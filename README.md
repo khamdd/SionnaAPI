@@ -53,7 +53,7 @@ SionnaSimulation/
 Open PowerShell:
 
 ```powershell
-cd D:\Workspace\Viettel\Miniproject\SionnaSimulation
+cd project_dir
 conda activate sionna-rt-py311
 python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
@@ -69,7 +69,7 @@ http://127.0.0.1:8000/docs
 After the backend is running, open this file in a browser:
 
 ```text
-D:\Workspace\Viettel\Miniproject\SionnaSimulation\frontend\index.html
+\SionnaSimulation\frontend\index.html
 ```
 
 The frontend calls:
@@ -127,7 +127,7 @@ Compares estimated throughput between a base tilt and target tilt.
 ## Run Tests
 
 ```powershell
-cd D:\Workspace\Viettel\Miniproject\SionnaSimulation
+cd project_dir
 conda activate sionna-rt-py311
 python -m pytest test -q
 ```
