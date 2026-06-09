@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+sionna
+pyngrok
+numpy
+matplotlib
+python-multipart
+pydantic
+email-validator
+pytest

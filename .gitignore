@@ -1,0 +1,33 @@
+# Python caches and test artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Python environments
+.venv/
+venv/
+env/
+backend/.sionna-venv/
+
+# Local configuration and secrets
+.env
+.env.*
+*.local
+
+# Generated simulation assets
+static/
+*.log
+
+# Frontend dependencies/build output, if a package-based frontend is added later
+node_modules/
+dist/
+build/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
