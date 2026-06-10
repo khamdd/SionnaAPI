@@ -1,5 +1,6 @@
 from pathlib import Path
 from uuid import uuid4
+from backend.constants import GENERATED_IMAGE_QUOTA_BYTES
 
 import numpy as np
 from sionna.rt import Camera, PlanarArray, RadioMapSolver, Transmitter
@@ -57,13 +58,7 @@ def calculate_coverage_map_service(req, base_url, scene):
             orientation=[0, 0, 0],
         )
 
-        STATIC_DIR.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        filename = f"{uuid4()}.png"
-        filepath = STATIC_DIR / filename
+        filename, filepath = prepare_generated_image_path()
 
         camera = Camera(
             position=list(camera_cfg.position),
@@ -190,13 +185,7 @@ def render_network_coverage_image(
     camera_cfg,
     base_url,
 ):
-    STATIC_DIR.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    filename = f"{uuid4()}.png"
-    filepath = STATIC_DIR / filename
+    filename, filepath = prepare_generated_image_path()
     camera = Camera(
         position=list(camera_cfg.position),
         look_at=list(camera_cfg.look_at),
@@ -213,6 +202,60 @@ def render_network_coverage_image(
     )
 
     return f"{str(base_url).rstrip('/')}/static/{filename}"
+
+
+def prepare_generated_image_path():
+    STATIC_DIR.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+    cleanup_generated_images()
+
+    filename = f"{uuid4()}.png"
+    return filename, STATIC_DIR / filename
+
+
+def cleanup_generated_images(
+    directory=STATIC_DIR,
+    quota_bytes=GENERATED_IMAGE_QUOTA_BYTES,
+):
+    if quota_bytes < 0 or not directory.exists():
+        return
+
+    files = [
+        path
+        for path in directory.glob("*.png")
+        if path.is_file()
+    ]
+    file_infos = [
+        (
+            path,
+            path.stat().st_size,
+            path.stat().st_mtime,
+        )
+        for path in files
+    ]
+    total_size = sum(
+        size
+        for _, size, _ in file_infos
+    )
+
+    if total_size <= quota_bytes:
+        return
+
+    for path, size, _ in sorted(
+        file_infos,
+        key=lambda item: item[2],
+    ):
+        if total_size <= quota_bytes:
+            break
+
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+        else:
+            total_size -= size
 
 
 def build_network_grid(
