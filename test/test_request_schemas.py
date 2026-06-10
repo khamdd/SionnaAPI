@@ -1,6 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
+from backend.constants import DEFAULT_TRANSMITTER_PATTERN
 from backend.schemas.requests import (
     CoverageRequest,
     NetworkCoverageRequest,
@@ -19,6 +20,7 @@ def test_sinr_request_accepts_required_fields_and_defaults():
 
     assert request.interferer_position == (120.0, 100.0, 25.0)
     assert request.tx_power == 30.0
+    assert request.transmitter_pattern == DEFAULT_TRANSMITTER_PATTERN
     assert request.solver.max_depth == 5
 
 
@@ -75,6 +77,7 @@ def test_network_coverage_request_accepts_up_to_ten_antennas():
     request = NetworkCoverageRequest(antennas=antennas)
 
     assert len(request.antennas) == 10
+    assert request.transmitter_pattern == DEFAULT_TRANSMITTER_PATTERN
     assert request.solver.cell_size == 2.0
 
 
@@ -96,6 +99,30 @@ def test_network_coverage_request_rejects_invalid_azimuth():
                         "current": 30.0,
                         "max": 40.0,
                     },
+                }
+            ]
+        )
+
+
+def test_network_coverage_request_rejects_per_antenna_pattern():
+    with pytest.raises(ValidationError):
+        NetworkCoverageRequest(
+            antennas=[
+                {
+                    "id": "A1",
+                    "position": (0.0, 0.0, 30.0),
+                    "tilt": {
+                        "min": 2.0,
+                        "current": 8.0,
+                        "max": 18.0,
+                    },
+                    "azimuth": 45.0,
+                    "tx_power": {
+                        "min": 20.0,
+                        "current": 30.0,
+                        "max": 40.0,
+                    },
+                    "pattern": "iso",
                 }
             ]
         )

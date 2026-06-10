@@ -1,0 +1,2 @@
+from backend.constants.constants import DEFAULT_TRANSMITTER_PATTERN
+

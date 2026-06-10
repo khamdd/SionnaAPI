@@ -1,4 +1,5 @@
 import numpy as np
+from backend.constants import DEFAULT_TRANSMITTER_PATTERN
 
 from sionna.rt import (
     PlanarArray,
@@ -12,8 +13,9 @@ def sync_transmitter(
     position,
     tilt_deg,
     power_dbm,
-    pattern="tr38901",
+    pattern=DEFAULT_TRANSMITTER_PATTERN,
     azimuth_deg=0.0,
+    configure_tx_array=True,
 ):
     tilt_rad = tilt_deg * np.pi / 180
     azimuth_rad = azimuth_deg * np.pi / 180
@@ -34,12 +36,13 @@ def sync_transmitter(
 
     else:
 
-        scene.tx_array = PlanarArray(
-            num_rows=1,
-            num_cols=1,
-            pattern=pattern,
-            polarization="V",
-        )
+        if configure_tx_array:
+            scene.tx_array = PlanarArray(
+                num_rows=1,
+                num_cols=1,
+                pattern=pattern,
+                polarization="V",
+            )
 
         tx = Transmitter(
             name=name,
@@ -60,5 +63,7 @@ def sync_transmitter(
 def remove_entity(scene, name):
     try:
         scene.remove(name)
-    except:
-        pass
+    except Exception as e:
+        return {
+            "error": str(e)
+        }

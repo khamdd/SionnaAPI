@@ -27,6 +27,7 @@ def calculate_sinr_service(req):
             req.transmitter_position,
             req.tilt,
             req.tx_power,
+            pattern=req.transmitter_pattern,
         )
 
         sync_transmitter(
@@ -35,6 +36,7 @@ def calculate_sinr_service(req):
             req.interferer_position,
             req.interferer_tilt,
             req.tx_power,
+            pattern=req.transmitter_pattern,
         )
 
         rm = execute_radio_map(

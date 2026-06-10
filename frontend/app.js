@@ -8,6 +8,8 @@ const DEFAULT_SOLVER = {
   size: [300, 300],
 };
 
+const TRANSMITTER_PATTERN = "tr38901";
+
 const DEFAULT_ANTENNAS = [
   antenna("A1", [-120, -105, 30], 2, 8, 16, 45, 20, 30, 40),
   antenna("A2", [-45, -120, 28], 2, 10, 18, 20, 20, 30, 40),
@@ -64,7 +66,6 @@ function antenna(
       current: powerCurrent,
       max: powerMax,
     },
-    pattern: "tr38901",
   };
 }
 
@@ -177,6 +178,7 @@ async function runSimulation() {
 function buildPayload() {
   return {
     antennas,
+    transmitter_pattern: TRANSMITTER_PATTERN,
     solver: DEFAULT_SOLVER,
     camera: {
       position: [0, 0, 650],

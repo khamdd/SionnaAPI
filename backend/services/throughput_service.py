@@ -18,6 +18,7 @@ def compare_throughput_service(req):
             req.transmitter_position,
             req.base_tilt,
             req.tx_power,
+            pattern=req.transmitter_pattern,
         )
 
         sync_transmitter(
@@ -26,6 +27,7 @@ def compare_throughput_service(req):
             req.interferer_position,
             req.interferer_tilt,
             req.tx_power,
+            pattern=req.transmitter_pattern,
         )
 
         rm_base = execute_radio_map(
@@ -49,6 +51,7 @@ def compare_throughput_service(req):
             req.transmitter_position,
             req.target_tilt,
             req.tx_power,
+            pattern=req.transmitter_pattern,
         )
 
         rm_target = execute_radio_map(

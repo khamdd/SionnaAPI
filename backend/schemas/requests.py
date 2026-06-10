@@ -1,11 +1,12 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import List, Tuple
+from backend.constants import DEFAULT_TRANSMITTER_PATTERN
 
 
 class SolverConfig(BaseModel):
-    max_depth: int = Field(default=5, ge=0)
-    samples_per_tx: int = Field(default=10**6, gt=0)
-    cell_size: float = Field(default=2.0, gt=0)
+    max_depth: int = Field(default=5, ge=0, le=10)
+    samples_per_tx: int = Field(default=10**6, gt=0, le=10**7)
+    cell_size: float = Field(default=2.0, gt=0, le=50.0)
     center: Tuple[float, float, float] = (
         0.0,
         0.0,
@@ -43,7 +44,7 @@ class CoverageRequest(BaseModel):
 
     tx_power: float = 30.0
 
-    transmitter_pattern: str = "tr38901"
+    transmitter_pattern: str = DEFAULT_TRANSMITTER_PATTERN
 
     solver: SolverConfig = Field(
         default_factory=SolverConfig
@@ -61,6 +62,8 @@ class RangeValue(BaseModel):
 
 
 class AntennaConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     id: str
 
     position: Tuple[
@@ -78,14 +81,14 @@ class AntennaConfig(BaseModel):
 
     tx_power: RangeValue
 
-    pattern: str = "tr38901"
-
 
 class NetworkCoverageRequest(BaseModel):
     antennas: List[AntennaConfig] = Field(
         min_length=1,
         max_length=10,
     )
+
+    transmitter_pattern: str = DEFAULT_TRANSMITTER_PATTERN
 
     solver: SolverConfig = Field(
         default_factory=SolverConfig
@@ -138,6 +141,8 @@ class SINRRequest(BaseModel):
 
     tx_power: float = 30.0
 
+    transmitter_pattern: str = DEFAULT_TRANSMITTER_PATTERN
+
     solver: SolverConfig = Field(
         default_factory=SolverConfig
     )
@@ -173,6 +178,8 @@ class ThroughputRequest(BaseModel):
     interferer_tilt: float = 12.0
 
     tx_power: float = 30.0
+
+    transmitter_pattern: str = DEFAULT_TRANSMITTER_PATTERN
 
     bandwidth_mhz: float = Field(
         default=100.0,

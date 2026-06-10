@@ -106,6 +106,13 @@ def calculate_network_coverage_service(req, base_url):
     ]
 
     try:
+        scene.tx_array = PlanarArray(
+            num_rows=1,
+            num_cols=1,
+            pattern=req.transmitter_pattern,
+            polarization="V",
+        )
+
         for antenna, name in zip(req.antennas, antenna_names):
             sync_transmitter(
                 scene,
@@ -113,8 +120,8 @@ def calculate_network_coverage_service(req, base_url):
                 antenna.position,
                 antenna.tilt.current,
                 antenna.tx_power.current,
-                pattern=antenna.pattern,
                 azimuth_deg=antenna.azimuth,
+                configure_tx_array=False,
             )
 
         radio_map = execute_network_radio_map(
@@ -141,6 +148,7 @@ def calculate_network_coverage_service(req, base_url):
                 "center": req.solver.center,
                 "size": req.solver.size,
             },
+            "transmitter_pattern": req.transmitter_pattern,
             "antennas": [
                 antenna.model_dump()
                 for antenna in req.antennas
