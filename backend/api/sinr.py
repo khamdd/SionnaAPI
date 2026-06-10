@@ -36,7 +36,7 @@ def return_or_raise(result):
 
     if status.startswith("failure"):
         raise HTTPException(
-            status_code=500,
+            status_code=result.get("status_code", 500),
             detail=result,
         )
 

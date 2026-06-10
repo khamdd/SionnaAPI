@@ -14,6 +14,14 @@ def failure_payload():
     }
 
 
+def client_error_payload():
+    return {
+        "status": "failure",
+        "status_code": 400,
+        "error": "Receiver position sits outside the defined simulation grid boundaries.",
+    }
+
+
 def test_coverage_map_failure_returns_http_500(monkeypatch):
     monkeypatch.setattr(
         api_module,
@@ -87,6 +95,26 @@ def test_sinr_failure_returns_http_500(monkeypatch):
     assert response.json()["detail"]["status"] == "failure"
 
 
+def test_sinr_client_input_failure_returns_http_400(monkeypatch):
+    monkeypatch.setattr(
+        api_module,
+        "calculate_sinr_service",
+        lambda req: client_error_payload(),
+    )
+
+    response = client.post(
+        "/api/v1/sinr",
+        json={
+            "tilt": 8.0,
+            "transmitter_position": [0.0, 0.0, 25.0],
+            "receiver_position": [9999.0, 9999.0, 1.5],
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["status"] == "failure"
+
+
 def test_throughput_comparison_failure_returns_http_500(monkeypatch):
     monkeypatch.setattr(
         api_module,
@@ -105,4 +133,25 @@ def test_throughput_comparison_failure_returns_http_500(monkeypatch):
     )
 
     assert response.status_code == 500
+    assert response.json()["detail"]["status"] == "failure"
+
+
+def test_throughput_client_input_failure_returns_http_400(monkeypatch):
+    monkeypatch.setattr(
+        api_module,
+        "compare_throughput_service",
+        lambda req: client_error_payload(),
+    )
+
+    response = client.post(
+        "/api/v1/throughput-comparison",
+        json={
+            "base_tilt": 8.0,
+            "target_tilt": 12.0,
+            "transmitter_position": [0.0, 0.0, 25.0],
+            "receiver_position": [9999.0, 9999.0, 1.5],
+        },
+    )
+
+    assert response.status_code == 400
     assert response.json()["detail"]["status"] == "failure"

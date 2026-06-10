@@ -1,3 +1,4 @@
+from backend.exceptions import ClientInputError
 from backend.simulations.antenna_factory import (
     remove_entity,
     sync_transmitter,
@@ -99,6 +100,13 @@ def compare_throughput_service(req):
                 f"{abs(percentage_change)}% {direction} "
                 "in download throughput."
             ),
+        }
+
+    except ClientInputError as e:
+        return {
+            "status": "failure",
+            "status_code": 400,
+            "error": str(e),
         }
 
     except Exception as e:

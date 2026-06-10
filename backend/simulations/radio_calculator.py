@@ -3,6 +3,8 @@ import math
 import numpy as np
 from sionna.rt import RadioMapSolver
 
+from backend.exceptions import ClientInputError
+
 
 def execute_radio_map(scene, solver_cfg):
 
@@ -90,7 +92,7 @@ def grid_indices_for_position(
         0 <= row < matrix_shape[1]
         and 0 <= col < matrix_shape[2]
     ):
-        raise ValueError(
+        raise ClientInputError(
             "Receiver position sits outside the defined simulation grid boundaries."
         )
 

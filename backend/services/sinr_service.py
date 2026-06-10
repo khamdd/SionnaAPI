@@ -1,5 +1,6 @@
 import numpy as np
 
+from backend.exceptions import ClientInputError
 from backend.simulations.sionna_engine import scene
 
 from backend.simulations.antenna_factory import (
@@ -81,6 +82,14 @@ def calculate_sinr_service(req):
                 watts_to_dbm(interference_plus_noise),
                 2,
             ),
+        }
+
+    except ClientInputError as e:
+
+        return {
+            "status": "failure",
+            "status_code": 400,
+            "error": str(e),
         }
 
     except Exception as e:
