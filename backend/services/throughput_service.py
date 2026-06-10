@@ -1,4 +1,5 @@
 from backend.exceptions import ClientInputError
+from backend.schemas.requests import ThroughputRequest
 from backend.simulations.antenna_factory import (
     remove_entity,
     sync_transmitter,
@@ -10,7 +11,7 @@ from backend.simulations.radio_calculator import (
 )
 
 
-def compare_throughput_service(req, scene):
+def compare_throughput_service(req: ThroughputRequest, scene):
     try:
         sync_transmitter(
             scene,

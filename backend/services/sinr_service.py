@@ -1,6 +1,7 @@
 import numpy as np
 
 from backend.exceptions import ClientInputError
+from backend.schemas.requests import SINRRequest
 
 from backend.simulations.antenna_factory import (
     sync_transmitter,
@@ -17,7 +18,7 @@ from backend.simulations.radio_calculator import (
 )
 
 
-def calculate_sinr_service(req, scene):
+def calculate_sinr_service(req: SINRRequest, scene):
 
     try:
 

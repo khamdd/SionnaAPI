@@ -5,6 +5,7 @@ from backend.constants import GENERATED_IMAGE_QUOTA_BYTES
 import numpy as np
 from sionna.rt import Camera, PlanarArray, RadioMapSolver, Transmitter
 
+from backend.schemas.requests import CoverageRequest, NetworkCoverageRequest
 from backend.simulations.antenna_factory import remove_entity, sync_transmitter
 from backend.simulations.radio_calculator import (
     calculate_5g_throughput,
@@ -17,7 +18,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STATIC_DIR = PROJECT_ROOT / "static"
 
 
-def calculate_coverage_map_service(req, base_url, scene):
+def calculate_coverage_map_service(req: CoverageRequest, base_url, scene):
     try:
         solver = req.solver
         camera_cfg = req.camera
@@ -93,7 +94,11 @@ def calculate_coverage_map_service(req, base_url, scene):
         remove_entity(scene, "tx0")
 
 
-def calculate_network_coverage_service(req, base_url, scene):
+def calculate_network_coverage_service(
+    req: NetworkCoverageRequest,
+    base_url,
+    scene,
+):
     antenna_names = [
         f"tx_{antenna.id}"
         for antenna in req.antennas
@@ -260,7 +265,7 @@ def cleanup_generated_images(
 
 def build_network_grid(
     radio_map,
-    req,
+    req: NetworkCoverageRequest,
 ):
     sinr = np.asarray(
         radio_map.sinr.numpy(),
