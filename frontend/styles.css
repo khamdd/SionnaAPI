@@ -361,6 +361,13 @@ h2 {
   gap: 8px;
 }
 
+.history-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  gap: 8px;
+  align-items: stretch;
+}
+
 .history-item {
   width: 100%;
   border: 1px solid var(--line);
@@ -369,6 +376,28 @@ h2 {
   padding: 10px;
   text-align: left;
   cursor: pointer;
+}
+
+.history-delete {
+  width: 38px;
+  min-height: 38px;
+  border: 1px solid #b42318;
+  border-radius: 8px;
+  background: #d92d20;
+  color: #ffffff;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.history-delete:hover {
+  background: #b42318;
+}
+
+.history-delete svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
 }
 
 .history-item:hover,

@@ -41,3 +41,40 @@ def test_simulation_run_detail_returns_not_found_for_missing_run(monkeypatch):
     response = client.get("/api/v1/simulation-runs/00000000-0000-0000-0000-000000000000")
 
     assert response.status_code == 404
+
+
+def test_delete_simulation_run_returns_success(monkeypatch):
+    monkeypatch.setattr(
+        api_module,
+        "delete_simulation_run",
+        lambda run_id: {
+            "database_configured": True,
+            "deleted": True,
+            "deleted_files": 1,
+        },
+    )
+
+    response = client.delete(
+        "/api/v1/simulation-runs/00000000-0000-0000-0000-000000000000"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["deleted"] is True
+    assert response.json()["deleted_files"] == 1
+
+
+def test_delete_simulation_run_returns_not_found(monkeypatch):
+    monkeypatch.setattr(
+        api_module,
+        "delete_simulation_run",
+        lambda run_id: {
+            "database_configured": True,
+            "deleted": False,
+        },
+    )
+
+    response = client.delete(
+        "/api/v1/simulation-runs/00000000-0000-0000-0000-000000000000"
+    )
+
+    assert response.status_code == 404

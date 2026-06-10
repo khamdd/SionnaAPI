@@ -251,6 +251,9 @@ function renderHistoryList() {
   historyList.innerHTML = "";
 
   latestHistory.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "history-row";
+
     const button = document.createElement("button");
     button.type = "button";
     button.className = "history-item";
@@ -263,8 +266,56 @@ function renderHistoryList() {
     button.addEventListener("click", () => {
       loadHistoryDetail(item.id);
     });
-    historyList.appendChild(button);
+
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "history-delete";
+    deleteButton.title = "Delete simulation history";
+    deleteButton.setAttribute("aria-label", `Delete ${formatSimulationType(item.simulation_type)} history`);
+    deleteButton.innerHTML = trashIconSvg();
+    deleteButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      deleteHistoryItem(item);
+    });
+
+    row.appendChild(button);
+    row.appendChild(deleteButton);
+    historyList.appendChild(row);
   });
+}
+
+async function deleteHistoryItem(item) {
+  const confirmed = window.confirm(
+    `Delete ${formatSimulationType(item.simulation_type)} history from ${formatDateTime(item.created_at)}?`
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  historyStatus.textContent = "Deleting history...";
+  historyStatus.classList.remove("error-text");
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/simulation-runs/${item.id}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    if (selectedHistoryId === item.id) {
+      selectedHistoryId = null;
+      historyDetail.classList.add("hidden");
+      historyDetail.innerHTML = "";
+    }
+
+    await loadHistory();
+  } catch (error) {
+    historyStatus.textContent = `Delete failed: ${error.message}`;
+    historyStatus.classList.add("error-text");
+  }
 }
 
 async function loadHistoryDetail(runId) {
@@ -670,6 +721,15 @@ function escapeHtml(value) {
 function firstArtifactUrl(artifacts) {
   const artifact = (artifacts || []).find((item) => item.public_url);
   return artifact ? artifact.public_url : "";
+}
+
+function trashIconSvg() {
+  return `
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M9 3h6l1 2h4v2H4V5h4l1-2Z"></path>
+      <path d="M6 9h12l-1 12H7L6 9Zm4 2v8h2v-8h-2Zm4 0v8h2v-8h-2Z"></path>
+    </svg>
+  `;
 }
 
 runButton.addEventListener("click", runSimulation);

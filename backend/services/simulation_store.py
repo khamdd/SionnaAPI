@@ -225,6 +225,66 @@ def get_simulation_run(run_id):
         }
 
 
+def delete_simulation_run(run_id):
+    if not is_database_configured():
+        return {
+            "database_configured": False,
+            "deleted": False,
+        }
+
+    try:
+        with db_session() as session:
+            artifacts = session.execute(
+                text(
+                    """
+                    SELECT
+                        file_path,
+                        public_url
+                    FROM simulation_artifacts
+                    WHERE simulation_run_id = :run_id
+                    """
+                ),
+                {
+                    "run_id": run_id,
+                },
+            ).mappings().all()
+
+            deleted = session.execute(
+                text(
+                    """
+                    DELETE FROM simulation_runs
+                    WHERE id = :run_id
+                    RETURNING id
+                    """
+                ),
+                {
+                    "run_id": run_id,
+                },
+            ).first()
+
+        if deleted is None:
+            return {
+                "database_configured": True,
+                "deleted": False,
+            }
+
+        deleted_files = delete_artifact_files(artifacts)
+
+        return {
+            "database_configured": True,
+            "deleted": True,
+            "deleted_files": deleted_files,
+        }
+
+    except SQLAlchemyError:
+        logger.exception("Failed to delete simulation run.")
+        return {
+            "database_configured": True,
+            "deleted": False,
+            "error": "Failed to delete simulation history.",
+        }
+
+
 def insert_simulation_run(
     session,
     simulation_type,
@@ -451,7 +511,55 @@ def static_file_path_from_url(url):
         return None
 
     relative_name = path.split(marker, 1)[1]
-    return STATIC_DIR / relative_name
+    return safe_static_path(relative_name)
+
+
+def static_file_path_from_stored_path(file_path):
+    if not file_path:
+        return None
+
+    return safe_static_path(Path(file_path))
+
+
+def safe_static_path(path):
+    candidate = Path(path)
+    if not candidate.is_absolute():
+        candidate = STATIC_DIR / candidate
+
+    try:
+        resolved_static = STATIC_DIR.resolve()
+        resolved_candidate = candidate.resolve()
+        resolved_candidate.relative_to(resolved_static)
+    except ValueError:
+        return None
+
+    return resolved_candidate
+
+
+def delete_artifact_files(artifacts):
+    deleted_files = 0
+
+    for artifact in artifacts:
+        path = (
+            static_file_path_from_stored_path(artifact["file_path"])
+            or static_file_path_from_url(artifact["public_url"])
+        )
+
+        if path is None or not path.exists() or not path.is_file():
+            continue
+
+        try:
+            path.unlink()
+        except OSError:
+            logger.warning(
+                "Failed to delete simulation artifact file: %s",
+                path,
+                exc_info=True,
+            )
+        else:
+            deleted_files += 1
+
+    return deleted_files
 
 
 def serialize_run_summary(row):

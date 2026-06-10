@@ -21,6 +21,7 @@ from backend.services.throughput_service import (
 )
 
 from backend.services.simulation_store import (
+    delete_simulation_run,
     get_simulation_run,
     list_simulation_runs,
     store_simulation_result,
@@ -57,16 +58,13 @@ def run_and_store(
     result = simulation_fn()
     finished_at = utc_now()
 
-    simulation_run_id = store_simulation_result(
+    store_simulation_result(
         simulation_type,
         req,
         result,
         started_at,
         finished_at,
     )
-
-    if simulation_run_id is not None:
-        result["simulation_run_id"] = str(simulation_run_id)
 
     return return_or_raise(result)
 
@@ -144,6 +142,28 @@ def simulation_run_detail(run_id: str):
         result.get("database_configured")
         and result.get("item") is None
         and not result.get("error")
+    ):
+        raise HTTPException(
+            status_code=404,
+            detail="Simulation run not found.",
+        )
+
+    return result
+
+
+@router.delete("/simulation-runs/{run_id}")
+def delete_simulation_run_history(run_id: str):
+    result = delete_simulation_run(run_id)
+
+    if result.get("error"):
+        raise HTTPException(
+            status_code=500,
+            detail=result,
+        )
+
+    if (
+        result.get("database_configured")
+        and not result.get("deleted")
     ):
         raise HTTPException(
             status_code=404,
