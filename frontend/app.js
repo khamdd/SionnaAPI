@@ -258,7 +258,7 @@ function renderHistoryList() {
     button.innerHTML = `
       <strong>${formatSimulationType(item.simulation_type)} - ${item.status}</strong>
       <span>${formatDateTime(item.created_at)}</span>
-      <span>Cell ${formatMaybeNumber(item.cell_size_m)} m | ${formatMaybeNumber(item.bandwidth_mhz)} MHz | ${item.mimo_layers || "--"} layers</span>
+      <span>${historyListSubtitle(item)}</span>
     `;
     button.addEventListener("click", () => {
       loadHistoryDetail(item.id);
@@ -303,12 +303,68 @@ async function loadHistoryDetail(runId) {
 }
 
 function renderHistoryDetail(item) {
+  const renderer = {
+    coverage_map: renderCoverageMapHistory,
+    network_coverage: renderNetworkCoverageHistory,
+    sinr: renderSinrHistory,
+    throughput_comparison: renderThroughputHistory,
+  }[item.simulation_type];
+
+  if (renderer) {
+    historyDetail.innerHTML = renderer(item);
+    return;
+  }
+
+  historyDetail.innerHTML = `
+    ${renderHistoryHeader(item)}
+    <p class="history-status">No specialized history view for this simulation type.</p>
+  `;
+}
+
+function renderHistoryHeader(item) {
+  return `
+    <strong>${formatSimulationType(item.simulation_type)}</strong>
+    <dl class="detail-grid">
+      <dt>Status</dt><dd>${formatText(item.status)}</dd>
+      <dt>Created</dt><dd>${formatDateTime(item.created_at)}</dd>
+      <dt>Pattern</dt><dd>${formatText(item.transmitter_pattern)}</dd>
+    </dl>
+  `;
+}
+
+function renderCoverageMapHistory(item) {
+  const request = item.request_json || {};
+  const response = item.response_json || {};
+  const imageUrl = item.coverage_map_image_url || firstArtifactUrl(item.artifacts);
+
+  return `
+    ${renderHistoryHeader(item)}
+    <h3>Transmitter</h3>
+    <dl class="detail-grid">
+      <dt>Position</dt><dd>${formatPositionValue(request.transmitter_position)}</dd>
+      <dt>Tilt</dt><dd>${formatMaybeNumber(request.tilt)} deg</dd>
+      <dt>Power</dt><dd>${formatMaybeNumber(request.tx_power)} dBm</dd>
+    </dl>
+    <h3>Simulation area</h3>
+    <dl class="detail-grid">
+      <dt>Cell size</dt><dd>${formatMaybeNumber(item.cell_size_m)} m</dd>
+      <dt>Center</dt><dd>${formatPositionValue(request.solver?.center)}</dd>
+      <dt>Size</dt><dd>${formatPositionValue(request.solver?.size)}</dd>
+      <dt>Status</dt><dd>${formatText(response.status || item.status)}</dd>
+    </dl>
+    ${imageUrl ? `<img src="${formatAttribute(imageUrl)}" alt="Saved coverage map" />` : ""}
+  `;
+}
+
+function renderNetworkCoverageHistory(item) {
+  const response = item.response_json || {};
+  const grid = response.grid || {};
   const imageUrl = item.coverage_map_image_url || firstArtifactUrl(item.artifacts);
   const antennasHtml = (item.antennas || [])
     .map((antenna) => `
       <dl class="antenna-snapshot">
-        <dt>Antenna</dt><dd>${antenna.antenna_code}</dd>
-        <dt>Position</dt><dd>${antenna.position.join(", ")}</dd>
+        <dt>Antenna</dt><dd>${formatText(antenna.antenna_code)}</dd>
+        <dt>Position</dt><dd>${formatPositionValue(antenna.position)}</dd>
         <dt>Azimuth</dt><dd>${formatMaybeNumber(antenna.azimuth_deg)} deg</dd>
         <dt>Tilt</dt><dd>${formatRange(antenna.tilt)} deg</dd>
         <dt>Power</dt><dd>${formatRange(antenna.tx_power)} dBm</dd>
@@ -316,19 +372,74 @@ function renderHistoryDetail(item) {
     `)
     .join("");
 
-  historyDetail.innerHTML = `
-    <strong>${formatSimulationType(item.simulation_type)}</strong>
+  return `
+    ${renderHistoryHeader(item)}
+    <h3>Coverage result</h3>
     <dl class="detail-grid">
-      <dt>Status</dt><dd>${item.status}</dd>
-      <dt>Created</dt><dd>${formatDateTime(item.created_at)}</dd>
-      <dt>Pattern</dt><dd>${item.transmitter_pattern}</dd>
       <dt>Cell size</dt><dd>${formatMaybeNumber(item.cell_size_m)} m</dd>
       <dt>Bandwidth</dt><dd>${formatMaybeNumber(item.bandwidth_mhz)} MHz</dd>
       <dt>MIMO layers</dt><dd>${item.mimo_layers || "--"}</dd>
+      <dt>Grid</dt><dd>${grid.rows || "--"} x ${grid.cols || "--"}</dd>
+      <dt>Cells</dt><dd>${grid.cell_count || "--"}</dd>
     </dl>
-    ${imageUrl ? `<img src="${imageUrl}" alt="Saved coverage map" />` : ""}
+    ${imageUrl ? `<img src="${formatAttribute(imageUrl)}" alt="Saved coverage map" />` : ""}
     <h3>Antenna snapshot</h3>
     ${antennasHtml || "<p class=\"history-status\">No antenna snapshot for this simulation type.</p>"}
+  `;
+}
+
+function renderSinrHistory(item) {
+  const request = item.request_json || {};
+  const response = item.response_json || {};
+
+  return `
+    ${renderHistoryHeader(item)}
+    <h3>Transmitter antenna</h3>
+    <dl class="detail-grid">
+      <dt>Position</dt><dd>${formatPositionValue(request.transmitter_position)}</dd>
+      <dt>Tilt</dt><dd>${formatMaybeNumber(request.tilt)} deg</dd>
+      <dt>Power</dt><dd>${formatMaybeNumber(request.tx_power)} dBm</dd>
+    </dl>
+    <h3>Receiver antenna</h3>
+    <dl class="detail-grid">
+      <dt>Position</dt><dd>${formatPositionValue(request.receiver_position)}</dd>
+      <dt>SINR</dt><dd>${formatMaybeNumber(response.sinr_db)} dB</dd>
+      <dt>Signal power</dt><dd>${formatMaybeNumber(response.signal_power)} dBm</dd>
+      <dt>Noise power</dt><dd>${formatMaybeNumber(response.noise_power)} dBm</dd>
+    </dl>
+    <h3>Interferer</h3>
+    <dl class="detail-grid">
+      <dt>Position</dt><dd>${formatPositionValue(request.interferer_position)}</dd>
+      <dt>Tilt</dt><dd>${formatMaybeNumber(request.interferer_tilt)} deg</dd>
+    </dl>
+  `;
+}
+
+function renderThroughputHistory(item) {
+  const request = item.request_json || {};
+  const response = item.response_json || {};
+  const comparison = response.comparison || {};
+
+  return `
+    ${renderHistoryHeader(item)}
+    <h3>Transmitter and receiver</h3>
+    <dl class="detail-grid">
+      <dt>Transmitter</dt><dd>${formatPositionValue(request.transmitter_position)}</dd>
+      <dt>Receiver</dt><dd>${formatPositionValue(request.receiver_position)}</dd>
+      <dt>Power</dt><dd>${formatMaybeNumber(request.tx_power)} dBm</dd>
+      <dt>Bandwidth</dt><dd>${formatMaybeNumber(request.bandwidth_mhz)} MHz</dd>
+      <dt>MIMO layers</dt><dd>${request.mimo_layers || "--"}</dd>
+    </dl>
+    <h3>Throughput comparison</h3>
+    <dl class="detail-grid">
+      <dt>Base tilt</dt><dd>${formatMaybeNumber(comparison.base_tilt_deg)} deg</dd>
+      <dt>Target tilt</dt><dd>${formatMaybeNumber(comparison.target_tilt_deg)} deg</dd>
+      <dt>Base throughput</dt><dd>${formatMaybeNumber(comparison.base_throughput_mbps)} Mbps</dd>
+      <dt>Target throughput</dt><dd>${formatMaybeNumber(comparison.target_throughput_mbps)} Mbps</dd>
+      <dt>Delta</dt><dd>${formatMaybeNumber(comparison.delta_mbps)} Mbps</dd>
+      <dt>Change</dt><dd>${formatMaybeNumber(comparison.percentage_change)}%</dd>
+      <dt>Direction</dt><dd>${formatText(comparison.direction)}</dd>
+    </dl>
   `;
 }
 
@@ -487,6 +598,22 @@ function formatSimulationType(type) {
     .replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
+function historyListSubtitle(item) {
+  if (item.simulation_type === "sinr") {
+    return `SINR point | ${formatText(item.status)}`;
+  }
+
+  if (item.simulation_type === "throughput_comparison") {
+    return `${formatMaybeNumber(item.bandwidth_mhz)} MHz | ${item.mimo_layers || "--"} layers`;
+  }
+
+  if (item.simulation_type === "coverage_map") {
+    return `Cell ${formatMaybeNumber(item.cell_size_m)} m | coverage image`;
+  }
+
+  return `Cell ${formatMaybeNumber(item.cell_size_m)} m | ${formatMaybeNumber(item.bandwidth_mhz)} MHz | ${item.mimo_layers || "--"} layers`;
+}
+
 function formatDateTime(value) {
   if (!value) {
     return "--";
@@ -509,6 +636,35 @@ function formatRange(range) {
   }
 
   return `${formatMaybeNumber(range.min)} / ${formatMaybeNumber(range.current)} / ${formatMaybeNumber(range.max)}`;
+}
+
+function formatPositionValue(value) {
+  if (!Array.isArray(value)) {
+    return "--";
+  }
+
+  return value.map(formatMaybeNumber).join(", ");
+}
+
+function formatText(value) {
+  if (value === null || value === undefined || value === "") {
+    return "--";
+  }
+
+  return escapeHtml(String(value));
+}
+
+function formatAttribute(value) {
+  return escapeHtml(String(value || ""));
+}
+
+function escapeHtml(value) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 function firstArtifactUrl(artifacts) {

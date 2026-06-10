@@ -2,6 +2,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import List, Tuple
 from backend.constants import DEFAULT_TRANSMITTER_PATTERN
 
+MAX_GRID_CELLS = 50000
+
 
 class SolverConfig(BaseModel):
     max_depth: int = Field(default=5, ge=0, le=10)
@@ -21,7 +23,7 @@ class SolverConfig(BaseModel):
     @model_validator(mode="after")
     def validate_grid_size(self):
         cells = (self.size[0] / self.cell_size) * (self.size[1] / self.cell_size)
-        if cells > 20000:
+        if cells > MAX_GRID_CELLS:
             raise ValueError("simulation grid is too large")
         return self
 
