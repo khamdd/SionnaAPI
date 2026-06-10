@@ -1,3 +1,6 @@
+import contextlib
+
+import pytest
 from fastapi.testclient import TestClient
 
 from backend.api import sinr as api_module
@@ -5,6 +8,20 @@ from backend.main import app
 
 
 client = TestClient(app)
+
+
+class FakeEngine:
+    def __init__(self):
+        self.lock = contextlib.nullcontext()
+        self.scene = object()
+
+    def get_scene(self):
+        return self.scene
+
+
+@pytest.fixture(autouse=True)
+def fake_sionna_engine(monkeypatch):
+    monkeypatch.setattr(api_module, "engine", FakeEngine())
 
 
 def failure_payload():
@@ -26,7 +43,7 @@ def test_coverage_map_failure_returns_http_500(monkeypatch):
     monkeypatch.setattr(
         api_module,
         "calculate_coverage_map_service",
-        lambda req, base_url: failure_payload(),
+        lambda req, base_url, scene: failure_payload(),
     )
 
     response = client.post(
@@ -45,7 +62,7 @@ def test_network_coverage_failure_returns_http_500(monkeypatch):
     monkeypatch.setattr(
         api_module,
         "calculate_network_coverage_service",
-        lambda req, base_url: failure_payload(),
+        lambda req, base_url, scene: failure_payload(),
     )
 
     response = client.post(
@@ -79,7 +96,7 @@ def test_sinr_failure_returns_http_500(monkeypatch):
     monkeypatch.setattr(
         api_module,
         "calculate_sinr_service",
-        lambda req: failure_payload(),
+        lambda req, scene: failure_payload(),
     )
 
     response = client.post(
@@ -99,7 +116,7 @@ def test_sinr_client_input_failure_returns_http_400(monkeypatch):
     monkeypatch.setattr(
         api_module,
         "calculate_sinr_service",
-        lambda req: client_error_payload(),
+        lambda req, scene: client_error_payload(),
     )
 
     response = client.post(
@@ -119,7 +136,7 @@ def test_throughput_comparison_failure_returns_http_500(monkeypatch):
     monkeypatch.setattr(
         api_module,
         "compare_throughput_service",
-        lambda req: failure_payload(),
+        lambda req, scene: failure_payload(),
     )
 
     response = client.post(
@@ -140,7 +157,7 @@ def test_throughput_client_input_failure_returns_http_400(monkeypatch):
     monkeypatch.setattr(
         api_module,
         "compare_throughput_service",
-        lambda req: client_error_payload(),
+        lambda req, scene: client_error_payload(),
     )
 
     response = client.post(

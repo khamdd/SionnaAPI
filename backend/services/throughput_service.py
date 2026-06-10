@@ -8,10 +8,9 @@ from backend.simulations.radio_calculator import (
     execute_radio_map,
     extract_linear_sinr_at_point,
 )
-from backend.simulations.sionna_engine import scene
 
 
-def compare_throughput_service(req):
+def compare_throughput_service(req, scene):
     try:
         sync_transmitter(
             scene,

@@ -10,14 +10,13 @@ from backend.simulations.radio_calculator import (
     linear_to_db,
     watts_to_dbm,
 )
-from backend.simulations.sionna_engine import scene
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STATIC_DIR = PROJECT_ROOT / "static"
 
 
-def calculate_coverage_map_service(req, base_url):
+def calculate_coverage_map_service(req, base_url, scene):
     try:
         solver = req.solver
         camera_cfg = req.camera
@@ -99,7 +98,7 @@ def calculate_coverage_map_service(req, base_url):
         remove_entity(scene, "tx0")
 
 
-def calculate_network_coverage_service(req, base_url):
+def calculate_network_coverage_service(req, base_url, scene):
     antenna_names = [
         f"tx_{antenna.id}"
         for antenna in req.antennas
@@ -126,9 +125,11 @@ def calculate_network_coverage_service(req, base_url):
 
         radio_map = execute_network_radio_map(
             req.solver,
+            scene,
         )
 
         image_url = render_network_coverage_image(
+            scene,
             radio_map,
             req.camera,
             base_url,
@@ -167,7 +168,7 @@ def calculate_network_coverage_service(req, base_url):
             remove_entity(scene, name)
 
 
-def execute_network_radio_map(solver):
+def execute_network_radio_map(solver, scene):
     radio_map_solver = RadioMapSolver()
     return radio_map_solver(
         scene,
@@ -184,6 +185,7 @@ def execute_network_radio_map(solver):
 
 
 def render_network_coverage_image(
+    scene,
     radio_map,
     camera_cfg,
     base_url,

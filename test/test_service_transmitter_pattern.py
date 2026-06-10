@@ -31,6 +31,7 @@ class FakeThroughputRequest:
 
 
 def test_sinr_service_passes_request_pattern_to_transmitters(monkeypatch):
+    fake_scene = object()
     sync_calls = []
 
     monkeypatch.setattr(
@@ -59,7 +60,10 @@ def test_sinr_service_passes_request_pattern_to_transmitters(monkeypatch):
         lambda scene, name: None,
     )
 
-    result = sinr_service.calculate_sinr_service(FakeSINRRequest())
+    result = sinr_service.calculate_sinr_service(
+        FakeSINRRequest(),
+        fake_scene,
+    )
 
     assert result["status"] == "success"
     assert len(sync_calls) == 2
@@ -70,6 +74,7 @@ def test_sinr_service_passes_request_pattern_to_transmitters(monkeypatch):
 
 
 def test_throughput_service_passes_request_pattern_to_transmitters(monkeypatch):
+    fake_scene = object()
     sync_calls = []
 
     monkeypatch.setattr(
@@ -94,7 +99,8 @@ def test_throughput_service_passes_request_pattern_to_transmitters(monkeypatch):
     )
 
     result = throughput_service.compare_throughput_service(
-        FakeThroughputRequest()
+        FakeThroughputRequest(),
+        fake_scene,
     )
 
     assert result["status"] == "success"

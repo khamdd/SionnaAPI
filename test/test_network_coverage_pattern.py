@@ -48,7 +48,6 @@ def test_network_coverage_uses_one_global_transmitter_pattern(monkeypatch):
     fake_scene = FakeScene()
     sync_calls = []
 
-    monkeypatch.setattr(coverage_service, "scene", fake_scene)
     monkeypatch.setattr(coverage_service, "PlanarArray", FakeArray)
     monkeypatch.setattr(
         coverage_service,
@@ -58,12 +57,12 @@ def test_network_coverage_uses_one_global_transmitter_pattern(monkeypatch):
     monkeypatch.setattr(
         coverage_service,
         "execute_network_radio_map",
-        lambda solver: object(),
+        lambda solver, scene: object(),
     )
     monkeypatch.setattr(
         coverage_service,
         "render_network_coverage_image",
-        lambda radio_map, camera, base_url: "http://test/static/map.png",
+        lambda scene, radio_map, camera, base_url: "http://test/static/map.png",
     )
     monkeypatch.setattr(
         coverage_service,
@@ -83,6 +82,7 @@ def test_network_coverage_uses_one_global_transmitter_pattern(monkeypatch):
     result = coverage_service.calculate_network_coverage_service(
         FakeRequest(),
         "http://test",
+        fake_scene,
     )
 
     assert result["status"] == "success"
