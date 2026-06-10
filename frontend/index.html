@@ -48,12 +48,30 @@
 
       <aside class="control-panel" aria-label="Antenna controls">
         <div class="panel-header">
-          <h2>Antenna sectors</h2>
-          <button id="reset-antennas" class="ghost-button" type="button">
-            Reset
+          <h2 id="panel-title">Antenna sectors</h2>
+          <div class="panel-actions">
+            <button id="reset-antennas" class="ghost-button" type="button">
+              Reset
+            </button>
+            <button id="refresh-history" class="ghost-button hidden" type="button">
+              Refresh
+            </button>
+          </div>
+        </div>
+        <div class="panel-tabs" role="tablist" aria-label="Side panel views">
+          <button id="antennas-tab" class="tab-button active" type="button">
+            Antennas
+          </button>
+          <button id="history-tab" class="tab-button" type="button">
+            History
           </button>
         </div>
         <div id="antenna-list" class="antenna-list"></div>
+        <div id="history-view" class="history-view hidden">
+          <p id="history-status" class="history-status">No history loaded.</p>
+          <div id="history-list" class="history-list"></div>
+          <section id="history-detail" class="history-detail hidden"></section>
+        </div>
       </aside>
     </main>
 

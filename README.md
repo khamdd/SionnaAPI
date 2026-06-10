@@ -94,6 +94,20 @@ When the DB is configured, every simulation request stores:
 - antenna snapshots in `simulation_run_antennas` for `/api/v1/network-coverage`
 - generated coverage image metadata in `simulation_artifacts` when a PNG is returned
 
+The frontend History tab reads from:
+
+```text
+GET /api/v1/simulation-runs
+GET /api/v1/simulation-runs/{run_id}
+```
+
+Make sure `simulation_runs` has this column:
+
+```sql
+ALTER TABLE simulation_runs
+ADD COLUMN IF NOT EXISTS coverage_map_image_url TEXT;
+```
+
 ## Start the Frontend
 
 After the backend is running, open this file in a browser:
@@ -153,6 +167,14 @@ Computes SINR at a receiver position.
 ### `POST /api/v1/throughput-comparison`
 
 Compares estimated throughput between a base tilt and target tilt.
+
+### `GET /api/v1/simulation-runs`
+
+Lists recent stored simulations for the frontend History tab.
+
+### `GET /api/v1/simulation-runs/{run_id}`
+
+Loads one stored simulation, including solver settings, response summary, antenna snapshots, and generated artifacts.
 
 ## Run Tests
 

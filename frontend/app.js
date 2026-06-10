@@ -26,8 +26,14 @@ const DEFAULT_ANTENNAS = [
 let antennas = structuredClone(DEFAULT_ANTENNAS);
 let latestGrid = null;
 let latestSolver = structuredClone(DEFAULT_SOLVER);
+let latestHistory = [];
+let selectedHistoryId = null;
 
 const antennaList = document.querySelector("#antenna-list");
+const historyView = document.querySelector("#history-view");
+const historyList = document.querySelector("#history-list");
+const historyDetail = document.querySelector("#history-detail");
+const historyStatus = document.querySelector("#history-status");
 const antennaLayer = document.querySelector("#antenna-layer");
 const mapStage = document.querySelector("#map-stage");
 const coverageImage = document.querySelector("#coverage-image");
@@ -35,7 +41,11 @@ const heatLayer = document.querySelector("#heat-layer");
 const hoverCard = document.querySelector("#hover-card");
 const runButton = document.querySelector("#run-simulation");
 const resetButton = document.querySelector("#reset-antennas");
+const refreshHistoryButton = document.querySelector("#refresh-history");
 const statusLabel = document.querySelector("#run-status");
+const panelTitle = document.querySelector("#panel-title");
+const antennasTab = document.querySelector("#antennas-tab");
+const historyTab = document.querySelector("#history-tab");
 const cellSizeLabel = document.querySelector("#cell-size-label");
 const bestSinrLabel = document.querySelector("#best-sinr-label");
 const medianThroughputLabel = document.querySelector("#median-throughput-label");
@@ -168,11 +178,158 @@ async function runSimulation() {
     renderAntennaMarkers();
     updateSummary(result.grid);
     setStatus("Simulation complete");
+    loadHistory();
   } catch (error) {
     setStatus(`Simulation failed: ${error.message}`, true);
   } finally {
     setLoading(false);
   }
+}
+
+function showAntennaPanel() {
+  panelTitle.textContent = "Antenna sectors";
+  antennaList.classList.remove("hidden");
+  historyView.classList.add("hidden");
+  resetButton.classList.remove("hidden");
+  refreshHistoryButton.classList.add("hidden");
+  antennasTab.classList.add("active");
+  historyTab.classList.remove("active");
+}
+
+function showHistoryPanel() {
+  panelTitle.textContent = "Simulation history";
+  antennaList.classList.add("hidden");
+  historyView.classList.remove("hidden");
+  resetButton.classList.add("hidden");
+  refreshHistoryButton.classList.remove("hidden");
+  antennasTab.classList.remove("active");
+  historyTab.classList.add("active");
+  loadHistory();
+}
+
+async function loadHistory() {
+  if (historyView.classList.contains("hidden")) {
+    return;
+  }
+
+  historyStatus.textContent = "Loading history...";
+  historyStatus.classList.remove("error-text");
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/simulation-runs?limit=25`);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const result = await response.json();
+
+    if (!result.database_configured) {
+      latestHistory = [];
+      historyList.innerHTML = "";
+      historyDetail.classList.add("hidden");
+      historyStatus.textContent = "Database is not configured. Set DATABASE_URL to use history.";
+      return;
+    }
+
+    if (result.error) {
+      throw new Error(result.error);
+    }
+
+    latestHistory = result.items || [];
+    renderHistoryList();
+    historyStatus.textContent = latestHistory.length
+      ? `${latestHistory.length} saved simulations`
+      : "No saved simulations yet.";
+  } catch (error) {
+    historyStatus.textContent = `History failed: ${error.message}`;
+    historyStatus.classList.add("error-text");
+  }
+}
+
+function renderHistoryList() {
+  historyList.innerHTML = "";
+
+  latestHistory.forEach((item) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "history-item";
+    button.classList.toggle("active", item.id === selectedHistoryId);
+    button.innerHTML = `
+      <strong>${formatSimulationType(item.simulation_type)} - ${item.status}</strong>
+      <span>${formatDateTime(item.created_at)}</span>
+      <span>Cell ${formatMaybeNumber(item.cell_size_m)} m | ${formatMaybeNumber(item.bandwidth_mhz)} MHz | ${item.mimo_layers || "--"} layers</span>
+    `;
+    button.addEventListener("click", () => {
+      loadHistoryDetail(item.id);
+    });
+    historyList.appendChild(button);
+  });
+}
+
+async function loadHistoryDetail(runId) {
+  selectedHistoryId = runId;
+  renderHistoryList();
+  historyDetail.classList.remove("hidden");
+  historyDetail.innerHTML = "<p class=\"history-status\">Loading detail...</p>";
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/simulation-runs/${runId}`);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const result = await response.json();
+
+    if (!result.database_configured) {
+      historyDetail.innerHTML = "<p class=\"history-status\">Database is not configured.</p>";
+      return;
+    }
+
+    if (result.error) {
+      throw new Error(result.error);
+    }
+
+    if (!result.item) {
+      historyDetail.innerHTML = "<p class=\"history-status\">Simulation not found.</p>";
+      return;
+    }
+
+    renderHistoryDetail(result.item);
+  } catch (error) {
+    historyDetail.innerHTML = `<p class="history-status error-text">Detail failed: ${error.message}</p>`;
+  }
+}
+
+function renderHistoryDetail(item) {
+  const imageUrl = item.coverage_map_image_url || firstArtifactUrl(item.artifacts);
+  const antennasHtml = (item.antennas || [])
+    .map((antenna) => `
+      <dl class="antenna-snapshot">
+        <dt>Antenna</dt><dd>${antenna.antenna_code}</dd>
+        <dt>Position</dt><dd>${antenna.position.join(", ")}</dd>
+        <dt>Azimuth</dt><dd>${formatMaybeNumber(antenna.azimuth_deg)} deg</dd>
+        <dt>Tilt</dt><dd>${formatRange(antenna.tilt)} deg</dd>
+        <dt>Power</dt><dd>${formatRange(antenna.tx_power)} dBm</dd>
+      </dl>
+    `)
+    .join("");
+
+  historyDetail.innerHTML = `
+    <strong>${formatSimulationType(item.simulation_type)}</strong>
+    <dl class="detail-grid">
+      <dt>Status</dt><dd>${item.status}</dd>
+      <dt>Created</dt><dd>${formatDateTime(item.created_at)}</dd>
+      <dt>Pattern</dt><dd>${item.transmitter_pattern}</dd>
+      <dt>Cell size</dt><dd>${formatMaybeNumber(item.cell_size_m)} m</dd>
+      <dt>Bandwidth</dt><dd>${formatMaybeNumber(item.bandwidth_mhz)} MHz</dd>
+      <dt>MIMO layers</dt><dd>${item.mimo_layers || "--"}</dd>
+    </dl>
+    ${imageUrl ? `<img src="${imageUrl}" alt="Saved coverage map" />` : ""}
+    <h3>Antenna snapshot</h3>
+    ${antennasHtml || "<p class=\"history-status\">No antenna snapshot for this simulation type.</p>"}
+  `;
 }
 
 function buildPayload() {
@@ -324,8 +481,46 @@ function resetAntennas() {
   drawHeatmap();
 }
 
+function formatSimulationType(type) {
+  return String(type || "")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return "--";
+  }
+
+  return new Date(value).toLocaleString();
+}
+
+function formatMaybeNumber(value) {
+  if (value === null || value === undefined) {
+    return "--";
+  }
+
+  return Number(value).toFixed(Number.isInteger(Number(value)) ? 0 : 1);
+}
+
+function formatRange(range) {
+  if (!range) {
+    return "--";
+  }
+
+  return `${formatMaybeNumber(range.min)} / ${formatMaybeNumber(range.current)} / ${formatMaybeNumber(range.max)}`;
+}
+
+function firstArtifactUrl(artifacts) {
+  const artifact = (artifacts || []).find((item) => item.public_url);
+  return artifact ? artifact.public_url : "";
+}
+
 runButton.addEventListener("click", runSimulation);
 resetButton.addEventListener("click", resetAntennas);
+refreshHistoryButton.addEventListener("click", loadHistory);
+antennasTab.addEventListener("click", showAntennaPanel);
+historyTab.addEventListener("click", showHistoryPanel);
 heatLayer.addEventListener("mousemove", handleHover);
 heatLayer.addEventListener("mouseleave", () => {
   hoverCard.classList.add("hidden");

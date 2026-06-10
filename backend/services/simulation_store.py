@@ -61,6 +61,170 @@ def store_simulation_result(
         return None
 
 
+def list_simulation_runs(limit=25):
+    if not is_database_configured():
+        return {
+            "database_configured": False,
+            "items": [],
+        }
+
+    try:
+        with db_session() as session:
+            rows = session.execute(
+                text(
+                    """
+                    SELECT
+                        id,
+                        simulation_type,
+                        status,
+                        transmitter_pattern,
+                        cell_size_m,
+                        bandwidth_mhz,
+                        mimo_layers,
+                        coverage_map_image_url,
+                        error_message,
+                        started_at,
+                        finished_at,
+                        created_at
+                    FROM simulation_runs
+                    ORDER BY created_at DESC
+                    LIMIT :limit
+                    """
+                ),
+                {
+                    "limit": limit,
+                },
+            ).mappings()
+
+            return {
+                "database_configured": True,
+                "items": [
+                    serialize_run_summary(row)
+                    for row in rows
+                ],
+            }
+
+    except SQLAlchemyError:
+        logger.exception("Failed to list simulation runs.")
+        return {
+            "database_configured": True,
+            "items": [],
+            "error": "Failed to load simulation history.",
+        }
+
+
+def get_simulation_run(run_id):
+    if not is_database_configured():
+        return {
+            "database_configured": False,
+            "item": None,
+        }
+
+    try:
+        with db_session() as session:
+            run = session.execute(
+                text(
+                    """
+                    SELECT
+                        id,
+                        simulation_type,
+                        status,
+                        transmitter_pattern,
+                        max_depth,
+                        samples_per_tx,
+                        cell_size_m,
+                        center_x_m,
+                        center_y_m,
+                        center_z_m,
+                        size_x_m,
+                        size_y_m,
+                        bandwidth_mhz,
+                        mimo_layers,
+                        request_json,
+                        response_json,
+                        coverage_map_image_url,
+                        error_message,
+                        started_at,
+                        finished_at,
+                        created_at
+                    FROM simulation_runs
+                    WHERE id = :run_id
+                    """
+                ),
+                {
+                    "run_id": run_id,
+                },
+            ).mappings().first()
+
+            if run is None:
+                return {
+                    "database_configured": True,
+                    "item": None,
+                }
+
+            antennas = session.execute(
+                text(
+                    """
+                    SELECT
+                        antenna_code,
+                        x_m,
+                        y_m,
+                        z_m,
+                        azimuth_deg,
+                        tilt_min_deg,
+                        tilt_current_deg,
+                        tilt_max_deg,
+                        tx_power_min_dbm,
+                        tx_power_current_dbm,
+                        tx_power_max_dbm
+                    FROM simulation_run_antennas
+                    WHERE simulation_run_id = :run_id
+                    ORDER BY antenna_code
+                    """
+                ),
+                {
+                    "run_id": run_id,
+                },
+            ).mappings()
+
+            artifacts = session.execute(
+                text(
+                    """
+                    SELECT
+                        artifact_type,
+                        file_path,
+                        public_url,
+                        size_bytes,
+                        created_at,
+                        expires_at
+                    FROM simulation_artifacts
+                    WHERE simulation_run_id = :run_id
+                    ORDER BY created_at DESC
+                    """
+                ),
+                {
+                    "run_id": run_id,
+                },
+            ).mappings()
+
+            return {
+                "database_configured": True,
+                "item": serialize_run_detail(
+                    run,
+                    antennas,
+                    artifacts,
+                ),
+            }
+
+    except SQLAlchemyError:
+        logger.exception("Failed to load simulation run.")
+        return {
+            "database_configured": True,
+            "item": None,
+            "error": "Failed to load simulation detail.",
+        }
+
+
 def insert_simulation_run(
     session,
     simulation_type,
@@ -91,6 +255,7 @@ def insert_simulation_run(
                 mimo_layers,
                 request_json,
                 response_json,
+                coverage_map_image_url,
                 error_message,
                 started_at,
                 finished_at
@@ -111,6 +276,7 @@ def insert_simulation_run(
                 :mimo_layers,
                 CAST(:request_json AS JSONB),
                 CAST(:response_json AS JSONB),
+                :coverage_map_image_url,
                 :error_message,
                 :started_at,
                 :finished_at
@@ -134,6 +300,7 @@ def insert_simulation_run(
             "mimo_layers": getattr(req, "mimo_layers", None),
             "request_json": to_json_string(req),
             "response_json": to_json_string(summarize_response(result)),
+            "coverage_map_image_url": result.get("coverage_map_image_url"),
             "error_message": result.get("error"),
             "started_at": started_at,
             "finished_at": finished_at,
@@ -285,3 +452,101 @@ def static_file_path_from_url(url):
 
     relative_name = path.split(marker, 1)[1]
     return STATIC_DIR / relative_name
+
+
+def serialize_run_summary(row):
+    return {
+        "id": str(row["id"]),
+        "simulation_type": row["simulation_type"],
+        "status": row["status"],
+        "transmitter_pattern": row["transmitter_pattern"],
+        "cell_size_m": row["cell_size_m"],
+        "bandwidth_mhz": row["bandwidth_mhz"],
+        "mimo_layers": row["mimo_layers"],
+        "coverage_map_image_url": row["coverage_map_image_url"],
+        "error_message": row["error_message"],
+        "started_at": serialize_datetime(row["started_at"]),
+        "finished_at": serialize_datetime(row["finished_at"]),
+        "created_at": serialize_datetime(row["created_at"]),
+    }
+
+
+def serialize_run_detail(
+    run,
+    antennas,
+    artifacts,
+):
+    return {
+        **serialize_run_summary(run),
+        "solver": {
+            "max_depth": run["max_depth"],
+            "samples_per_tx": run["samples_per_tx"],
+            "cell_size_m": run["cell_size_m"],
+            "center": [
+                run["center_x_m"],
+                run["center_y_m"],
+                run["center_z_m"],
+            ],
+            "size": [
+                run["size_x_m"],
+                run["size_y_m"],
+            ],
+        },
+        "request_json": normalize_json_value(run["request_json"]),
+        "response_json": normalize_json_value(run["response_json"]),
+        "antennas": [
+            serialize_antenna_snapshot(row)
+            for row in antennas
+        ],
+        "artifacts": [
+            serialize_artifact(row)
+            for row in artifacts
+        ],
+    }
+
+
+def serialize_antenna_snapshot(row):
+    return {
+        "antenna_code": row["antenna_code"],
+        "position": [
+            row["x_m"],
+            row["y_m"],
+            row["z_m"],
+        ],
+        "azimuth_deg": row["azimuth_deg"],
+        "tilt": {
+            "min": row["tilt_min_deg"],
+            "current": row["tilt_current_deg"],
+            "max": row["tilt_max_deg"],
+        },
+        "tx_power": {
+            "min": row["tx_power_min_dbm"],
+            "current": row["tx_power_current_dbm"],
+            "max": row["tx_power_max_dbm"],
+        },
+    }
+
+
+def serialize_artifact(row):
+    return {
+        "artifact_type": row["artifact_type"],
+        "file_path": row["file_path"],
+        "public_url": row["public_url"],
+        "size_bytes": row["size_bytes"],
+        "created_at": serialize_datetime(row["created_at"]),
+        "expires_at": serialize_datetime(row["expires_at"]),
+    }
+
+
+def serialize_datetime(value):
+    if value is None:
+        return None
+
+    return value.isoformat()
+
+
+def normalize_json_value(value):
+    if isinstance(value, str):
+        return json.loads(value)
+
+    return value

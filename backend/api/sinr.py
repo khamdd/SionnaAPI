@@ -21,6 +21,8 @@ from backend.services.throughput_service import (
 )
 
 from backend.services.simulation_store import (
+    get_simulation_run,
+    list_simulation_runs,
     store_simulation_result,
     utc_now,
 )
@@ -127,3 +129,25 @@ def compare_throughput(req: ThroughputRequest):
             req,
             lambda: compare_throughput_service(req, scene),
         )
+
+
+@router.get("/simulation-runs")
+def simulation_runs(limit: int = 25):
+    return list_simulation_runs(limit=limit)
+
+
+@router.get("/simulation-runs/{run_id}")
+def simulation_run_detail(run_id: str):
+    result = get_simulation_run(run_id)
+
+    if (
+        result.get("database_configured")
+        and result.get("item") is None
+        and not result.get("error")
+    ):
+        raise HTTPException(
+            status_code=404,
+            detail="Simulation run not found.",
+        )
+
+    return result
