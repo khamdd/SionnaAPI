@@ -64,6 +64,36 @@ The backend API docs will be available at:
 http://127.0.0.1:8000/docs
 ```
 
+## Connect Postgres
+
+The backend can store simulation history in Postgres. It uses the tables you created in pgAdmin:
+
+- `simulation_runs`
+- `simulation_run_antennas`
+- `simulation_artifacts`
+
+Create a local `.env` file in the project root:
+
+```text
+DATABASE_URL=postgresql+psycopg://postgres:your_password@localhost:5432/sionna_simulation
+```
+
+Replace:
+
+- `postgres` with your database username.
+- `your_password` with your pgAdmin/Postgres password.
+- `sionna_simulation` with your database name if you used a different one.
+
+The `.env` file is ignored by Git. Use `.env.example` as the template.
+
+If `DATABASE_URL` is not set, the app still runs but skips database storage.
+
+When the DB is configured, every simulation request stores:
+
+- one row in `simulation_runs`
+- antenna snapshots in `simulation_run_antennas` for `/api/v1/network-coverage`
+- generated coverage image metadata in `simulation_artifacts` when a PNG is returned
+
 ## Start the Frontend
 
 After the backend is running, open this file in a browser:

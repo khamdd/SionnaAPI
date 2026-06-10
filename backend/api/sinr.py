@@ -20,6 +20,11 @@ from backend.services.throughput_service import (
     compare_throughput_service,
 )
 
+from backend.services.simulation_store import (
+    store_simulation_result,
+    utc_now,
+)
+
 from backend.simulations.sionna_engine import engine
 
 router = APIRouter(
@@ -41,18 +46,43 @@ def return_or_raise(result):
     return result
 
 
+def run_and_store(
+    simulation_type,
+    req,
+    simulation_fn,
+):
+    started_at = utc_now()
+    result = simulation_fn()
+    finished_at = utc_now()
+
+    simulation_run_id = store_simulation_result(
+        simulation_type,
+        req,
+        result,
+        started_at,
+        finished_at,
+    )
+
+    if simulation_run_id is not None:
+        result["simulation_run_id"] = str(simulation_run_id)
+
+    return return_or_raise(result)
+
+
 @router.post("/coverage-map")
 def coverage_map(req: CoverageRequest, request: Request):
 
     with engine.lock:
         scene = engine.get_scene()
 
-        return return_or_raise(
-            calculate_coverage_map_service(
+        return run_and_store(
+            "coverage_map",
+            req,
+            lambda: calculate_coverage_map_service(
                 req,
                 request.base_url,
                 scene,
-            )
+            ),
         )
 
 
@@ -62,12 +92,14 @@ def network_coverage(req: NetworkCoverageRequest, request: Request):
     with engine.lock:
         scene = engine.get_scene()
 
-        return return_or_raise(
-            calculate_network_coverage_service(
+        return run_and_store(
+            "network_coverage",
+            req,
+            lambda: calculate_network_coverage_service(
                 req,
                 request.base_url,
                 scene,
-            )
+            ),
         )
 
 
@@ -77,8 +109,10 @@ def calculate_sinr(req: SINRRequest):
     with engine.lock:
         scene = engine.get_scene()
 
-        return return_or_raise(
-            calculate_sinr_service(req, scene)
+        return run_and_store(
+            "sinr",
+            req,
+            lambda: calculate_sinr_service(req, scene),
         )
 
 
@@ -88,6 +122,8 @@ def compare_throughput(req: ThroughputRequest):
     with engine.lock:
         scene = engine.get_scene()
 
-        return return_or_raise(
-            compare_throughput_service(req, scene)
+        return run_and_store(
+            "throughput_comparison",
+            req,
+            lambda: compare_throughput_service(req, scene),
         )
