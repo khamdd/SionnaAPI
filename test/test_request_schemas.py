@@ -1,5 +1,6 @@
 import pytest
 from pydantic import ValidationError
+from backend.schemas.requests import RangeValue
 
 from backend.constants import DEFAULT_TRANSMITTER_PATTERN
 from backend.schemas.requests import (
@@ -125,4 +126,40 @@ def test_network_coverage_request_rejects_per_antenna_pattern():
                     "pattern": "iso",
                 }
             ]
+        )
+
+def test_range_value_accepts_current_inside_bounds():
+    value = RangeValue(
+        min=2.0,
+        current=8.0,
+        max=18.0,
+    )
+
+    assert value.current == 8.0
+
+
+def test_range_value_rejects_current_below_min():
+    with pytest.raises(ValidationError):
+        RangeValue(
+            min=2.0,
+            current=1.0,
+            max=18.0,
+        )
+
+
+def test_range_value_rejects_current_above_max():
+    with pytest.raises(ValidationError):
+        RangeValue(
+            min=2.0,
+            current=20.0,
+            max=18.0,
+        )
+
+
+def test_range_value_rejects_min_above_max():
+    with pytest.raises(ValidationError):
+        RangeValue(
+            min=20.0,
+            current=18.0,
+            max=10.0,
         )

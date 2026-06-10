@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import List, Tuple
 from backend.constants import DEFAULT_TRANSMITTER_PATTERN
 
@@ -59,6 +59,16 @@ class RangeValue(BaseModel):
     min: float
     current: float
     max: float
+
+    @model_validator(mode="after")
+    def validate_current_inside_range(self):
+        if self.min > self.max:
+            raise ValueError("min must be less than or equal to max")
+
+        if not self.min <= self.current <= self.max:
+            raise ValueError("current must be between min and max")
+
+        return self
 
 
 class AntennaConfig(BaseModel):
