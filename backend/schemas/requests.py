@@ -18,6 +18,13 @@ class SolverConfig(BaseModel):
         400.0,
     )
 
+    @model_validator(mode="after")
+    def validate_grid_size(self):
+        cells = (self.size[0] / self.cell_size) * (self.size[1] / self.cell_size)
+        if cells > 20000:
+            raise ValueError("simulation grid is too large")
+        return self
+
 
 class CameraConfig(BaseModel):
     position: Tuple[float, float, float] = (
