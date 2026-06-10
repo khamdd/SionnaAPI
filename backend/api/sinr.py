@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 
 from backend.schemas.requests import (
     CoverageRequest,
@@ -29,14 +29,30 @@ router = APIRouter(
 )
 
 
+def return_or_raise(result):
+    status = str(
+        result.get("status", "")
+    ).lower()
+
+    if status.startswith("failure"):
+        raise HTTPException(
+            status_code=500,
+            detail=result,
+        )
+
+    return result
+
+
 @router.post("/coverage-map")
 def coverage_map(req: CoverageRequest, request: Request):
 
     with sionna_lock:
 
-        return calculate_coverage_map_service(
-            req,
-            request.base_url,
+        return return_or_raise(
+            calculate_coverage_map_service(
+                req,
+                request.base_url,
+            )
         )
 
 
@@ -45,9 +61,11 @@ def network_coverage(req: NetworkCoverageRequest, request: Request):
 
     with sionna_lock:
 
-        return calculate_network_coverage_service(
-            req,
-            request.base_url,
+        return return_or_raise(
+            calculate_network_coverage_service(
+                req,
+                request.base_url,
+            )
         )
 
 
@@ -56,7 +74,9 @@ def calculate_sinr(req: SINRRequest):
 
     with sionna_lock:
 
-        return calculate_sinr_service(req)
+        return return_or_raise(
+            calculate_sinr_service(req)
+        )
 
 
 @router.post("/throughput-comparison")
@@ -64,4 +84,6 @@ def compare_throughput(req: ThroughputRequest):
 
     with sionna_lock:
 
-        return compare_throughput_service(req)
+        return return_or_raise(
+            compare_throughput_service(req)
+        )
