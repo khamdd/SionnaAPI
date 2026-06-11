@@ -5,7 +5,7 @@ This project is a local radio-network planning demo built on top of NVIDIA Sionn
 It has two parts:
 
 - `backend/`: a FastAPI server that loads the Sionna Munich scene, runs GPU-backed radio simulations, and returns coverage/SINR/throughput data.
-- `frontend/`: a static browser UI for editing antenna tilt and transmit power, running a simulation, and inspecting grid-cell metrics on a top-down map.
+- `frontend/`: a React/Vite browser UI for editing antenna tilt and transmit power, running a simulation, and inspecting grid-cell metrics on a top-down map.
 
 ## Requirements
 
@@ -20,6 +20,7 @@ The current verified environment uses:
 - FastAPI
 - Uvicorn
 - Pytest
+- Node.js/npm for the React frontend
 
 ## Project Structure
 
@@ -40,9 +41,25 @@ SionnaSimulation/
       antenna_factory.py
       radio_calculator.py
   frontend/
+    package.json
     index.html
     styles.css
-    app.js
+    src/
+      main.jsx
+      App.jsx
+      api.js
+      constants.js
+      components/
+        AntennaPanel.jsx
+        ComparisonResult.jsx
+        HistoryDetail.jsx
+        HistoryModal.jsx
+        HistoryPanel.jsx
+        MapPanel.jsx
+      utils/
+        format.js
+        history.js
+        map.js
   test/
     test_radio_calculator.py
     test_request_schemas.py
@@ -115,10 +132,18 @@ GET /api/v1/simulation-runs/{run_id}
 
 ## Start the Frontend
 
-After the backend is running, open this file in a browser:
+After the backend is running, open another PowerShell window:
+
+```powershell
+cd project_dir\frontend
+npm install
+npm run dev
+```
+
+Open the URL printed by Vite, normally:
 
 ```text
-\SionnaSimulation\frontend\index.html
+http://127.0.0.1:5173
 ```
 
 The frontend calls:
@@ -127,7 +152,11 @@ The frontend calls:
 http://127.0.0.1:8000/api/v1/network-coverage
 ```
 
-No frontend build step is required.
+To point the React app at another backend URL, create `frontend/.env`:
+
+```text
+VITE_API_BASE_URL=http://127.0.0.1:8000
+```
 
 ## Main App Flow
 
@@ -196,7 +225,7 @@ The unit tests cover request validation, grid indexing, dB/dBm conversions, and 
 The default antennas and solver settings are in:
 
 ```text
-frontend/app.js
+frontend/src/constants.js
 ```
 
 To change antenna positions, edit `DEFAULT_ANTENNAS`.
@@ -274,4 +303,4 @@ Stop-Process -Id <PID>
 
 - Generated coverage images are written to `static/`.
 - `static/` is ignored by Git because these images are runtime artifacts.
-- The frontend is intentionally static HTML/CSS/JS so it is easy to inspect and modify without a build system.
+- The frontend is a React/Vite app. Use `npm run dev` for local development and `npm run build` before static deployment.
