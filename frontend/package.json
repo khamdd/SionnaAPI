@@ -9,6 +9,7 @@
     "leaflet": "^1.9.4",
     "react": "latest",
     "react-dom": "latest",
+    "three": "^0.184.0",
     "vite": "latest"
   }
 }

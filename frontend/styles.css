@@ -948,6 +948,12 @@ h2 {
   font-weight: 500;
 }
 
+.field-error {
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .scene-map-toolbar button {
   min-width: 42px;
 }
@@ -1041,6 +1047,46 @@ h2 {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
+}
+
+.scene-3d-preview {
+  position: relative;
+  min-height: 430px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #edf2f7;
+}
+
+.scene-3d-canvas {
+  width: 100%;
+  height: 430px;
+}
+
+.scene-3d-canvas canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.scene-3d-overlay {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 16px;
+  display: grid;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.scene-3d-overlay strong {
+  color: #0f172a;
+  font-size: 24px;
+}
+
+.scene-3d-overlay span {
+  color: #475569;
+  font-size: 13px;
 }
 
 .scene-preview-meta {

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import { activateScene, createScenePreview, deleteScene } from "../api";
 import { formatMaybeNumber } from "../utils/format";
-import SceneMapPreview from "./SceneMapPreview";
+import Scene3DPreview from "./Scene3DPreview";
 
 const DEFAULT_CENTER = [48.1374, 11.5755];
 const DEFAULT_ZOOM = 14;
@@ -29,6 +29,7 @@ export default function SceneChooserModal({
   const [previewBounds, setPreviewBounds] = useState(null);
   const [previewScene, setPreviewScene] = useState(null);
   const [status, setStatus] = useState("Move and zoom the map, then click Select area to draw a scene rectangle.");
+  const [sceneNameError, setSceneNameError] = useState("");
   const [error, setError] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
 
@@ -292,23 +293,27 @@ export default function SceneChooserModal({
 
     if (!bounds) {
       setStatus("Select an area on the map before previewing.");
+      setSceneNameError("");
       setError(true);
       return;
     }
 
     if (!trimmedSceneName) {
       setStatus("Enter a scene name before previewing.");
+      setSceneNameError("Scene name is required.");
       setError(true);
       return;
     }
 
     if (isTooLarge) {
       setStatus("Selected area is too large. Choose a smaller area.");
+      setSceneNameError("");
       setError(true);
       return;
     }
 
     setIsBusy(true);
+    setSceneNameError("");
     setError(false);
     setStatus("Creating scene preview...");
 
@@ -464,11 +469,15 @@ export default function SceneChooserModal({
               required
               onChange={(event) => {
                 setSceneName(event.target.value);
+                if (event.target.value.trim()) {
+                  setSceneNameError("");
+                }
                 if (error) {
                   setError(false);
                 }
               }}
             />
+            {sceneNameError && <small className="field-error">{sceneNameError}</small>}
           </label>
           <div
             ref={mapNodeRef}
@@ -497,7 +506,7 @@ export default function SceneChooserModal({
       {previewScene && (
         <div className="scene-preview">
           {previewBounds ? (
-            <SceneMapPreview bounds={previewBounds} />
+            <Scene3DPreview bounds={previewBounds} sceneName={previewScene.name} />
           ) : (
             <img src={previewScene.preview_url} alt={`${previewScene.name} preview`} />
           )}
