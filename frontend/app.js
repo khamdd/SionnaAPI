@@ -28,12 +28,16 @@ let latestGrid = null;
 let latestSolver = structuredClone(DEFAULT_SOLVER);
 let latestHistory = [];
 let selectedHistoryId = null;
+let comparisonType = null;
+let selectedComparisonIds = new Set();
+let comparisonDetails = new Map();
 
 const antennaList = document.querySelector("#antenna-list");
 const historyView = document.querySelector("#history-view");
 const historyList = document.querySelector("#history-list");
 const historyDetail = document.querySelector("#history-detail");
 const historyStatus = document.querySelector("#history-status");
+const historyComparePanel = document.querySelector("#history-compare-panel");
 const antennaLayer = document.querySelector("#antenna-layer");
 const mapStage = document.querySelector("#map-stage");
 const coverageImage = document.querySelector("#coverage-image");
@@ -226,6 +230,7 @@ async function loadHistory() {
 
     if (!result.database_configured) {
       latestHistory = [];
+      resetComparisonState();
       historyList.innerHTML = "";
       historyDetail.classList.add("hidden");
       historyStatus.textContent = "Database is not configured. Set DATABASE_URL to use history.";
@@ -237,7 +242,9 @@ async function loadHistory() {
     }
 
     latestHistory = result.items || [];
+    pruneComparisonSelection();
     renderHistoryList();
+    renderComparisonPanel();
     historyStatus.textContent = latestHistory.length
       ? `${latestHistory.length} saved simulations`
       : "No saved simulations yet.";
@@ -253,11 +260,17 @@ function renderHistoryList() {
   latestHistory.forEach((item) => {
     const row = document.createElement("div");
     row.className = "history-row";
+    const isComparing = Boolean(comparisonType);
+    const isCompatible = !isComparing || item.simulation_type === comparisonType;
+    const isSelectedForComparison = selectedComparisonIds.has(item.id);
+    row.classList.toggle("comparison-disabled", !isCompatible);
+    row.classList.toggle("comparison-selected", isSelectedForComparison);
 
     const button = document.createElement("button");
     button.type = "button";
     button.className = "history-item";
     button.classList.toggle("active", item.id === selectedHistoryId);
+    button.disabled = !isCompatible;
     button.innerHTML = `
       <strong>${formatSimulationType(item.simulation_type)} - ${item.status}</strong>
       <span>${formatDateTime(item.created_at)}</span>
@@ -267,9 +280,23 @@ function renderHistoryList() {
       loadHistoryDetail(item.id);
     });
 
+    const compareButton = document.createElement("button");
+    compareButton.type = "button";
+    compareButton.className = "history-compare";
+    compareButton.disabled = !isCompatible;
+    compareButton.textContent = isSelectedForComparison ? "Selected" : "Compare";
+    compareButton.title = isComparing && !isCompatible
+      ? `Only ${formatSimulationType(comparisonType)} runs can be compared now`
+      : `Compare ${formatSimulationType(item.simulation_type)} history`;
+    compareButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleComparisonSelection(item);
+    });
+
     const deleteButton = document.createElement("button");
     deleteButton.type = "button";
     deleteButton.className = "history-delete";
+    deleteButton.disabled = !isCompatible;
     deleteButton.title = "Delete simulation history";
     deleteButton.setAttribute("aria-label", `Delete ${formatSimulationType(item.simulation_type)} history`);
     deleteButton.innerHTML = trashIconSvg();
@@ -279,9 +306,158 @@ function renderHistoryList() {
     });
 
     row.appendChild(button);
+    row.appendChild(compareButton);
     row.appendChild(deleteButton);
     historyList.appendChild(row);
   });
+}
+
+function toggleComparisonSelection(item) {
+  if (!comparisonType) {
+    comparisonType = item.simulation_type;
+  }
+
+  if (item.simulation_type !== comparisonType) {
+    return;
+  }
+
+  if (selectedComparisonIds.has(item.id)) {
+    selectedComparisonIds.delete(item.id);
+    comparisonDetails.delete(item.id);
+  } else {
+    selectedComparisonIds.add(item.id);
+  }
+
+  renderHistoryList();
+  renderComparisonPanel();
+}
+
+function renderComparisonPanel() {
+  if (!comparisonType) {
+    historyComparePanel.classList.add("hidden");
+    historyComparePanel.innerHTML = "";
+    return;
+  }
+
+  const selectedCount = selectedComparisonIds.size;
+  const canCompare = selectedCount >= 2;
+
+  historyComparePanel.classList.remove("hidden");
+  historyComparePanel.innerHTML = `
+    <div>
+      <strong>Comparing ${formatSimulationType(comparisonType)}</strong>
+      <span>${selectedCount} selected. Choose 2 or more saved results.</span>
+    </div>
+    <div class="comparison-actions">
+      <button id="cancel-comparison" class="ghost-button" type="button">Cancel</button>
+      <button id="show-comparison" class="primary-button" type="button" ${canCompare ? "" : "disabled"}>
+        Show comparison
+      </button>
+    </div>
+  `;
+
+  document
+    .querySelector("#cancel-comparison")
+    .addEventListener("click", cancelComparison);
+  document
+    .querySelector("#show-comparison")
+    .addEventListener("click", showComparisonResult);
+}
+
+function cancelComparison() {
+  resetComparisonState();
+  renderHistoryList();
+  renderComparisonPanel();
+}
+
+function resetComparisonState() {
+  comparisonType = null;
+  selectedComparisonIds = new Set();
+  comparisonDetails = new Map();
+}
+
+function pruneComparisonSelection() {
+  if (!comparisonType) {
+    return;
+  }
+
+  const availableIds = new Set(
+    latestHistory
+      .filter((item) => item.simulation_type === comparisonType)
+      .map((item) => item.id)
+  );
+
+  selectedComparisonIds = new Set(
+    [...selectedComparisonIds].filter((id) => availableIds.has(id))
+  );
+
+  for (const id of [...comparisonDetails.keys()]) {
+    if (!availableIds.has(id)) {
+      comparisonDetails.delete(id);
+    }
+  }
+
+  if (selectedComparisonIds.size === 0) {
+    resetComparisonState();
+  }
+}
+
+async function showComparisonResult() {
+  if (!comparisonType || selectedComparisonIds.size < 2) {
+    return;
+  }
+
+  historyStatus.textContent = "Loading comparison...";
+  historyStatus.classList.remove("error-text");
+
+  try {
+    const selectedIds = [...selectedComparisonIds];
+    const items = [];
+
+    for (const id of selectedIds) {
+      items.push(await loadComparisonDetail(id));
+    }
+
+    historyDetail.classList.remove("hidden");
+    historyDetail.innerHTML = renderComparisonResult(comparisonType, items);
+    selectedHistoryId = null;
+    resetComparisonState();
+    renderHistoryList();
+    renderComparisonPanel();
+    historyStatus.textContent = `Compared ${items.length} simulations.`;
+  } catch (error) {
+    historyStatus.textContent = `Comparison failed: ${error.message}`;
+    historyStatus.classList.add("error-text");
+  }
+}
+
+async function loadComparisonDetail(runId) {
+  if (comparisonDetails.has(runId)) {
+    return comparisonDetails.get(runId);
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/v1/simulation-runs/${runId}`);
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+
+  const result = await response.json();
+
+  if (!result.database_configured) {
+    throw new Error("Database is not configured.");
+  }
+
+  if (result.error) {
+    throw new Error(result.error);
+  }
+
+  if (!result.item) {
+    throw new Error("Simulation not found.");
+  }
+
+  comparisonDetails.set(runId, result.item);
+  return result.item;
 }
 
 async function deleteHistoryItem(item) {
@@ -310,6 +486,9 @@ async function deleteHistoryItem(item) {
       historyDetail.classList.add("hidden");
       historyDetail.innerHTML = "";
     }
+    selectedComparisonIds.delete(item.id);
+    comparisonDetails.delete(item.id);
+    pruneComparisonSelection();
 
     await loadHistory();
   } catch (error) {
@@ -492,6 +671,207 @@ function renderThroughputHistory(item) {
       <dt>Direction</dt><dd>${formatText(comparison.direction)}</dd>
     </dl>
   `;
+}
+
+function renderComparisonResult(type, items) {
+  const renderer = {
+    coverage_map: renderCoverageMapComparison,
+    network_coverage: renderNetworkCoverageComparison,
+    sinr: renderSinrComparison,
+    throughput_comparison: renderThroughputComparison,
+  }[type];
+
+  if (!renderer) {
+    return `
+      <strong>Comparison: ${formatSimulationType(type)}</strong>
+      <p class="history-status">No comparison view is available for this simulation type.</p>
+    `;
+  }
+
+  return `
+    <strong>Comparison: ${formatSimulationType(type)}</strong>
+    ${renderer(items)}
+  `;
+}
+
+function renderCoverageMapComparison(items) {
+  return `
+    <div class="comparison-grid">
+      ${items.map((item, index) => {
+        const request = item.request_json || {};
+        const imageUrl = item.coverage_map_image_url || firstArtifactUrl(item.artifacts);
+
+        return `
+          <article class="comparison-card">
+            <h3>Run ${index + 1}</h3>
+            <dl class="detail-grid">
+              <dt>Created</dt><dd>${formatDateTime(item.created_at)}</dd>
+              <dt>Status</dt><dd>${formatText(item.status)}</dd>
+              <dt>Transmitter</dt><dd>${formatPositionValue(request.transmitter_position)}</dd>
+              <dt>Tilt</dt><dd>${formatMaybeNumber(request.tilt)} deg</dd>
+              <dt>Power</dt><dd>${formatMaybeNumber(request.tx_power)} dBm</dd>
+              <dt>Cell size</dt><dd>${formatMaybeNumber(item.cell_size_m)} m</dd>
+              <dt>Area</dt><dd>${formatPositionValue(request.solver?.size)}</dd>
+            </dl>
+            ${imageUrl ? `<img src="${formatAttribute(imageUrl)}" alt="Coverage comparison run ${index + 1}" />` : ""}
+          </article>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function renderNetworkCoverageComparison(items) {
+  return `
+    <div class="comparison-grid">
+      ${items.map((item, index) => {
+        const response = item.response_json || {};
+        const grid = response.grid || {};
+        const imageUrl = item.coverage_map_image_url || firstArtifactUrl(item.artifacts);
+        const antennaStats = summarizeAntennaSnapshot(item.antennas || []);
+
+        return `
+          <article class="comparison-card">
+            <h3>Run ${index + 1}</h3>
+            <dl class="detail-grid">
+              <dt>Created</dt><dd>${formatDateTime(item.created_at)}</dd>
+              <dt>Status</dt><dd>${formatText(item.status)}</dd>
+              <dt>Cell size</dt><dd>${formatMaybeNumber(item.cell_size_m)} m</dd>
+              <dt>Bandwidth</dt><dd>${formatMaybeNumber(item.bandwidth_mhz)} MHz</dd>
+              <dt>MIMO layers</dt><dd>${item.mimo_layers || "--"}</dd>
+              <dt>Grid</dt><dd>${grid.rows || "--"} x ${grid.cols || "--"}</dd>
+              <dt>Cells</dt><dd>${grid.cell_count || "--"}</dd>
+              <dt>Antennas</dt><dd>${antennaStats.count}</dd>
+              <dt>Avg tilt</dt><dd>${formatMaybeNumber(antennaStats.averageTilt)} deg</dd>
+              <dt>Avg power</dt><dd>${formatMaybeNumber(antennaStats.averagePower)} dBm</dd>
+            </dl>
+            ${imageUrl ? `<img src="${formatAttribute(imageUrl)}" alt="Network coverage comparison run ${index + 1}" />` : ""}
+          </article>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function renderSinrComparison(items) {
+  const rows = items.map((item, index) => {
+    const request = item.request_json || {};
+    const response = item.response_json || {};
+
+    return [
+      `Run ${index + 1}`,
+      formatDateTime(item.created_at),
+      formatText(item.status),
+      formatPositionValue(request.transmitter_position),
+      formatPositionValue(request.receiver_position),
+      `${formatMaybeNumber(request.tilt)} deg`,
+      `${formatMaybeNumber(request.tx_power)} dBm`,
+      `${formatMaybeNumber(response.sinr_db)} dB`,
+      `${formatMaybeNumber(response.signal_power)} dBm`,
+      `${formatMaybeNumber(response.noise_power)} dBm`,
+    ];
+  });
+
+  return renderComparisonTable(
+    [
+      "Run",
+      "Created",
+      "Status",
+      "Transmitter",
+      "Receiver",
+      "Tilt",
+      "Power",
+      "SINR",
+      "Signal",
+      "Noise",
+    ],
+    rows
+  );
+}
+
+function renderThroughputComparison(items) {
+  const rows = items.map((item, index) => {
+    const request = item.request_json || {};
+    const response = item.response_json || {};
+    const comparison = response.comparison || {};
+
+    return [
+      `Run ${index + 1}`,
+      formatDateTime(item.created_at),
+      formatText(item.status),
+      formatPositionValue(request.receiver_position),
+      `${formatMaybeNumber(request.bandwidth_mhz)} MHz`,
+      request.mimo_layers || "--",
+      `${formatMaybeNumber(comparison.base_tilt_deg)} deg`,
+      `${formatMaybeNumber(comparison.target_tilt_deg)} deg`,
+      `${formatMaybeNumber(comparison.base_throughput_mbps)} Mbps`,
+      `${formatMaybeNumber(comparison.target_throughput_mbps)} Mbps`,
+      `${formatMaybeNumber(comparison.delta_mbps)} Mbps`,
+      `${formatMaybeNumber(comparison.percentage_change)}%`,
+      formatText(comparison.direction),
+    ];
+  });
+
+  return renderComparisonTable(
+    [
+      "Run",
+      "Created",
+      "Status",
+      "Receiver",
+      "Bandwidth",
+      "Layers",
+      "Base tilt",
+      "Target tilt",
+      "Base throughput",
+      "Target throughput",
+      "Delta",
+      "Change",
+      "Direction",
+    ],
+    rows
+  );
+}
+
+function renderComparisonTable(headers, rows) {
+  return `
+    <div class="comparison-table-wrap">
+      <table class="comparison-table">
+        <thead>
+          <tr>${headers.map((header) => `<th>${formatText(header)}</th>`).join("")}</tr>
+        </thead>
+        <tbody>
+          ${rows.map((row) => `
+            <tr>${row.map((cell) => `<td>${cell}</td>`).join("")}</tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function summarizeAntennaSnapshot(snapshot) {
+  const tiltValues = snapshot
+    .map((item) => item.tilt?.current)
+    .filter((value) => Number.isFinite(Number(value)))
+    .map(Number);
+  const powerValues = snapshot
+    .map((item) => item.tx_power?.current)
+    .filter((value) => Number.isFinite(Number(value)))
+    .map(Number);
+
+  return {
+    count: snapshot.length,
+    averageTilt: average(tiltValues),
+    averagePower: average(powerValues),
+  };
+}
+
+function average(values) {
+  if (!values.length) {
+    return null;
+  }
+
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
 function buildPayload() {

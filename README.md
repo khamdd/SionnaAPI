@@ -64,13 +64,23 @@ The backend API docs will be available at:
 http://127.0.0.1:8000/docs
 ```
 
-## Connect Postgres
+## Connect Postgres/PostGIS
 
-The backend can store simulation history in Postgres. It uses the tables you created in pgAdmin:
+The backend can store simulation history in PostgreSQL with PostGIS enabled. The schema stores local Sionna coordinates as PostGIS geometry values:
 
+- antenna positions use `scene_position GEOMETRY(PointZ, 0)`
+- simulation centers use `center_position GEOMETRY(PointZ, 0)`
+- simulation areas use `area_geom GEOMETRY(Polygon, 0)`
+
+The app uses these project tables:
+
+- `sites`
+- `antennas`
 - `simulation_runs`
 - `simulation_run_antennas`
 - `simulation_artifacts`
+
+PostGIS also creates metadata tables/views such as `spatial_ref_sys`, `geometry_columns`, and `geography_columns`. Those are expected and should not be deleted.
 
 Create a local `.env` file in the project root:
 
@@ -94,18 +104,13 @@ When the DB is configured, every simulation request stores:
 - antenna snapshots in `simulation_run_antennas` for `/api/v1/network-coverage`
 - generated coverage image metadata in `simulation_artifacts` when a PNG is returned
 
+The app does not use a `coverage_cells` table. Coverage grid detail stays in the API response for the active simulation, while the database stores the request, summarized response, image URL, and antenna snapshots.
+
 The frontend History tab reads from:
 
 ```text
 GET /api/v1/simulation-runs
 GET /api/v1/simulation-runs/{run_id}
-```
-
-Make sure `simulation_runs` has this column:
-
-```sql
-ALTER TABLE simulation_runs
-ADD COLUMN IF NOT EXISTS coverage_map_image_url TEXT;
 ```
 
 ## Start the Frontend
