@@ -440,8 +440,7 @@ async function showComparisonResult() {
       items.push(await loadComparisonDetail(id));
     }
 
-    historyDetail.classList.remove("hidden");
-    historyDetail.innerHTML = renderComparisonResult(comparisonType, items);
+    openHistoryModal(renderComparisonResult(comparisonType, items));
     selectedHistoryId = null;
     resetComparisonState();
     renderHistoryList();
@@ -504,9 +503,7 @@ async function deleteHistoryItem(item) {
     }
 
     if (selectedHistoryId === item.id) {
-      selectedHistoryId = null;
-      historyDetail.classList.add("hidden");
-      historyDetail.innerHTML = "";
+      closeHistoryModal();
     }
     selectedComparisonIds.delete(item.id);
     comparisonDetails.delete(item.id);
@@ -522,8 +519,7 @@ async function deleteHistoryItem(item) {
 async function loadHistoryDetail(runId) {
   selectedHistoryId = runId;
   renderHistoryList();
-  historyDetail.classList.remove("hidden");
-  historyDetail.innerHTML = "<p class=\"history-status\">Loading detail...</p>";
+  openHistoryModal("<p class=\"history-status\">Loading detail...</p>");
 
   try {
     const response = await fetch(`${API_BASE_URL}/api/v1/simulation-runs/${runId}`);
@@ -535,7 +531,7 @@ async function loadHistoryDetail(runId) {
     const result = await response.json();
 
     if (!result.database_configured) {
-      historyDetail.innerHTML = "<p class=\"history-status\">Database is not configured.</p>";
+      openHistoryModal("<p class=\"history-status\">Database is not configured.</p>");
       return;
     }
 
@@ -544,13 +540,13 @@ async function loadHistoryDetail(runId) {
     }
 
     if (!result.item) {
-      historyDetail.innerHTML = "<p class=\"history-status\">Simulation not found.</p>";
+      openHistoryModal("<p class=\"history-status\">Simulation not found.</p>");
       return;
     }
 
     renderHistoryDetail(result.item);
   } catch (error) {
-    historyDetail.innerHTML = `<p class="history-status error-text">Detail failed: ${error.message}</p>`;
+    openHistoryModal(`<p class="history-status error-text">Detail failed: ${formatText(error.message)}</p>`);
   }
 }
 
@@ -563,14 +559,39 @@ function renderHistoryDetail(item) {
   }[item.simulation_type];
 
   if (renderer) {
-    historyDetail.innerHTML = renderer(item);
+    openHistoryModal(renderer(item));
     return;
   }
 
-  historyDetail.innerHTML = `
+  openHistoryModal(`
     ${renderHistoryHeader(item)}
     <p class="history-status">No specialized history view for this simulation type.</p>
+  `);
+}
+
+function openHistoryModal(content) {
+  historyDetail.classList.remove("hidden");
+  historyDetail.innerHTML = `
+    <div class="history-modal-content" role="dialog" aria-modal="true" aria-label="Simulation history detail">
+      <button id="close-history-detail" class="history-modal-close" type="button" aria-label="Close history detail">
+        ${closeIconSvg()}
+      </button>
+      <div class="history-modal-body">
+        ${content}
+      </div>
+    </div>
   `;
+
+  document
+    .querySelector("#close-history-detail")
+    .addEventListener("click", closeHistoryModal);
+}
+
+function closeHistoryModal() {
+  selectedHistoryId = null;
+  historyDetail.classList.add("hidden");
+  historyDetail.innerHTML = "";
+  renderHistoryList();
 }
 
 function renderHistoryHeader(item) {
@@ -1168,6 +1189,14 @@ function trashIconSvg() {
   `;
 }
 
+function closeIconSvg() {
+  return `
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M18.3 5.7 12 12l6.3 6.3-1.4 1.4L10.6 13.4 4.3 19.7 2.9 18.3 9.2 12 2.9 5.7 4.3 4.3l6.3 6.3 6.3-6.3 1.4 1.4Z"></path>
+    </svg>
+  `;
+}
+
 runButton.addEventListener("click", runSimulation);
 resetButton.addEventListener("click", resetAntennas);
 refreshHistoryButton.addEventListener("click", loadHistory);
@@ -1176,6 +1205,16 @@ historyTab.addEventListener("click", showHistoryPanel);
 heatLayer.addEventListener("mousemove", handleHover);
 heatLayer.addEventListener("mouseleave", () => {
   hoverCard.classList.add("hidden");
+});
+historyDetail.addEventListener("click", (event) => {
+  if (event.target === historyDetail) {
+    closeHistoryModal();
+  }
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !historyDetail.classList.contains("hidden")) {
+    closeHistoryModal();
+  }
 });
 window.addEventListener("resize", () => {
   drawHeatmap();

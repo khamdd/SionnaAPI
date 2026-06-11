@@ -497,9 +497,60 @@ h2 {
 }
 
 .history-detail {
-  margin-top: 12px;
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.45);
+  padding: 24px;
+}
+
+.history-detail.hidden {
+  display: none;
+}
+
+.history-modal-content {
+  position: relative;
+  width: min(860px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.32);
+  padding: 18px;
+}
+
+.history-modal-body {
+  padding-right: 34px;
+}
+
+.history-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.history-modal-close:hover {
+  border-color: var(--accent);
+  color: var(--accent-dark);
+}
+
+.history-modal-close svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
 }
 
 .detail-grid,
