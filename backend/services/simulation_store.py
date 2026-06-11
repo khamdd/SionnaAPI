@@ -26,12 +26,14 @@ def store_simulation_result(
     result,
     started_at,
     finished_at,
+    scene_info=None,
 ):
     if not is_database_configured():
         return None
 
     try:
         with db_session() as session:
+            ensure_scene_columns(session)
             run_id = insert_simulation_run(
                 session,
                 simulation_type,
@@ -39,6 +41,7 @@ def store_simulation_result(
                 result,
                 started_at,
                 finished_at,
+                scene_info,
             )
 
             if simulation_type == "network_coverage":
@@ -70,6 +73,7 @@ def list_simulation_runs(limit=25):
 
     try:
         with db_session() as session:
+            ensure_scene_columns(session)
             rows = session.execute(
                 text(
                     """
@@ -78,6 +82,8 @@ def list_simulation_runs(limit=25):
                         simulation_type,
                         status,
                         transmitter_pattern,
+                        scene_id,
+                        scene_name,
                         cell_size_m,
                         bandwidth_mhz,
                         mimo_layers,
@@ -122,6 +128,7 @@ def get_simulation_run(run_id):
 
     try:
         with db_session() as session:
+            ensure_scene_columns(session)
             run = session.execute(
                 text(
                     """
@@ -130,6 +137,8 @@ def get_simulation_run(run_id):
                         simulation_type,
                         status,
                         transmitter_pattern,
+                        scene_id,
+                        scene_name,
                         max_depth,
                         samples_per_tx,
                         cell_size_m,
@@ -285,6 +294,25 @@ def delete_simulation_run(run_id):
         }
 
 
+def ensure_scene_columns(session):
+    session.execute(
+        text(
+            """
+            ALTER TABLE simulation_runs
+            ADD COLUMN IF NOT EXISTS scene_id TEXT NOT NULL DEFAULT 'munich'
+            """
+        )
+    )
+    session.execute(
+        text(
+            """
+            ALTER TABLE simulation_runs
+            ADD COLUMN IF NOT EXISTS scene_name TEXT NOT NULL DEFAULT 'Munich'
+            """
+        )
+    )
+
+
 def insert_simulation_run(
     session,
     simulation_type,
@@ -292,9 +320,11 @@ def insert_simulation_run(
     result,
     started_at,
     finished_at,
+    scene_info=None,
 ):
     solver = req.solver
     status = normalize_status(result)
+    scene_info = scene_info or {}
 
     row = session.execute(
         text(
@@ -303,6 +333,8 @@ def insert_simulation_run(
                 simulation_type,
                 status,
                 transmitter_pattern,
+                scene_id,
+                scene_name,
                 max_depth,
                 samples_per_tx,
                 cell_size_m,
@@ -321,6 +353,8 @@ def insert_simulation_run(
                 :simulation_type,
                 :status,
                 :transmitter_pattern,
+                :scene_id,
+                :scene_name,
                 :max_depth,
                 :samples_per_tx,
                 :cell_size_m,
@@ -348,6 +382,8 @@ def insert_simulation_run(
             "simulation_type": simulation_type,
             "status": status,
             "transmitter_pattern": req.transmitter_pattern,
+            "scene_id": scene_info.get("id", "munich"),
+            "scene_name": scene_info.get("name", "Munich"),
             "max_depth": solver.max_depth,
             "samples_per_tx": solver.samples_per_tx,
             "cell_size_m": solver.cell_size,
@@ -564,6 +600,8 @@ def serialize_run_summary(row):
         "simulation_type": row["simulation_type"],
         "status": row["status"],
         "transmitter_pattern": row["transmitter_pattern"],
+        "scene_id": row["scene_id"],
+        "scene_name": row["scene_name"],
         "cell_size_m": row["cell_size_m"],
         "bandwidth_mhz": row["bandwidth_mhz"],
         "mimo_layers": row["mimo_layers"],

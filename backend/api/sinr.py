@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, Request
 from backend.schemas.requests import (
     CoverageRequest,
     NetworkCoverageRequest,
+    SceneBoundsRequest,
     SINRRequest,
     ThroughputRequest,
 )
@@ -26,6 +27,13 @@ from backend.services.simulation_store import (
     list_simulation_runs,
     store_simulation_result,
     utc_now,
+)
+from backend.services.scene_service import (
+    activate_scene,
+    create_scene_preview,
+    delete_scene,
+    get_active_scene,
+    list_scenes,
 )
 
 from backend.simulations.sionna_engine import engine
@@ -64,9 +72,22 @@ def run_and_store(
         result,
         started_at,
         finished_at,
+        scene_info=get_engine_scene_info(),
     )
 
     return return_or_raise(result)
+
+
+def get_engine_scene_info():
+    get_active_scene_info = getattr(engine, "get_active_scene_info", None)
+
+    if get_active_scene_info is None:
+        return {
+            "id": "munich",
+            "name": "Munich",
+        }
+
+    return get_active_scene_info()
 
 
 @router.post("/coverage-map")
@@ -171,3 +192,39 @@ def delete_simulation_run_history(run_id: str):
         )
 
     return result
+
+
+@router.get("/scenes")
+def scenes():
+    return list_scenes()
+
+
+@router.get("/scenes/active")
+def active_scene():
+    return get_active_scene()
+
+
+@router.post("/scenes/preview")
+def preview_scene(req: SceneBoundsRequest, request: Request):
+    result = create_scene_preview(req, request.base_url)
+    return return_or_raise(result)
+
+
+@router.post("/scenes/{scene_id}/activate")
+def activate_scene_route(scene_id: str):
+    result = activate_scene(scene_id)
+    scene = return_or_raise(result)["scene"]
+
+    with engine.lock:
+        engine.set_active_scene(scene)
+
+    return {
+        "status": "success",
+        "scene": scene,
+    }
+
+
+@router.delete("/scenes/{scene_id}")
+def delete_scene_route(scene_id: str):
+    result = delete_scene(scene_id)
+    return return_or_raise(result)

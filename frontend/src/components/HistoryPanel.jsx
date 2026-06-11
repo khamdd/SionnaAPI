@@ -10,6 +10,8 @@ import {
 import { TrashIcon } from "./Icons";
 
 export default function HistoryPanel({
+  comparisonSceneId,
+  comparisonSceneName,
   comparisonType,
   historyError,
   historyStatus,
@@ -35,6 +37,8 @@ export default function HistoryPanel({
         {items.map((item) => (
           <HistoryRow
             key={item.id}
+            comparisonSceneId={comparisonSceneId}
+            comparisonSceneName={comparisonSceneName}
             item={item}
             comparisonType={comparisonType}
             isSelectedForComparison={selectedComparisonIds.has(item.id)}
@@ -50,6 +54,8 @@ export default function HistoryPanel({
 }
 
 function HistoryRow({
+  comparisonSceneId,
+  comparisonSceneName,
   comparisonType,
   isSelectedForComparison,
   isSelectedHistory,
@@ -62,6 +68,7 @@ function HistoryRow({
   const canCompareItem = isSuccessfulHistoryItem(item);
   const isCompatible = !isComparing || (
     item.simulation_type === comparisonType && canCompareItem
+    && item.scene_id === comparisonSceneId
   );
 
   return (
@@ -85,7 +92,13 @@ function HistoryRow({
         className="history-compare"
         type="button"
         disabled={!canCompareItem || !isCompatible}
-        title={compareButtonTitle(item, isComparing, isCompatible, comparisonType)}
+        title={compareButtonTitle(
+          item,
+          isComparing,
+          isCompatible,
+          comparisonType,
+          comparisonSceneName,
+        )}
         onClick={() => onToggleCompare(item)}
       >
         {isSelectedForComparison ? "Selected" : "Compare"}

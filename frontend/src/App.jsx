@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  listScenes,
   deleteSimulationRun,
   getSimulationRun,
   listSimulationRuns,
@@ -21,6 +22,8 @@ import HistoryDetail from "./components/HistoryDetail";
 import HistoryModal, { HistoryModalBody } from "./components/HistoryModal";
 import HistoryPanel from "./components/HistoryPanel";
 import MapPanel from "./components/MapPanel";
+import SceneChooserModal from "./components/SceneChooserModal";
+import ScenesPage from "./components/ScenesPage";
 import { formatDateTime, formatSimulationType } from "./utils/format";
 import {
   isSuccessfulHistoryItem,
@@ -38,6 +41,7 @@ const ROUTES = [
   { path: "/sinr", label: "SINR API" },
   { path: "/throughput", label: "Throughput API" },
   { path: "/history", label: "History" },
+  { path: "/scenes", label: "Scenes" },
 ];
 
 function clone(value) {
@@ -58,9 +62,15 @@ export default function App() {
   const [latestHistory, setLatestHistory] = useState([]);
   const [selectedHistoryId, setSelectedHistoryId] = useState(null);
   const [comparisonType, setComparisonType] = useState(null);
+  const [comparisonSceneId, setComparisonSceneId] = useState(null);
+  const [comparisonSceneName, setComparisonSceneName] = useState(null);
   const [selectedComparisonIds, setSelectedComparisonIds] = useState(() => new Set());
   const [comparisonDetails, setComparisonDetails] = useState(() => new Map());
   const [modalContent, setModalContent] = useState(null);
+  const [sceneChooserOpen, setSceneChooserOpen] = useState(false);
+  const [scenes, setScenes] = useState([]);
+  const [activeScene, setActiveScene] = useState({ id: "munich", name: "Munich" });
+  const [sceneNotice, setSceneNoticeState] = useState(null);
   const [hover, setHover] = useState(null);
 
   const canvasRef = useRef(null);
@@ -91,13 +101,22 @@ export default function App() {
       const items = result.items || [];
       setLatestHistory(items);
       setHistoryStatus(items.length ? `${items.length} saved simulations` : "No saved simulations yet.");
-      setSelectedComparisonIds((current) => pruneComparisonSelection(current, items, comparisonType));
+      setSelectedComparisonIds((current) => (
+        pruneComparisonSelection(current, items, comparisonType, comparisonSceneId)
+      ));
       setComparisonDetails((current) => pruneComparisonDetails(current, items));
     } catch (error) {
       setHistoryStatus(`History failed: ${error.message}`);
       setHistoryError(true);
     }
-  }, [comparisonType]);
+  }, [comparisonSceneId, comparisonType]);
+
+  const loadScenes = useCallback(async () => {
+    const result = await listScenes();
+    setScenes(result.scenes || []);
+    setActiveScene(result.active_scene || { id: result.active_scene_id || "munich", name: "Munich" });
+    return result;
+  }, []);
 
   useEffect(() => {
     function handlePopState() {
@@ -115,8 +134,16 @@ export default function App() {
   }, [route, loadHistory]);
 
   useEffect(() => {
+    loadScenes().catch((error) => {
+      setSceneNotice(`Failed to load scenes: ${error.message}`, true);
+    });
+  }, [loadScenes]);
+
+  useEffect(() => {
     if (comparisonType && selectedComparisonIds.size === 0) {
       setComparisonType(null);
+      setComparisonSceneId(null);
+      setComparisonSceneName(null);
     }
   }, [comparisonType, selectedComparisonIds]);
 
@@ -209,19 +236,62 @@ export default function App() {
       return;
     }
 
-    if (comparisonType && item.simulation_type !== comparisonType) {
+    if (
+      comparisonType
+      && (
+        item.simulation_type !== comparisonType
+        || item.scene_id !== comparisonSceneId
+      )
+    ) {
       return;
     }
 
     setComparisonType((current) => current || item.simulation_type);
+    setComparisonSceneId((current) => current || item.scene_id);
+    setComparisonSceneName((current) => current || item.scene_name);
     setSelectedComparisonIds((current) => toggleSetValue(current, item.id));
     setComparisonDetails((current) => removeMapValue(current, item.id));
   }
 
   function cancelComparison() {
     setComparisonType(null);
+    setComparisonSceneId(null);
+    setComparisonSceneName(null);
     setSelectedComparisonIds(new Set());
     setComparisonDetails(new Map());
+  }
+
+  async function chooseScene() {
+    try {
+      const result = await loadScenes();
+      const importedCount = result.imported_scene_count || 0;
+      const maxScenes = result.max_imported_scenes || 3;
+
+      if (importedCount >= maxScenes) {
+        setSceneNotice(`Only ${maxScenes} imported scenes are allowed. Delete one before choosing a new scene.`, true);
+        navigate("/scenes");
+        return;
+      }
+
+      setSceneChooserOpen(true);
+    } catch (error) {
+      setSceneNotice(`Failed to check scenes: ${error.message}`, true);
+      navigate("/scenes");
+    }
+  }
+
+  function handleSceneActivated(scene) {
+    setActiveScene(scene);
+    setSceneChooserOpen(false);
+    setSceneNotice(`${scene.name} is now active.`);
+    loadScenes().catch(() => {});
+    setLatestGrid(null);
+    setCoverageImageUrl("");
+    setHover(null);
+  }
+
+  function setSceneNotice(message, error = false) {
+    setSceneNoticeState({ message, error });
   }
 
   async function showComparisonResult() {
@@ -341,7 +411,12 @@ export default function App() {
 
   return (
     <div className="app-frame">
-      <Navbar route={route} onNavigate={navigate} />
+      <Navbar
+        activeScene={activeScene}
+        onChooseScene={chooseScene}
+        route={route}
+        onNavigate={navigate}
+      />
       {route === "/network" && (
         <NetworkCoveragePage
           antennas={antennas}
@@ -378,6 +453,19 @@ export default function App() {
           onToggleCompare={toggleComparisonSelection}
           selectedComparisonIds={selectedComparisonIds}
           selectedHistoryId={selectedHistoryId}
+          comparisonSceneId={comparisonSceneId}
+          comparisonSceneName={comparisonSceneName}
+        />
+      )}
+      {route === "/scenes" && (
+        <ScenesPage
+          activeSceneId={activeScene?.id}
+          isLoading={false}
+          notice={sceneNotice}
+          onRefresh={loadScenes}
+          onSceneActivated={handleSceneActivated}
+          onSetNotice={setSceneNotice}
+          scenes={scenes}
         />
       )}
 
@@ -386,16 +474,29 @@ export default function App() {
           {modalContent}
         </HistoryModal>
       )}
+      {sceneChooserOpen && (
+        <HistoryModal onClose={() => setSceneChooserOpen(false)}>
+          <SceneChooserModal
+            onClose={() => setSceneChooserOpen(false)}
+            onLimitReached={(message) => {
+              setSceneChooserOpen(false);
+              setSceneNotice(message, true);
+              navigate("/scenes");
+            }}
+            onSceneActivated={handleSceneActivated}
+          />
+        </HistoryModal>
+      )}
     </div>
   );
 }
 
-function Navbar({ onNavigate, route }) {
+function Navbar({ activeScene, onChooseScene, onNavigate, route }) {
   return (
     <header className="app-navbar">
       <div>
         <strong>Sionna Planner</strong>
-        <span>GPU radio simulation workspace</span>
+        <span>Scene: {activeScene?.name || "Munich"}</span>
       </div>
       <nav aria-label="Primary navigation">
         {ROUTES.map((item) => (
@@ -408,6 +509,9 @@ function Navbar({ onNavigate, route }) {
             {item.label}
           </button>
         ))}
+        <button className="scene-picker-button" type="button" onClick={onChooseScene}>
+          Choose scene
+        </button>
       </nav>
     </header>
   );
@@ -463,6 +567,8 @@ function NetworkCoveragePage({
 }
 
 function HistoryRoutePage({
+  comparisonSceneId,
+  comparisonSceneName,
   comparisonType,
   historyError,
   historyStatus,
@@ -489,6 +595,8 @@ function HistoryRoutePage({
       </div>
       <section className="history-page-panel">
         <HistoryPanel
+          comparisonSceneId={comparisonSceneId}
+          comparisonSceneName={comparisonSceneName}
           comparisonType={comparisonType}
           historyError={historyError}
           historyStatus={historyStatus}

@@ -34,6 +34,7 @@ SionnaSimulation/
       requests.py
     services/
       coverage_service.py
+      scene_service.py
       sinr_service.py
       throughput_service.py
     simulations/
@@ -57,6 +58,8 @@ SionnaSimulation/
         HistoryModal.jsx
         HistoryPanel.jsx
         MapPanel.jsx
+        SceneChooserModal.jsx
+        ScenesPage.jsx
       utils/
         format.js
         history.js
@@ -121,8 +124,11 @@ When the DB is configured, every simulation request stores:
 - one row in `simulation_runs`
 - antenna snapshots in `simulation_run_antennas` for `/api/v1/network-coverage`
 - generated coverage image metadata in `simulation_artifacts` when a PNG is returned
+- active scene metadata (`scene_id`, `scene_name`) on the simulation run
 
 The app does not use a `coverage_cells` table. Coverage grid detail stays in the API response for the active simulation, while the database stores the request, summarized response, image URL, and antenna snapshots.
+
+If your existing `simulation_runs` table does not have `scene_id` and `scene_name`, the backend adds those two columns automatically when history is stored or read.
 
 The frontend History tab reads from:
 
@@ -161,22 +167,34 @@ VITE_API_BASE_URL=http://127.0.0.1:8000
 
 ## Main App Flow
 
-1. The frontend displays 10 antennas on a top-down Munich planning map.
-2. Each antenna has:
+1. The frontend starts with the Munich scene as the active global scene.
+2. The active scene name is displayed in the navbar. Use `Choose scene` to select a small area from the map, preview it, then keep or cancel it.
+3. The frontend displays 10 antennas on a top-down planning map.
+4. Each antenna has:
    - coordinate `(x, y, z)`
    - tilt range and current tilt
    - azimuth direction
    - transmit-power range and current power
-3. Users can edit only:
+5. Users can edit only:
    - current tilt
    - current transmit power
-4. Clicking `Run simulation` sends all antenna settings to the backend.
-5. The backend runs Sionna RT, renders a top-down coverage image, and returns grid metrics.
-6. The frontend overlays a heatmap and shows hover details per cell:
+6. Clicking `Run simulation` sends all antenna settings to the backend.
+7. The backend runs Sionna RT with the active global scene, renders a top-down coverage image, and returns grid metrics.
+8. The frontend overlays a heatmap and shows hover details per cell:
    - serving antenna
    - SINR in dB
    - signal power in dBm
    - estimated throughput in Mbps
+
+## Scene Management
+
+The Scenes page lists all available scenes. Users can load a scene or delete an imported scene. The active scene and the default Munich scene cannot be deleted.
+
+Imported scenes are limited to 3. If the user tries to choose another map scene after reaching that limit, the app redirects to the Scenes page and asks them to delete one first.
+
+History comparison only allows successful simulation runs with the same API type and the same `scene_id`. This avoids comparing Munich results against another scene.
+
+Current limitation: the map picker validates and stores the selected real-world area, then creates a runnable Sionna demo scene from a bundled Sionna scene template. It does not yet convert OpenStreetMap building geometry into a true Sionna RT scene. That conversion needs an OSM/building importer pipeline before production use.
 
 ## API Endpoints
 
@@ -210,6 +228,16 @@ Lists recent stored simulations for the frontend History tab.
 ### `GET /api/v1/simulation-runs/{run_id}`
 
 Loads one stored simulation, including solver settings, response summary, antenna snapshots, and generated artifacts.
+
+### Scene endpoints
+
+```text
+GET /api/v1/scenes
+GET /api/v1/scenes/active
+POST /api/v1/scenes/preview
+POST /api/v1/scenes/{scene_id}/activate
+DELETE /api/v1/scenes/{scene_id}
+```
 
 ## Run Tests
 

@@ -213,3 +213,40 @@ class ThroughputRequest(BaseModel):
     solver: SolverConfig = Field(
         default_factory=SolverConfig
     )
+
+
+class SceneBoundsRequest(BaseModel):
+    name: str | None = Field(
+        default=None,
+        max_length=80,
+    )
+
+    south: float = Field(
+        ge=-90.0,
+        le=90.0,
+    )
+
+    west: float = Field(
+        ge=-180.0,
+        le=180.0,
+    )
+
+    north: float = Field(
+        ge=-90.0,
+        le=90.0,
+    )
+
+    east: float = Field(
+        ge=-180.0,
+        le=180.0,
+    )
+
+    @model_validator(mode="after")
+    def validate_bounds(self):
+        if self.south >= self.north:
+            raise ValueError("south must be less than north")
+
+        if self.west >= self.east:
+            raise ValueError("west must be less than east")
+
+        return self

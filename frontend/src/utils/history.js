@@ -8,13 +8,13 @@ export function isSuccessfulHistoryItem(item) {
   return String(item.status || "").toLowerCase() === "success";
 }
 
-export function compareButtonTitle(item, isComparing, isCompatible, comparisonType) {
+export function compareButtonTitle(item, isComparing, isCompatible, comparisonType, comparisonSceneName) {
   if (!isSuccessfulHistoryItem(item)) {
     return "Failed simulations cannot be compared";
   }
 
   if (isComparing && !isCompatible) {
-    return `Only successful ${formatSimulationType(comparisonType)} runs can be compared now`;
+    return `Only successful ${formatSimulationType(comparisonType)} runs from ${comparisonSceneName || "the same scene"} can be compared now`;
   }
 
   return `Compare ${formatSimulationType(item.simulation_type)} history`;
@@ -22,21 +22,21 @@ export function compareButtonTitle(item, isComparing, isCompatible, comparisonTy
 
 export function historyListSubtitle(item) {
   if (item.simulation_type === "sinr") {
-    return `SINR point | ${formatText(item.status)}`;
+    return `SINR point | ${formatText(item.scene_name)} | ${formatText(item.status)}`;
   }
 
   if (item.simulation_type === "throughput_comparison") {
-    return `${formatMaybeNumber(item.bandwidth_mhz)} MHz | ${item.mimo_layers || "--"} layers`;
+    return `${formatMaybeNumber(item.bandwidth_mhz)} MHz | ${item.mimo_layers || "--"} layers | ${formatText(item.scene_name)}`;
   }
 
   if (item.simulation_type === "coverage_map") {
-    return `Cell ${formatMaybeNumber(item.cell_size_m)} m | coverage image`;
+    return `Cell ${formatMaybeNumber(item.cell_size_m)} m | ${formatText(item.scene_name)}`;
   }
 
-  return `Cell ${formatMaybeNumber(item.cell_size_m)} m | ${formatMaybeNumber(item.bandwidth_mhz)} MHz | ${item.mimo_layers || "--"} layers`;
+  return `Cell ${formatMaybeNumber(item.cell_size_m)} m | ${formatMaybeNumber(item.bandwidth_mhz)} MHz | ${item.mimo_layers || "--"} layers | ${formatText(item.scene_name)}`;
 }
 
-export function pruneComparisonSelection(current, items, comparisonType) {
+export function pruneComparisonSelection(current, items, comparisonType, comparisonSceneId) {
   if (!comparisonType) {
     return current;
   }
@@ -45,6 +45,7 @@ export function pruneComparisonSelection(current, items, comparisonType) {
     items
       .filter((item) => (
         item.simulation_type === comparisonType
+        && item.scene_id === comparisonSceneId
         && isSuccessfulHistoryItem(item)
       ))
       .map((item) => item.id),
