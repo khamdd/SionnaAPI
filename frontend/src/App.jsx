@@ -11,6 +11,11 @@ import {
   TRANSMITTER_PATTERN,
 } from "./constants";
 import AntennaPanel from "./components/AntennaPanel";
+import {
+  CoverageApiPage,
+  SinrApiPage,
+  ThroughputApiPage,
+} from "./components/ApiPages";
 import ComparisonResult from "./components/ComparisonResult";
 import HistoryDetail from "./components/HistoryDetail";
 import HistoryModal, { HistoryModalBody } from "./components/HistoryModal";
@@ -27,13 +32,21 @@ import {
   summarizeGrid,
 } from "./utils/map";
 
+const ROUTES = [
+  { path: "/network", label: "Network Coverage" },
+  { path: "/coverage", label: "Coverage API" },
+  { path: "/sinr", label: "SINR API" },
+  { path: "/throughput", label: "Throughput API" },
+  { path: "/history", label: "History" },
+];
+
 function clone(value) {
   return structuredClone(value);
 }
 
 export default function App() {
+  const [route, setRoute] = useState(() => normalizeRoute(window.location.pathname));
   const [antennas, setAntennas] = useState(() => clone(DEFAULT_ANTENNAS));
-  const [activePanel, setActivePanel] = useState("antennas");
   const [latestGrid, setLatestGrid] = useState(null);
   const [latestSolver, setLatestSolver] = useState(() => clone(DEFAULT_SOLVER));
   const [coverageImageUrl, setCoverageImageUrl] = useState("");
@@ -87,10 +100,19 @@ export default function App() {
   }, [comparisonType]);
 
   useEffect(() => {
-    if (activePanel === "history") {
+    function handlePopState() {
+      setRoute(normalizeRoute(window.location.pathname));
+    }
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  useEffect(() => {
+    if (route === "/history") {
       loadHistory();
     }
-  }, [activePanel, loadHistory]);
+  }, [route, loadHistory]);
 
   useEffect(() => {
     if (comparisonType && selectedComparisonIds.size === 0) {
@@ -100,7 +122,7 @@ export default function App() {
 
   useEffect(() => {
     drawHeatmap(canvasRef.current, mapStageRef.current, latestGrid);
-  }, [latestGrid]);
+  }, [latestGrid, route]);
 
   useEffect(() => {
     function handleResize() {
@@ -126,6 +148,12 @@ export default function App() {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [modalContent]);
 
+  function navigate(path) {
+    const nextRoute = normalizeRoute(path);
+    window.history.pushState({}, "", nextRoute);
+    setRoute(nextRoute);
+  }
+
   async function runSimulation() {
     setIsRunning(true);
     setRunError(false);
@@ -142,10 +170,6 @@ export default function App() {
       setLatestSolver(result.solver);
       setCoverageImageUrl(`${result.coverage_map_image_url}?t=${Date.now()}`);
       setRunStatus("Simulation complete");
-
-      if (activePanel === "history") {
-        loadHistory();
-      }
     } catch (error) {
       setRunStatus(`Simulation failed: ${error.message}`);
       setRunError(true);
@@ -316,6 +340,97 @@ export default function App() {
   }
 
   return (
+    <div className="app-frame">
+      <Navbar route={route} onNavigate={navigate} />
+      {route === "/network" && (
+        <NetworkCoveragePage
+          antennas={antennas}
+          canvasRef={canvasRef}
+          coverageImageUrl={coverageImageUrl}
+          hover={hover}
+          isRunning={isRunning}
+          latestSolver={latestSolver}
+          mapStageRef={mapStageRef}
+          onHover={handleHover}
+          onHoverEnd={() => setHover(null)}
+          onResetAntennas={resetAntennas}
+          onRun={runSimulation}
+          onUpdateAntenna={updateAntenna}
+          runError={runError}
+          runStatus={runStatus}
+          summary={summary}
+        />
+      )}
+      {route === "/coverage" && <CoverageApiPage />}
+      {route === "/sinr" && <SinrApiPage />}
+      {route === "/throughput" && <ThroughputApiPage />}
+      {route === "/history" && (
+        <HistoryRoutePage
+          comparisonType={comparisonType}
+          historyError={historyError}
+          historyStatus={historyStatus}
+          items={latestHistory}
+          onCancelComparison={cancelComparison}
+          onDelete={deleteHistoryItem}
+          onOpen={openHistoryDetail}
+          onRefresh={loadHistory}
+          onShowComparison={showComparisonResult}
+          onToggleCompare={toggleComparisonSelection}
+          selectedComparisonIds={selectedComparisonIds}
+          selectedHistoryId={selectedHistoryId}
+        />
+      )}
+
+      {modalContent && (
+        <HistoryModal onClose={closeModal}>
+          {modalContent}
+        </HistoryModal>
+      )}
+    </div>
+  );
+}
+
+function Navbar({ onNavigate, route }) {
+  return (
+    <header className="app-navbar">
+      <div>
+        <strong>Sionna Planner</strong>
+        <span>GPU radio simulation workspace</span>
+      </div>
+      <nav aria-label="Primary navigation">
+        {ROUTES.map((item) => (
+          <button
+            key={item.path}
+            className={route === item.path ? "active" : ""}
+            type="button"
+            onClick={() => onNavigate(item.path)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </nav>
+    </header>
+  );
+}
+
+function NetworkCoveragePage({
+  antennas,
+  canvasRef,
+  coverageImageUrl,
+  hover,
+  isRunning,
+  latestSolver,
+  mapStageRef,
+  onHover,
+  onHoverEnd,
+  onResetAntennas,
+  onRun,
+  onUpdateAntenna,
+  runError,
+  runStatus,
+  summary,
+}) {
+  return (
     <main className="app-shell">
       <MapPanel
         antennas={antennas}
@@ -325,87 +440,69 @@ export default function App() {
         isRunning={isRunning}
         latestSolver={latestSolver}
         mapStageRef={mapStageRef}
-        onHover={handleHover}
-        onHoverEnd={() => setHover(null)}
-        onRun={runSimulation}
+        onHover={onHover}
+        onHoverEnd={onHoverEnd}
+        onRun={onRun}
         runError={runError}
         runStatus={runStatus}
         summary={summary}
       />
-
       <aside className="control-panel" aria-label="Antenna controls">
-        <PanelHeader
-          activePanel={activePanel}
-          onRefreshHistory={loadHistory}
-          onResetAntennas={resetAntennas}
-        />
-        <PanelTabs activePanel={activePanel} onChange={setActivePanel} />
-
-        {activePanel === "antennas" ? (
-          <AntennaPanel antennas={antennas} onChange={updateAntenna} />
-        ) : (
-          <HistoryPanel
-            historyStatus={historyStatus}
-            historyError={historyError}
-            items={latestHistory}
-            selectedHistoryId={selectedHistoryId}
-            comparisonType={comparisonType}
-            selectedComparisonIds={selectedComparisonIds}
-            onOpen={openHistoryDetail}
-            onDelete={deleteHistoryItem}
-            onToggleCompare={toggleComparisonSelection}
-            onCancelComparison={cancelComparison}
-            onShowComparison={showComparisonResult}
-          />
-        )}
+        <div className="panel-header">
+          <h2>Antenna sectors</h2>
+          <div className="panel-actions">
+            <button className="ghost-button" type="button" onClick={onResetAntennas}>
+              Reset
+            </button>
+          </div>
+        </div>
+        <AntennaPanel antennas={antennas} onChange={onUpdateAntenna} />
       </aside>
-
-      {modalContent && (
-        <HistoryModal onClose={closeModal}>
-          {modalContent}
-        </HistoryModal>
-      )}
     </main>
   );
 }
 
-function PanelHeader({ activePanel, onRefreshHistory, onResetAntennas }) {
+function HistoryRoutePage({
+  comparisonType,
+  historyError,
+  historyStatus,
+  items,
+  onCancelComparison,
+  onDelete,
+  onOpen,
+  onRefresh,
+  onShowComparison,
+  onToggleCompare,
+  selectedComparisonIds,
+  selectedHistoryId,
+}) {
   return (
-    <div className="panel-header">
-      <h2>{activePanel === "antennas" ? "Antenna sectors" : "Simulation history"}</h2>
-      <div className="panel-actions">
-        {activePanel === "antennas" ? (
-          <button className="ghost-button" type="button" onClick={onResetAntennas}>
-            Reset
-          </button>
-        ) : (
-          <button className="ghost-button" type="button" onClick={onRefreshHistory}>
-            Refresh
-          </button>
-        )}
+    <main className="route-page">
+      <div className="page-title with-action">
+        <div>
+          <h1>Simulation History</h1>
+          <p>Review saved simulation runs, compare matching successful runs, or delete old records.</p>
+        </div>
+        <button className="ghost-button" type="button" onClick={onRefresh}>
+          Refresh
+        </button>
       </div>
-    </div>
-  );
-}
-
-function PanelTabs({ activePanel, onChange }) {
-  return (
-    <div className="panel-tabs" role="tablist" aria-label="Side panel views">
-      <button
-        className={`tab-button ${activePanel === "antennas" ? "active" : ""}`}
-        type="button"
-        onClick={() => onChange("antennas")}
-      >
-        Antennas
-      </button>
-      <button
-        className={`tab-button ${activePanel === "history" ? "active" : ""}`}
-        type="button"
-        onClick={() => onChange("history")}
-      >
-        History
-      </button>
-    </div>
+      <section className="history-page-panel">
+        <HistoryPanel
+          comparisonType={comparisonType}
+          historyError={historyError}
+          historyStatus={historyStatus}
+          items={items}
+          onCancelComparison={onCancelComparison}
+          onDelete={onDelete}
+          onOpen={onOpen}
+          onShowComparison={onShowComparison}
+          onToggleCompare={onToggleCompare}
+          selectedComparisonIds={selectedComparisonIds}
+          selectedHistoryId={selectedHistoryId}
+        />
+      </section>
+    </main>
   );
 }
 
@@ -456,6 +553,16 @@ async function loadComparisonDetails(selectedIds, cachedDetails) {
     items,
     details,
   };
+}
+
+function normalizeRoute(pathname) {
+  if (pathname === "/") {
+    return "/network";
+  }
+
+  return ROUTES.some((item) => item.path === pathname)
+    ? pathname
+    : "/network";
 }
 
 function toggleSetValue(current, value) {

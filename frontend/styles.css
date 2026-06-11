@@ -35,12 +35,197 @@ button.hidden,
   display: none;
 }
 
+.app-frame {
+  min-height: 100vh;
+}
+
+.app-navbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.96);
+  padding: 12px 18px;
+}
+
+.app-navbar > div {
+  display: grid;
+  gap: 2px;
+}
+
+.app-navbar strong {
+  font-size: 15px;
+}
+
+.app-navbar span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.app-navbar nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.app-navbar button {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  padding: 0 11px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.app-navbar button.active {
+  border-color: var(--accent);
+  background: #f0fdfa;
+  color: var(--accent-dark);
+}
+
 .app-shell {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 390px;
   gap: 18px;
-  min-height: 100vh;
+  min-height: calc(100vh - 63px);
   padding: 18px;
+}
+
+.route-page {
+  min-height: calc(100vh - 63px);
+  padding: 18px;
+}
+
+.page-title {
+  margin: 0 auto 14px;
+  max-width: 1160px;
+}
+
+.page-title.with-action {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.page-title p {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.api-page {
+  min-height: calc(100vh - 63px);
+  padding: 18px;
+}
+
+.api-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+  gap: 18px;
+  max-width: 1160px;
+  margin: 0 auto;
+}
+
+.api-panel,
+.api-result-panel,
+.history-page-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.api-panel,
+.api-result-panel {
+  padding: 16px;
+}
+
+.api-result-panel h2 {
+  margin-bottom: 12px;
+}
+
+.api-form {
+  display: grid;
+  gap: 14px;
+}
+
+.form-section {
+  display: grid;
+  gap: 10px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 0;
+  padding: 14px 0 0;
+}
+
+.form-section:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.form-section legend {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+  padding: 0 8px 0 0;
+}
+
+.form-field {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.form-field input {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 0 9px;
+}
+
+.input-with-unit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.input-with-unit small {
+  min-width: 36px;
+  color: var(--muted);
+}
+
+.vector-inputs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.vector-inputs.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.result-summary img,
+.api-result-panel img {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-top: 10px;
 }
 
 .map-panel,
@@ -386,6 +571,17 @@ h2 {
   padding: 12px;
 }
 
+.history-page-panel {
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+.history-page-panel .history-view {
+  height: auto;
+  min-height: 420px;
+  max-height: none;
+}
+
 .history-status {
   color: var(--muted);
   font-size: 13px;
@@ -687,7 +883,20 @@ h2 {
 }
 
 @media (max-width: 980px) {
+  .app-navbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .app-navbar nav {
+    justify-content: flex-start;
+  }
+
   .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .api-layout {
     grid-template-columns: 1fr;
   }
 
@@ -703,6 +912,25 @@ h2 {
 @media (max-width: 640px) {
   .app-shell {
     padding: 10px;
+  }
+
+  .route-page,
+  .api-page {
+    padding: 10px;
+  }
+
+  .app-navbar {
+    padding: 10px;
+  }
+
+  .app-navbar nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .app-navbar button {
+    width: 100%;
   }
 
   .topbar,
@@ -736,5 +964,14 @@ h2 {
   .comparison-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .page-title.with-action,
+  .form-field {
+    grid-template-columns: 1fr;
+  }
+
+  .page-title.with-action {
+    display: grid;
   }
 }
