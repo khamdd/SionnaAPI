@@ -21,7 +21,11 @@ export default function SceneChooserModal({
   const keptSceneRef = useRef(false);
   const [isSelectingArea, setIsSelectingArea] = useState(false);
   const [locationQuery, setLocationQuery] = useState("");
+  const [locationResults, setLocationResults] = useState([]);
+  const [showLocationResults, setShowLocationResults] = useState(false);
+  const [isSearchingLocation, setIsSearchingLocation] = useState(false);
   const [bounds, setBounds] = useState(null);
+  const [previewBounds, setPreviewBounds] = useState(null);
   const [previewScene, setPreviewScene] = useState(null);
   const [status, setStatus] = useState("Move and zoom the map, then click Select area to draw a scene rectangle.");
   const [error, setError] = useState(false);
@@ -40,7 +44,7 @@ export default function SceneChooserModal({
     const map = L.map(node, {
       center: DEFAULT_CENTER,
       zoom: DEFAULT_ZOOM,
-      minZoom: 12,
+      minZoom: 2,
       maxZoom: 18,
       scrollWheelZoom: true,
       zoomControl: true,
@@ -78,6 +82,42 @@ export default function SceneChooserModal({
       deleteScene(scene.id).catch(() => {});
     }
   }, []);
+
+  useEffect(() => {
+    const query = locationQuery.trim();
+
+    if (query.length < 3 || previewScene) {
+      setLocationResults([]);
+      setShowLocationResults(false);
+      setIsSearchingLocation(false);
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    const timerId = window.setTimeout(async () => {
+      setIsSearchingLocation(true);
+
+      try {
+        const results = await fetchLocationResults(query, 5, controller.signal);
+        setLocationResults(results);
+        setShowLocationResults(true);
+      } catch (caught) {
+        if (caught.name !== "AbortError") {
+          setLocationResults([]);
+          setShowLocationResults(false);
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsSearchingLocation(false);
+        }
+      }
+    }, 650);
+
+    return () => {
+      window.clearTimeout(timerId);
+      controller.abort();
+    };
+  }, [locationQuery, previewScene]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -184,22 +224,7 @@ export default function SceneChooserModal({
     setStatus("Searching location...");
 
     try {
-      const params = new URLSearchParams({
-        format: "jsonv2",
-        limit: "1",
-        q: query,
-      });
-      const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
-        headers: {
-          Accept: "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const results = await response.json();
+      const results = await fetchLocationResults(query, 5);
       const place = results[0];
 
       if (!place) {
@@ -208,17 +233,24 @@ export default function SceneChooserModal({
         return;
       }
 
-      moveMapToPlace(place);
-      setBounds(null);
-      removeRectangle();
-      setIsSelectingArea(false);
-      setStatus(`Moved map to ${place.display_name || query}.`);
+      selectLocationResult(place);
     } catch (caught) {
       setStatus(`Location search failed: ${caught.message}`);
       setError(true);
     } finally {
       setIsBusy(false);
     }
+  }
+
+  function selectLocationResult(place) {
+    moveMapToPlace(place);
+    setLocationQuery(place.display_name || "");
+    setLocationResults([]);
+    setShowLocationResults(false);
+    setBounds(null);
+    removeRectangle();
+    setIsSelectingArea(false);
+    setStatus(`Moved map to ${place.display_name || "selected location"}.`);
   }
 
   function moveMapToPlace(place) {
@@ -272,6 +304,7 @@ export default function SceneChooserModal({
         east: bounds.east,
       });
 
+      setPreviewBounds(bounds);
       setPreviewScene(result.scene);
       setStatus("Preview ready. Keep it, select a new area, or cancel.");
     } catch (caught) {
@@ -312,6 +345,7 @@ export default function SceneChooserModal({
     await cleanupPreview();
     setPreviewScene(null);
     setBounds(null);
+    setPreviewBounds(null);
     removeRectangle();
     setError(false);
     startSelection();
@@ -351,12 +385,43 @@ export default function SceneChooserModal({
       {!previewScene && (
         <>
           <form className="scene-location-search" onSubmit={searchLocation}>
-            <input
-              type="search"
-              value={locationQuery}
-              placeholder="Search location, e.g. Munich, Hanoi, Times Square"
-              onChange={(event) => setLocationQuery(event.target.value)}
-            />
+            <div className="scene-location-input-wrap">
+              <input
+                type="search"
+                value={locationQuery}
+                placeholder="Search location, e.g. Munich, Hanoi, Times Square"
+                autoComplete="off"
+                onBlur={() => window.setTimeout(() => setShowLocationResults(false), 150)}
+                onChange={(event) => {
+                  setLocationQuery(event.target.value);
+                  setShowLocationResults(true);
+                }}
+                onFocus={() => {
+                  if (locationResults.length) {
+                    setShowLocationResults(true);
+                  }
+                }}
+              />
+              {showLocationResults && (locationResults.length > 0 || isSearchingLocation) && (
+                <div className="scene-location-results">
+                  {isSearchingLocation && (
+                    <div className="scene-location-result muted">Searching...</div>
+                  )}
+                  {locationResults.map((place) => (
+                    <button
+                      key={place.place_id}
+                      className="scene-location-result"
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => selectLocationResult(place)}
+                    >
+                      <strong>{place.name || place.display_name?.split(",")[0] || "Unnamed place"}</strong>
+                      <span>{place.display_name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button className="primary-button" type="submit" disabled={isBusy || !locationQuery.trim()}>
               Search
             </button>
@@ -398,7 +463,16 @@ export default function SceneChooserModal({
 
       {previewScene && (
         <div className="scene-preview">
-          <img src={previewScene.preview_url} alt={`${previewScene.name} preview`} />
+          {previewBounds ? (
+            <ScenePreviewMap bounds={previewBounds} />
+          ) : (
+            <img src={previewScene.preview_url} alt={`${previewScene.name} preview`} />
+          )}
+          <dl className="scene-preview-meta">
+            <dt>Scene</dt><dd>{previewScene.name}</dd>
+            <dt>Area</dt><dd>{previewScene.metrics?.area_km2 ?? "--"} km2</dd>
+            <dt>Size</dt><dd>{previewScene.metrics?.width_m ?? "--"} x {previewScene.metrics?.height_m ?? "--"} m</dd>
+          </dl>
           <div className="scene-preview-actions">
             <button className="ghost-button" type="button" disabled={isBusy} onClick={selectNewArea}>
               Select new area
@@ -414,6 +488,85 @@ export default function SceneChooserModal({
       )}
     </div>
   );
+}
+
+function ScenePreviewMap({ bounds }) {
+  const nodeRef = useRef(null);
+
+  useEffect(() => {
+    const node = nodeRef.current;
+
+    if (!node) {
+      return undefined;
+    }
+
+    const map = L.map(node, {
+      attributionControl: false,
+      dragging: false,
+      doubleClickZoom: false,
+      boxZoom: false,
+      keyboard: false,
+      scrollWheelZoom: false,
+      touchZoom: false,
+      zoomControl: false,
+    });
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap contributors",
+    }).addTo(map);
+
+    const leafletBounds = [
+      [bounds.south, bounds.west],
+      [bounds.north, bounds.east],
+    ];
+
+    map.fitBounds(leafletBounds, {
+      padding: [24, 24],
+      maxZoom: 16,
+    });
+
+    L.rectangle(leafletBounds, {
+      color: "#2563eb",
+      weight: 3,
+      fillColor: "#2563eb",
+      fillOpacity: 0.12,
+      interactive: false,
+    }).addTo(map);
+
+    setTimeout(() => map.invalidateSize(), 0);
+
+    return () => map.remove();
+  }, [bounds]);
+
+  return (
+    <div
+      ref={nodeRef}
+      className="scene-preview-map"
+      aria-label="Selected scene area preview"
+    />
+  );
+}
+
+async function fetchLocationResults(query, limit, signal) {
+  const params = new URLSearchParams({
+    format: "jsonv2",
+    addressdetails: "1",
+    limit: String(limit),
+    q: query,
+  });
+  const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
+    headers: {
+      Accept: "application/json",
+    },
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+
+  return response.json();
 }
 
 function serializeBounds(bounds) {
