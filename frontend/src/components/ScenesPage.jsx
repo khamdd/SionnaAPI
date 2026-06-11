@@ -1,6 +1,9 @@
 import { activateScene, deleteScene } from "../api";
 import { formatDateTime, formatMaybeNumber } from "../utils/format";
 import { TrashIcon } from "./Icons";
+import SceneMapPreview from "./SceneMapPreview";
+
+const CARD_PREVIEW_PADDING = [6, 6];
 
 export default function ScenesPage({
   activeSceneId,
@@ -66,8 +69,13 @@ export default function ScenesPage({
           return (
             <article className={`scene-card ${isActive ? "active" : ""}`} key={scene.id}>
               <div className="scene-card-preview">
-                {scene.preview_url ? (
-                  <img src={scene.preview_url} alt={`${scene.name} preview`} />
+                {scene.bounds ? (
+                  <SceneMapPreview
+                    bounds={scene.bounds}
+                    className="scene-card-map-preview"
+                    maxZoom={17}
+                    padding={CARD_PREVIEW_PADDING}
+                  />
                 ) : (
                   <div className="munich-preview">Munich</div>
                 )}

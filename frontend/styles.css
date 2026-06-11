@@ -189,6 +189,11 @@ button.hidden,
   object-fit: cover;
 }
 
+.scene-card-map-preview {
+  width: 100%;
+  height: 100%;
+}
+
 .munich-preview {
   display: grid;
   place-items: center;
@@ -921,6 +926,26 @@ h2 {
 .scene-location-result.muted {
   color: var(--muted);
   cursor: default;
+}
+
+.scene-name-field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.scene-name-field input {
+  min-height: 38px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 0 12px;
+  font-weight: 500;
 }
 
 .scene-map-toolbar button {

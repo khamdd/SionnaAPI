@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
-import "leaflet/dist/leaflet.css";
 import { activateScene, createScenePreview, deleteScene } from "../api";
 import { formatMaybeNumber } from "../utils/format";
+import SceneMapPreview from "./SceneMapPreview";
 
 const DEFAULT_CENTER = [48.1374, 11.5755];
 const DEFAULT_ZOOM = 14;
@@ -24,6 +24,7 @@ export default function SceneChooserModal({
   const [locationResults, setLocationResults] = useState([]);
   const [showLocationResults, setShowLocationResults] = useState(false);
   const [isSearchingLocation, setIsSearchingLocation] = useState(false);
+  const [sceneName, setSceneName] = useState("");
   const [bounds, setBounds] = useState(null);
   const [previewBounds, setPreviewBounds] = useState(null);
   const [previewScene, setPreviewScene] = useState(null);
@@ -287,7 +288,23 @@ export default function SceneChooserModal({
   }
 
   async function previewSelectedArea() {
-    if (!bounds || isTooLarge) {
+    const trimmedSceneName = sceneName.trim();
+
+    if (!bounds) {
+      setStatus("Select an area on the map before previewing.");
+      setError(true);
+      return;
+    }
+
+    if (!trimmedSceneName) {
+      setStatus("Enter a scene name before previewing.");
+      setError(true);
+      return;
+    }
+
+    if (isTooLarge) {
+      setStatus("Selected area is too large. Choose a smaller area.");
+      setError(true);
       return;
     }
 
@@ -297,7 +314,7 @@ export default function SceneChooserModal({
 
     try {
       const result = await createScenePreview({
-        name: `Map scene ${new Date().toLocaleString()}`,
+        name: trimmedSceneName,
         south: bounds.south,
         west: bounds.west,
         north: bounds.north,
@@ -437,6 +454,22 @@ export default function SceneChooserModal({
             </button>
             <span>Use the map controls or mouse wheel to zoom.</span>
           </div>
+          <label className="scene-name-field">
+            <span>Scene name</span>
+            <input
+              type="text"
+              value={sceneName}
+              placeholder="Required, e.g. Hanoi test area"
+              maxLength={80}
+              required
+              onChange={(event) => {
+                setSceneName(event.target.value);
+                if (error) {
+                  setError(false);
+                }
+              }}
+            />
+          </label>
           <div
             ref={mapNodeRef}
             className="scene-map"
@@ -452,7 +485,7 @@ export default function SceneChooserModal({
             <button
               className="primary-button"
               type="button"
-              disabled={!bounds || isTooLarge || isBusy}
+              disabled={isBusy || isTooLarge}
               onClick={previewSelectedArea}
             >
               Preview scene
@@ -464,7 +497,7 @@ export default function SceneChooserModal({
       {previewScene && (
         <div className="scene-preview">
           {previewBounds ? (
-            <ScenePreviewMap bounds={previewBounds} />
+            <SceneMapPreview bounds={previewBounds} />
           ) : (
             <img src={previewScene.preview_url} alt={`${previewScene.name} preview`} />
           )}
@@ -487,64 +520,6 @@ export default function SceneChooserModal({
         </div>
       )}
     </div>
-  );
-}
-
-function ScenePreviewMap({ bounds }) {
-  const nodeRef = useRef(null);
-
-  useEffect(() => {
-    const node = nodeRef.current;
-
-    if (!node) {
-      return undefined;
-    }
-
-    const map = L.map(node, {
-      attributionControl: false,
-      dragging: false,
-      doubleClickZoom: false,
-      boxZoom: false,
-      keyboard: false,
-      scrollWheelZoom: false,
-      touchZoom: false,
-      zoomControl: false,
-    });
-
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: "&copy; OpenStreetMap contributors",
-    }).addTo(map);
-
-    const leafletBounds = [
-      [bounds.south, bounds.west],
-      [bounds.north, bounds.east],
-    ];
-
-    map.fitBounds(leafletBounds, {
-      padding: [24, 24],
-      maxZoom: 16,
-    });
-
-    L.rectangle(leafletBounds, {
-      color: "#2563eb",
-      weight: 3,
-      fillColor: "#2563eb",
-      fillOpacity: 0.12,
-      interactive: false,
-    }).addTo(map);
-
-    setTimeout(() => map.invalidateSize(), 0);
-
-    return () => map.remove();
-  }, [bounds]);
-
-  return (
-    <div
-      ref={nodeRef}
-      className="scene-preview-map"
-      aria-label="Selected scene area preview"
-    />
   );
 }
 
