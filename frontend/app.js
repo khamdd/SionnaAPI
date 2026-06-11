@@ -261,16 +261,18 @@ function renderHistoryList() {
     const row = document.createElement("div");
     row.className = "history-row";
     const isComparing = Boolean(comparisonType);
-    const isCompatible = !isComparing || item.simulation_type === comparisonType;
+    const canCompareItem = isSuccessfulHistoryItem(item);
+    const isCompatible = !isComparing || (
+      item.simulation_type === comparisonType && canCompareItem
+    );
     const isSelectedForComparison = selectedComparisonIds.has(item.id);
-    row.classList.toggle("comparison-disabled", !isCompatible);
+    row.classList.toggle("comparison-disabled", isComparing && !isCompatible);
     row.classList.toggle("comparison-selected", isSelectedForComparison);
 
     const button = document.createElement("button");
     button.type = "button";
     button.className = "history-item";
     button.classList.toggle("active", item.id === selectedHistoryId);
-    button.disabled = !isCompatible;
     button.innerHTML = `
       <strong>${formatSimulationType(item.simulation_type)} - ${item.status}</strong>
       <span>${formatDateTime(item.created_at)}</span>
@@ -283,11 +285,9 @@ function renderHistoryList() {
     const compareButton = document.createElement("button");
     compareButton.type = "button";
     compareButton.className = "history-compare";
-    compareButton.disabled = !isCompatible;
+    compareButton.disabled = !canCompareItem || !isCompatible;
     compareButton.textContent = isSelectedForComparison ? "Selected" : "Compare";
-    compareButton.title = isComparing && !isCompatible
-      ? `Only ${formatSimulationType(comparisonType)} runs can be compared now`
-      : `Compare ${formatSimulationType(item.simulation_type)} history`;
+    compareButton.title = compareButtonTitle(item, isComparing, isCompatible);
     compareButton.addEventListener("click", (event) => {
       event.stopPropagation();
       toggleComparisonSelection(item);
@@ -296,7 +296,6 @@ function renderHistoryList() {
     const deleteButton = document.createElement("button");
     deleteButton.type = "button";
     deleteButton.className = "history-delete";
-    deleteButton.disabled = !isCompatible;
     deleteButton.title = "Delete simulation history";
     deleteButton.setAttribute("aria-label", `Delete ${formatSimulationType(item.simulation_type)} history`);
     deleteButton.innerHTML = trashIconSvg();
@@ -312,7 +311,27 @@ function renderHistoryList() {
   });
 }
 
+function isSuccessfulHistoryItem(item) {
+  return String(item.status || "").toLowerCase() === "success";
+}
+
+function compareButtonTitle(item, isComparing, isCompatible) {
+  if (!isSuccessfulHistoryItem(item)) {
+    return "Failed simulations cannot be compared";
+  }
+
+  if (isComparing && !isCompatible) {
+    return `Only successful ${formatSimulationType(comparisonType)} runs can be compared now`;
+  }
+
+  return `Compare ${formatSimulationType(item.simulation_type)} history`;
+}
+
 function toggleComparisonSelection(item) {
+  if (!isSuccessfulHistoryItem(item)) {
+    return;
+  }
+
   if (!comparisonType) {
     comparisonType = item.simulation_type;
   }
@@ -383,7 +402,10 @@ function pruneComparisonSelection() {
 
   const availableIds = new Set(
     latestHistory
-      .filter((item) => item.simulation_type === comparisonType)
+      .filter((item) => (
+        item.simulation_type === comparisonType
+        && isSuccessfulHistoryItem(item)
+      ))
       .map((item) => item.id)
   );
 
@@ -930,17 +952,37 @@ function handleHover(event) {
   }
 
   hoverCard.innerHTML = `
-    <strong>Cell (${cell.x} m, ${cell.y} m)</strong>
+    <strong>Cell (${formatMaybeNumber(cell.x)} m, ${formatMaybeNumber(cell.y)} m)</strong>
     <dl>
-      <dt>Serving</dt><dd>${cell.serving_antenna}</dd>
-      <dt>SINR</dt><dd>${cell.sinr_db} dB</dd>
-      <dt>Signal</dt><dd>${cell.signal_dbm} dBm</dd>
-      <dt>Throughput</dt><dd>${cell.throughput_mbps} Mbps</dd>
+      <dt>Serving</dt><dd>${formatText(cell.serving_antenna)}</dd>
+      <dt>SINR</dt><dd>${formatMaybeNumber(cell.sinr_db)} dB</dd>
+      <dt>Signal</dt><dd>${formatMaybeNumber(cell.signal_dbm)} dBm</dd>
+      <dt>Throughput</dt><dd>${formatMaybeNumber(cell.throughput_mbps)} Mbps</dd>
     </dl>
+    ${renderCellNeighbors(cell.neighbors)}
   `;
   hoverCard.style.left = `${Math.min(x + 14, rect.width - 252)}px`;
   hoverCard.style.top = `${Math.max(y - 80, 10)}px`;
   hoverCard.classList.remove("hidden");
+}
+
+function renderCellNeighbors(neighbors) {
+  if (!Array.isArray(neighbors) || neighbors.length === 0) {
+    return "<p class=\"neighbor-empty\">No close neighbors</p>";
+  }
+
+  return `
+    <div class="neighbor-list">
+      <span>Neighbors</span>
+      ${neighbors.map((neighbor) => `
+        <div>
+          <strong>${formatText(neighbor.antenna)}</strong>
+          <small>${formatNeighborDelta(neighbor.weaker_than_serving_db)}</small>
+          <small>${formatMaybeNumber(neighbor.signal_dbm)} dBm</small>
+        </div>
+      `).join("")}
+    </div>
+  `;
 }
 
 function updateSummary(grid) {
@@ -1067,6 +1109,20 @@ function formatRange(range) {
   }
 
   return `${formatMaybeNumber(range.min)} / ${formatMaybeNumber(range.current)} / ${formatMaybeNumber(range.max)}`;
+}
+
+function formatNeighborDelta(value) {
+  const delta = Number(value);
+
+  if (!Number.isFinite(delta)) {
+    return "--";
+  }
+
+  if (delta < 0) {
+    return `${Math.abs(delta).toFixed(1)} dB stronger`;
+  }
+
+  return `${delta.toFixed(1)} dB weaker`;
 }
 
 function formatPositionValue(value) {

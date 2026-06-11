@@ -16,6 +16,8 @@ from backend.simulations.radio_calculator import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STATIC_DIR = PROJECT_ROOT / "static"
+NEIGHBOR_SIGNAL_WINDOW_DB = 10.0
+MIN_NEIGHBOR_SIGNAL_DBM = -120.0
 
 
 def calculate_coverage_map_service(req: CoverageRequest, base_url, scene):
@@ -204,6 +206,8 @@ def render_network_coverage_image(
             900,
         ],
         radio_map=radio_map,
+        show_devices=False,
+        show_orientations=False,
     )
 
     return f"{str(base_url).rstrip('/')}/static/{filename}"
@@ -302,6 +306,7 @@ def build_network_grid(
             tx_idx = int(best_tx_index[row, col])
             linear_sinr = float(sinr[tx_idx, row, col])
             signal_watts = float(rss[tx_idx, row, col])
+            serving_signal_dbm = watts_to_dbm(signal_watts)
 
             cells.append(
                 {
@@ -321,8 +326,17 @@ def build_network_grid(
                         2,
                     ),
                     "signal_dbm": round(
-                        watts_to_dbm(signal_watts),
+                        serving_signal_dbm,
                         2,
+                    ),
+                    "neighbors": build_cell_neighbors(
+                        sinr,
+                        rss,
+                        req,
+                        tx_idx,
+                        row,
+                        col,
+                        serving_signal_dbm,
                     ),
                     "throughput_mbps": calculate_5g_throughput(
                         linear_sinr,
@@ -337,3 +351,58 @@ def build_network_grid(
         "cols": cols,
         "cells": cells,
     }
+
+
+def build_cell_neighbors(
+    sinr,
+    rss,
+    req: NetworkCoverageRequest,
+    serving_tx_idx,
+    row,
+    col,
+    serving_signal_dbm,
+):
+    if serving_signal_dbm < MIN_NEIGHBOR_SIGNAL_DBM:
+        return []
+
+    neighbors = []
+
+    for candidate_idx, antenna in enumerate(req.antennas):
+        if candidate_idx == serving_tx_idx:
+            continue
+
+        candidate_signal_dbm = watts_to_dbm(
+            float(rss[candidate_idx, row, col])
+        )
+
+        if candidate_signal_dbm < MIN_NEIGHBOR_SIGNAL_DBM:
+            continue
+
+        weaker_than_serving_db = serving_signal_dbm - candidate_signal_dbm
+
+        if weaker_than_serving_db > NEIGHBOR_SIGNAL_WINDOW_DB:
+            continue
+
+        neighbors.append(
+            {
+                "antenna": antenna.id,
+                "signal_dbm": round(
+                    candidate_signal_dbm,
+                    2,
+                ),
+                "sinr_db": round(
+                    linear_to_db(float(sinr[candidate_idx, row, col])),
+                    2,
+                ),
+                "weaker_than_serving_db": round(
+                    weaker_than_serving_db,
+                    2,
+                ),
+            }
+        )
+
+    return sorted(
+        neighbors,
+        key=lambda item: item["signal_dbm"],
+        reverse=True,
+    )

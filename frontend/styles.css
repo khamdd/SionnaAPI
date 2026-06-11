@@ -226,6 +226,42 @@ h2 {
   font-weight: 700;
 }
 
+.neighbor-list {
+  margin-top: 9px;
+  border-top: 1px solid var(--line);
+  padding-top: 7px;
+}
+
+.neighbor-list > span,
+.neighbor-empty {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.neighbor-empty {
+  margin: 8px 0 0;
+}
+
+.neighbor-list div {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  gap: 7px;
+  align-items: center;
+  margin-top: 5px;
+}
+
+.neighbor-list strong {
+  margin: 0;
+  font-size: 12px;
+}
+
+.neighbor-list small {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 .metric-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
