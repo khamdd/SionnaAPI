@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STATIC_DIR = PROJECT_ROOT / "static"
 SCENE_REGISTRY_PATH = STATIC_DIR / "scenes" / "scenes.json"
+DEFAULT_SCENE_ID = "munich"
+DEFAULT_SCENE_NAME = "Munich"
 
 
 def utc_now():
@@ -84,8 +86,6 @@ def list_simulation_runs(limit=25):
                         status,
                         transmitter_pattern,
                         scene_id,
-                        scene_name,
-                        scene_bounds_json,
                         cell_size_m,
                         bandwidth_mhz,
                         mimo_layers,
@@ -140,8 +140,6 @@ def get_simulation_run(run_id):
                         status,
                         transmitter_pattern,
                         scene_id,
-                        scene_name,
-                        scene_bounds_json,
                         max_depth,
                         samples_per_tx,
                         cell_size_m,
@@ -306,22 +304,6 @@ def ensure_scene_columns(session):
             """
         )
     )
-    session.execute(
-        text(
-            """
-            ALTER TABLE simulation_runs
-            ADD COLUMN IF NOT EXISTS scene_name TEXT NOT NULL DEFAULT 'Munich'
-            """
-        )
-    )
-    session.execute(
-        text(
-            """
-            ALTER TABLE simulation_runs
-            ADD COLUMN IF NOT EXISTS scene_bounds_json JSONB
-            """
-        )
-    )
 
 
 def insert_simulation_run(
@@ -345,8 +327,6 @@ def insert_simulation_run(
                 status,
                 transmitter_pattern,
                 scene_id,
-                scene_name,
-                scene_bounds_json,
                 max_depth,
                 samples_per_tx,
                 cell_size_m,
@@ -366,8 +346,6 @@ def insert_simulation_run(
                 :status,
                 :transmitter_pattern,
                 :scene_id,
-                :scene_name,
-                CAST(:scene_bounds_json AS JSONB),
                 :max_depth,
                 :samples_per_tx,
                 :cell_size_m,
@@ -395,12 +373,7 @@ def insert_simulation_run(
             "simulation_type": simulation_type,
             "status": status,
             "transmitter_pattern": req.transmitter_pattern,
-            "scene_id": scene_info.get("id", "munich"),
-            "scene_name": scene_info.get("name", "Munich"),
-            "scene_bounds_json": to_json_string(
-                scene_info.get("bounds")
-                or resolve_scene_bounds(scene_info.get("id", "munich"))
-            ),
+            "scene_id": scene_info.get("id", DEFAULT_SCENE_ID),
             "max_depth": solver.max_depth,
             "samples_per_tx": solver.samples_per_tx,
             "cell_size_m": solver.cell_size,
@@ -612,17 +585,16 @@ def delete_artifact_files(artifacts):
 
 
 def serialize_run_summary(row):
+    scene_info = resolve_scene_info(row["scene_id"])
+
     return {
         "id": str(row["id"]),
         "simulation_type": row["simulation_type"],
         "status": row["status"],
         "transmitter_pattern": row["transmitter_pattern"],
         "scene_id": row["scene_id"],
-        "scene_name": row["scene_name"],
-        "scene_bounds": resolve_scene_bounds(
-            row["scene_id"],
-            normalize_json_value(row["scene_bounds_json"]),
-        ),
+        "scene_name": scene_info["name"],
+        "scene_bounds": scene_info["bounds"],
         "cell_size_m": row["cell_size_m"],
         "bandwidth_mhz": row["bandwidth_mhz"],
         "mimo_layers": row["mimo_layers"],
@@ -718,20 +690,25 @@ def normalize_json_value(value):
     return value
 
 
-def resolve_scene_bounds(scene_id, stored_bounds=None):
-    if stored_bounds:
-        return stored_bounds
+def resolve_scene_info(scene_id):
+    fallback = {
+        "name": DEFAULT_SCENE_NAME if scene_id == DEFAULT_SCENE_ID else scene_id,
+        "bounds": None,
+    }
 
     if not scene_id or not SCENE_REGISTRY_PATH.exists():
-        return None
+        return fallback
 
     try:
         registry = json.loads(SCENE_REGISTRY_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return None
+        return fallback
 
     for scene in registry.get("scenes", []):
         if scene.get("id") == scene_id:
-            return scene.get("bounds")
+            return {
+                "name": scene.get("name") or fallback["name"],
+                "bounds": scene.get("bounds"),
+            }
 
-    return None
+    return fallback
