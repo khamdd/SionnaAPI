@@ -95,6 +95,8 @@ export default function MapPanel({
         )}
       </div>
 
+      {(latestGrid?.cells?.length || coverageImageUrl) && <CoverageColorLegend />}
+
       <div className="metric-strip">
         <div>
           <span>Cell size</span>
@@ -114,6 +116,70 @@ export default function MapPanel({
         </div>
       </div>
     </section>
+  );
+}
+
+function CoverageColorLegend() {
+  const rows = [
+    {
+      color: "#b91c1c",
+      label: "Poor",
+      range: "SINR < 0 dB",
+      meaning: "Weak or noisy connection",
+    },
+    {
+      color: "#eab308",
+      label: "Fair",
+      range: "0 to 8 dB",
+      meaning: "Usable but unstable",
+    },
+    {
+      color: "#22c55e",
+      label: "Good",
+      range: "8 to 18 dB",
+      meaning: "Stable connection",
+    },
+    {
+      color: "#0ea5e9",
+      label: "Excellent",
+      range: ">= 18 dB",
+      meaning: "Strong connection",
+    },
+    {
+      color: "#6b7280",
+      label: "No coverage",
+      range: "No valid value",
+      meaning: "No usable serving signal",
+    },
+  ];
+
+  return (
+    <div className="coverage-legend" aria-label="Coverage color legend">
+      <div>
+        <strong>Coverage colors</strong>
+        <span>Uses SINR when available. If SINR is missing, the map falls back to throughput or signal power.</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Color</th>
+            <th>Quality</th>
+            <th>Range</th>
+            <th>Meaning</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.label}>
+              <td><span className="coverage-swatch" style={{ background: row.color }} /></td>
+              <td>{row.label}</td>
+              <td>{row.range}</td>
+              <td>{row.meaning}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

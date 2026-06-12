@@ -613,6 +613,59 @@ h2 {
   color: #b91c1c;
 }
 
+.coverage-legend {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(0, 2fr);
+  gap: 14px;
+  align-items: start;
+  border-top: 1px solid var(--line);
+  padding: 14px 16px;
+}
+
+.coverage-legend strong,
+.coverage-legend span {
+  display: block;
+}
+
+.coverage-legend strong {
+  font-size: 13px;
+}
+
+.coverage-legend span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.coverage-legend table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.coverage-legend th,
+.coverage-legend td {
+  border: 1px solid var(--line);
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.coverage-legend th {
+  background: #f8fafc;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.coverage-swatch {
+  display: block;
+  width: 28px;
+  height: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  border-radius: 4px;
+}
+
 .neighbor-list {
   margin-top: 9px;
   border-top: 1px solid var(--line);
@@ -1461,6 +1514,10 @@ h2 {
 
   .metric-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .coverage-legend {
+    grid-template-columns: 1fr;
   }
 
   .history-row {
