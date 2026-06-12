@@ -29,6 +29,7 @@ export default function MapPanel({
   summary,
 }) {
   const showScene3D = Boolean(activeScene?.bounds);
+  const sceneTitle = activeScene?.name || "Munich";
   const [selectedCoverageCell, setSelectedCoverageCell] = useState(null);
 
   useEffect(() => {
@@ -39,7 +40,7 @@ export default function MapPanel({
     <section className="map-panel" aria-label="Coverage map">
       <div className="topbar">
         <div>
-          <h1>Munich Coverage Planner</h1>
+          <h1>{sceneTitle} Coverage Planner</h1>
           <p id="run-status" className={runError ? "error-text" : ""}>{runStatus}</p>
         </div>
         <button
