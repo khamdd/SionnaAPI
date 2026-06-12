@@ -552,6 +552,67 @@ h2 {
   font-weight: 700;
 }
 
+.coverage-cell-dialog {
+  position: absolute;
+  z-index: 7;
+  top: 50%;
+  left: 50%;
+  width: min(360px, calc(100% - 40px));
+  border: 1px solid rgba(17, 24, 39, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.97);
+  padding: 16px;
+  box-shadow: 0 24px 70px rgba(17, 24, 39, 0.28);
+  color: var(--text);
+  font-size: 13px;
+  transform: translate(-50%, -50%);
+}
+
+.coverage-cell-dialog strong {
+  display: block;
+  margin-right: 30px;
+  margin-bottom: 10px;
+  font-size: 15px;
+}
+
+.coverage-cell-dialog dl {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 7px 14px;
+  margin: 0;
+}
+
+.coverage-cell-dialog dt {
+  color: var(--muted);
+}
+
+.coverage-cell-dialog dd {
+  margin: 0;
+  font-weight: 800;
+}
+
+.coverage-cell-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.coverage-cell-close:hover {
+  border-color: rgba(239, 68, 68, 0.45);
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
 .neighbor-list {
   margin-top: 9px;
   border-top: 1px solid var(--line);

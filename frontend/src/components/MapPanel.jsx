@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   formatMaybeNumber,
   formatNeighborDelta,
@@ -17,6 +18,7 @@ export default function MapPanel({
   canvasRef,
   hover,
   isRunning,
+  latestGrid,
   latestSolver,
   mapStageRef,
   onHover,
@@ -26,7 +28,12 @@ export default function MapPanel({
   runStatus,
   summary,
 }) {
-  const showPreSimulationScene = Boolean(activeScene?.bounds && !coverageImageUrl);
+  const showScene3D = Boolean(activeScene?.bounds);
+  const [selectedCoverageCell, setSelectedCoverageCell] = useState(null);
+
+  useEffect(() => {
+    setSelectedCoverageCell(null);
+  }, [activeScene?.id, latestGrid]);
 
   return (
     <section className="map-panel" aria-label="Coverage map">
@@ -46,25 +53,28 @@ export default function MapPanel({
       </div>
 
       <div ref={mapStageRef} className="map-stage">
-        {coverageImageUrl ? (
-          <img id="coverage-image" src={coverageImageUrl} alt="Top-down coverage map" />
-        ) : activeScene?.bounds ? (
+        {activeScene?.bounds ? (
           <Scene3DPreview
             antennas={antennas}
             bounds={activeScene.bounds}
             className="network-scene-3d"
+            coverageGrid={latestGrid}
+            onCoverageCellSelect={setSelectedCoverageCell}
             sceneName={activeScene.name}
+            selectedCoverageCell={selectedCoverageCell}
             showOverlay={false}
             solver={latestSolver}
             viewMode="top"
           />
+        ) : coverageImageUrl ? (
+          <img id="coverage-image" src={coverageImageUrl} alt="Top-down coverage map" />
         ) : (
           <div className="network-scene-empty">
             <strong>{activeScene?.name || "Munich"}</strong>
             <span>Run a simulation to render the Sionna coverage map.</span>
           </div>
         )}
-        {!showPreSimulationScene && (
+        {!showScene3D && (
           <>
             <canvas
               id="heat-layer"
@@ -75,7 +85,13 @@ export default function MapPanel({
             <AntennaLayer antennas={antennas} solver={latestSolver} />
           </>
         )}
-        {hover && <HoverCard hover={hover} />}
+        {!showScene3D && hover && <HoverCard hover={hover} />}
+        {showScene3D && selectedCoverageCell && (
+          <CoverageCellDialog
+            cell={selectedCoverageCell}
+            onClose={() => setSelectedCoverageCell(null)}
+          />
+        )}
       </div>
 
       <div className="metric-strip">
@@ -97,6 +113,29 @@ export default function MapPanel({
         </div>
       </div>
     </section>
+  );
+}
+
+function CoverageCellDialog({ cell, onClose }) {
+  return (
+    <div className="coverage-cell-dialog" role="dialog" aria-label="Coverage cell detail">
+      <button
+        className="coverage-cell-close"
+        type="button"
+        aria-label="Close cell detail"
+        onClick={onClose}
+      >
+        x
+      </button>
+      <strong>Cell ({formatMaybeNumber(cell.x)} m, {formatMaybeNumber(cell.y)} m)</strong>
+      <dl>
+        <dt>Serving</dt><dd>{formatText(cell.serving_antenna)}</dd>
+        <dt>SINR</dt><dd>{formatMaybeNumber(cell.sinr_db)} dB</dd>
+        <dt>Signal</dt><dd>{formatMaybeNumber(cell.signal_dbm)} dBm</dd>
+        <dt>Throughput</dt><dd>{formatMaybeNumber(cell.throughput_mbps)} Mbps</dd>
+      </dl>
+      <CellNeighbors neighbors={cell.neighbors} />
+    </div>
   );
 }
 

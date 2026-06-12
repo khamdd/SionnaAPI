@@ -425,6 +425,7 @@ export default function App() {
           coverageImageUrl={coverageImageUrl}
           hover={hover}
           isRunning={isRunning}
+          latestGrid={latestGrid}
           latestSolver={latestSolver}
           mapStageRef={mapStageRef}
           onHover={handleHover}
@@ -525,6 +526,7 @@ function NetworkCoveragePage({
   coverageImageUrl,
   hover,
   isRunning,
+  latestGrid,
   latestSolver,
   mapStageRef,
   onHover,
@@ -546,6 +548,7 @@ function NetworkCoveragePage({
         hover={hover}
         isRunning={isRunning}
         latestSolver={latestSolver}
+        latestGrid={latestGrid}
         mapStageRef={mapStageRef}
         onHover={onHover}
         onHoverEnd={onHoverEnd}

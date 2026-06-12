@@ -3,19 +3,41 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 const DEFAULT_HEIGHT_M = 9;
+const SELECTED_CELL_OUTLINE = {
+  fillColor: 0xffffff,
+  fillOpacity: 0.22,
+  lineColor: 0xffffff,
+  renderOrder: 8,
+  y: 3.2,
+};
+const HOVER_CELL_OUTLINE = {
+  fillColor: 0xfacc15,
+  fillOpacity: 0.34,
+  lineColor: 0xf59e0b,
+  renderOrder: 9,
+  y: 4.0,
+};
 
 export default function Scene3DPreview({
   antennas = [],
   bounds,
   className = "",
+  coverageGrid = null,
+  onCoverageCellSelect = null,
   sceneName,
+  selectedCoverageCell = null,
   showOverlay = true,
   solver = null,
   viewMode = "oblique",
 }) {
   const canvasHostRef = useRef(null);
+  const selectedCoverageCellRef = useRef(selectedCoverageCell);
   const [model, setModel] = useState(null);
   const [status, setStatus] = useState("Loading OSM buildings...");
+
+  useEffect(() => {
+    selectedCoverageCellRef.current = selectedCoverageCell;
+  }, [selectedCoverageCell]);
 
   useEffect(() => {
     if (!bounds) {
@@ -62,8 +84,17 @@ export default function Scene3DPreview({
       return undefined;
     }
 
-    return renderThreeScene(host, model, viewMode, antennas, solver);
-  }, [antennas, model, solver, viewMode]);
+    return renderThreeScene(
+      host,
+      model,
+      viewMode,
+      antennas,
+      solver,
+      coverageGrid,
+      selectedCoverageCellRef,
+      onCoverageCellSelect,
+    );
+  }, [antennas, coverageGrid, model, onCoverageCellSelect, solver, viewMode]);
 
   return (
     <div className={["scene-3d-preview", className].filter(Boolean).join(" ")}>
@@ -240,7 +271,16 @@ function buildModel(bounds, buildings) {
   };
 }
 
-function renderThreeScene(host, model, viewMode, antennas, solver) {
+function renderThreeScene(
+  host,
+  model,
+  viewMode,
+  antennas,
+  solver,
+  coverageGrid,
+  selectedCoverageCellRef,
+  onCoverageCellSelect,
+) {
   host.innerHTML = "";
 
   const width = host.clientWidth || 820;
@@ -300,6 +340,13 @@ function renderThreeScene(host, model, viewMode, antennas, solver) {
   scene.add(edge);
 
   addRoadLines(scene, model);
+  const coverageMesh = addCoverageGrid(scene, model, coverageGrid, solver);
+  const selectedCellGroup = new THREE.Group();
+  const hoveredCellGroup = new THREE.Group();
+  scene.add(selectedCellGroup);
+  scene.add(hoveredCellGroup);
+  let lastSelectedCell = null;
+  let lastHoveredCell = null;
 
   model.buildings.forEach((building) => {
     const mesh = createBuildingMesh(building);
@@ -319,9 +366,97 @@ function renderThreeScene(host, model, viewMode, antennas, solver) {
   });
   observer.observe(host);
 
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
+  let pointerStart = null;
+
+  function handlePointerDown(event) {
+    pointerStart = {
+      x: event.clientX,
+      y: event.clientY,
+    };
+  }
+
+  function setHoveredCell(cell) {
+    if (cell === lastHoveredCell) {
+      return;
+    }
+
+    updateCellOutlineGroup(hoveredCellGroup, model, cell, solver, HOVER_CELL_OUTLINE);
+    lastHoveredCell = cell;
+    renderer.domElement.style.cursor = cell ? "pointer" : "";
+  }
+
+  function handlePointerMove(event) {
+    if (event.buttons !== 0) {
+      setHoveredCell(null);
+      return;
+    }
+
+    setHoveredCell(pickCoverageCellFromEvent(
+      event,
+      renderer,
+      camera,
+      raycaster,
+      pointer,
+      coverageMesh,
+      model,
+      coverageGrid,
+      solver,
+    ));
+  }
+
+  function handlePointerLeave() {
+    pointerStart = null;
+    setHoveredCell(null);
+  }
+
+  function handlePointerUp(event) {
+    if (!pointerStart) {
+      return;
+    }
+
+    const distance = Math.hypot(
+      event.clientX - pointerStart.x,
+      event.clientY - pointerStart.y,
+    );
+    pointerStart = null;
+
+    if (distance > 5) {
+      return;
+    }
+
+    if (!onCoverageCellSelect) {
+      return;
+    }
+
+    const cell = pickCoverageCellFromEvent(
+      event,
+      renderer,
+      camera,
+      raycaster,
+      pointer,
+      coverageMesh,
+      model,
+      coverageGrid,
+      solver,
+    );
+    if (cell) {
+      onCoverageCellSelect(cell);
+    }
+  }
+
+  renderer.domElement.addEventListener("pointerdown", handlePointerDown);
+  renderer.domElement.addEventListener("pointermove", handlePointerMove);
+  renderer.domElement.addEventListener("pointerleave", handlePointerLeave);
+  renderer.domElement.addEventListener("pointerup", handlePointerUp);
+
   let animationId = 0;
   function animate() {
     controls.update();
+    syncSelectedCellOutline(selectedCellGroup, model, selectedCoverageCellRef, solver, lastSelectedCell, (cell) => {
+      lastSelectedCell = cell;
+    });
     renderer.render(scene, camera);
     animationId = window.requestAnimationFrame(animate);
   }
@@ -331,6 +466,10 @@ function renderThreeScene(host, model, viewMode, antennas, solver) {
     window.cancelAnimationFrame(animationId);
     observer.disconnect();
     controls.dispose();
+    renderer.domElement.removeEventListener("pointerdown", handlePointerDown);
+    renderer.domElement.removeEventListener("pointermove", handlePointerMove);
+    renderer.domElement.removeEventListener("pointerleave", handlePointerLeave);
+    renderer.domElement.removeEventListener("pointerup", handlePointerUp);
     renderer.dispose();
     scene.traverse((object) => {
       if (object.geometry) {
@@ -342,6 +481,201 @@ function renderThreeScene(host, model, viewMode, antennas, solver) {
     });
     host.innerHTML = "";
   };
+}
+
+function syncSelectedCellOutline(group, model, selectedCoverageCellRef, solver, lastSelectedCell, setLastSelectedCell) {
+  const cell = selectedCoverageCellRef?.current || null;
+
+  if (cell === lastSelectedCell) {
+    return;
+  }
+
+  updateCellOutlineGroup(group, model, cell, solver, SELECTED_CELL_OUTLINE);
+  setLastSelectedCell(cell);
+}
+
+function updateCellOutlineGroup(group, model, cell, solver, style) {
+  while (group.children.length) {
+    const child = group.children[0];
+    group.remove(child);
+    disposeThreeObject(child);
+  }
+
+  addCellOutline(group, model, cell, solver, style);
+}
+
+function addCoverageGrid(scene, model, grid, solver) {
+  if (!grid || !Array.isArray(grid.cells) || !solver) {
+    return;
+  }
+
+  const texture = createCoverageTexture(grid);
+
+  if (!texture) {
+    return;
+  }
+
+  const geometry = new THREE.PlaneGeometry(model.width, model.depth);
+  const material = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    opacity: 0.76,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.y = 1.8;
+  mesh.renderOrder = 5;
+  scene.add(mesh);
+  return mesh;
+}
+
+function addCellOutline(scene, model, cell, solver, style) {
+  if (!cell || !solver) {
+    return;
+  }
+
+  const sizeX = solver.size?.[0] || 300;
+  const sizeY = solver.size?.[1] || 300;
+  const centerX = solver.center?.[0] || 0;
+  const centerY = solver.center?.[1] || 0;
+  const cellWidth = Math.max(((solver.cell_size || 5) / sizeX) * model.width, 0.6);
+  const cellDepth = Math.max(((solver.cell_size || 5) / sizeY) * model.depth, 0.6);
+  const x = ((numericValue(cell.x) - centerX) / sizeX) * model.width;
+  const z = -((numericValue(cell.y) - centerY) / sizeY) * model.depth;
+
+  if (!Number.isFinite(x) || !Number.isFinite(z)) {
+    return;
+  }
+
+  const y = style.y;
+  const points = [
+    new THREE.Vector3(x - cellWidth / 2, y, z - cellDepth / 2),
+    new THREE.Vector3(x + cellWidth / 2, y, z - cellDepth / 2),
+    new THREE.Vector3(x + cellWidth / 2, y, z + cellDepth / 2),
+    new THREE.Vector3(x - cellWidth / 2, y, z + cellDepth / 2),
+    new THREE.Vector3(x - cellWidth / 2, y, z - cellDepth / 2),
+  ];
+  const geometry = new THREE.BufferGeometry().setFromPoints(points);
+  const line = new THREE.Line(
+    geometry,
+    new THREE.LineBasicMaterial({
+      color: style.lineColor,
+      linewidth: 2,
+    }),
+  );
+  line.renderOrder = style.renderOrder;
+  scene.add(line);
+
+  const fill = new THREE.Mesh(
+    new THREE.PlaneGeometry(cellWidth, cellDepth),
+    new THREE.MeshBasicMaterial({
+      color: style.fillColor,
+      transparent: true,
+      opacity: style.fillOpacity,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    }),
+  );
+  fill.rotation.x = -Math.PI / 2;
+  fill.position.set(x, y - 0.05, z);
+  fill.renderOrder = style.renderOrder - 1;
+  scene.add(fill);
+}
+
+function disposeThreeObject(object) {
+  if (object.geometry) {
+    object.geometry.dispose();
+  }
+
+  if (Array.isArray(object.material)) {
+    object.material.forEach((material) => material.dispose());
+  } else if (object.material) {
+    object.material.dispose();
+  }
+}
+
+function createCoverageTexture(grid) {
+  const rows = Number(grid.rows);
+  const cols = Number(grid.cols);
+
+  if (!Number.isInteger(rows) || !Number.isInteger(cols) || rows <= 0 || cols <= 0) {
+    return null;
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = cols;
+  canvas.height = rows;
+  const context = canvas.getContext("2d");
+  context.clearRect(0, 0, cols, rows);
+
+  grid.cells.forEach((cell) => {
+    const row = Number(cell.row);
+    const col = Number(cell.col);
+
+    if (!Number.isInteger(row) || !Number.isInteger(col)) {
+      return;
+    }
+
+    context.fillStyle = colorForCoverageCell(cell);
+    context.fillRect(col, rows - row - 1, 1, 1);
+  });
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function findCoverageCellAtPoint(point, model, grid, solver) {
+  const sizeX = solver.size?.[0] || 300;
+  const sizeY = solver.size?.[1] || 300;
+  const centerX = solver.center?.[0] || 0;
+  const centerY = solver.center?.[1] || 0;
+  const cellSize = solver.cell_size || 5;
+  const xMin = centerX - sizeX / 2;
+  const yMin = centerY - sizeY / 2;
+  const worldX = (point.x / model.width) * sizeX + centerX;
+  const worldY = -(point.z / model.depth) * sizeY + centerY;
+  const col = Math.floor((worldX - xMin) / cellSize);
+  const row = Math.floor((worldY - yMin) / cellSize);
+
+  return grid.cells.find((cell) => (
+    Number(cell.row) === row
+    && Number(cell.col) === col
+  ));
+}
+
+function pickCoverageCellFromEvent(
+  event,
+  renderer,
+  camera,
+  raycaster,
+  pointer,
+  coverageMesh,
+  model,
+  coverageGrid,
+  solver,
+) {
+  if (!coverageMesh || !coverageGrid || !solver) {
+    return null;
+  }
+
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -(((event.clientY - rect.top) / rect.height) * 2 - 1);
+  raycaster.setFromCamera(pointer, camera);
+
+  const hit = raycaster.intersectObject(coverageMesh, false)[0];
+  if (!hit) {
+    return null;
+  }
+
+  return findCoverageCellAtPoint(hit.point, model, coverageGrid, solver) || null;
 }
 
 function addAntennas(scene, model, antennas, solver) {
@@ -516,6 +850,66 @@ function createBuildingMesh(building) {
   };
 
   return mesh;
+}
+
+function colorForCoverageCell(cell) {
+  const sinrDb = numericValue(cell.sinr_db);
+
+  if (Number.isFinite(sinrDb) && sinrDb > -80) {
+    if (sinrDb < 0) {
+      return "rgba(185, 28, 28, 0.72)";
+    }
+    if (sinrDb < 8) {
+      return "rgba(234, 179, 8, 0.72)";
+    }
+    if (sinrDb < 18) {
+      return "rgba(34, 197, 94, 0.68)";
+    }
+    return "rgba(14, 165, 233, 0.68)";
+  }
+
+  const throughput = numericValue(cell.throughput_mbps);
+  if (Number.isFinite(throughput) && throughput > 0) {
+    if (throughput < 100) {
+      return "rgba(185, 28, 28, 0.66)";
+    }
+    if (throughput < 500) {
+      return "rgba(234, 179, 8, 0.66)";
+    }
+    if (throughput < 1200) {
+      return "rgba(34, 197, 94, 0.62)";
+    }
+    return "rgba(14, 165, 233, 0.62)";
+  }
+
+  const signalDbm = numericValue(cell.signal_dbm);
+  if (Number.isFinite(signalDbm) && signalDbm > -130) {
+    if (signalDbm < -105) {
+      return "rgba(185, 28, 28, 0.54)";
+    }
+    if (signalDbm < -90) {
+      return "rgba(234, 179, 8, 0.54)";
+    }
+    if (signalDbm < -75) {
+      return "rgba(34, 197, 94, 0.50)";
+    }
+    return "rgba(14, 165, 233, 0.50)";
+  }
+
+  return "rgba(107, 114, 128, 0.28)";
+}
+
+function numericValue(value) {
+  if (typeof value === "number") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : NaN;
+  }
+
+  return NaN;
 }
 
 function addRoadLines(scene, model) {
