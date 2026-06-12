@@ -19,6 +19,7 @@ export default function SceneChooserModal({
   const drawStartRef = useRef(null);
   const previewSceneRef = useRef(null);
   const keptSceneRef = useRef(false);
+  const mapViewRef = useRef(null);
   const [isSelectingArea, setIsSelectingArea] = useState(false);
   const [locationQuery, setLocationQuery] = useState("");
   const [locationResults, setLocationResults] = useState([]);
@@ -39,13 +40,14 @@ export default function SceneChooserModal({
   useEffect(() => {
     const node = mapNodeRef.current;
 
-    if (!node || mapRef.current) {
+    if (previewScene || !node || mapRef.current) {
       return undefined;
     }
 
+    const savedView = mapViewRef.current;
     const map = L.map(node, {
-      center: DEFAULT_CENTER,
-      zoom: DEFAULT_ZOOM,
+      center: savedView?.center || DEFAULT_CENTER,
+      zoom: savedView?.zoom || DEFAULT_ZOOM,
       minZoom: 2,
       maxZoom: 18,
       scrollWheelZoom: true,
@@ -67,11 +69,15 @@ export default function SceneChooserModal({
     setTimeout(() => map.invalidateSize(), 0);
 
     return () => {
+      mapViewRef.current = {
+        center: [map.getCenter().lat, map.getCenter().lng],
+        zoom: map.getZoom(),
+      };
       observer.disconnect();
       map.remove();
       mapRef.current = null;
     };
-  }, []);
+  }, [previewScene]);
 
   useEffect(() => {
     previewSceneRef.current = previewScene;
@@ -370,7 +376,8 @@ export default function SceneChooserModal({
     setPreviewBounds(null);
     removeRectangle();
     setError(false);
-    startSelection();
+    setIsSelectingArea(true);
+    setStatus("Selection mode enabled. Drag on the map to draw a small scene area.");
   }
 
   async function cancelSelection() {
