@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STATIC_DIR = PROJECT_ROOT / "static"
+SCENE_REGISTRY_PATH = STATIC_DIR / "scenes" / "scenes.json"
 
 
 def utc_now():
@@ -84,6 +85,7 @@ def list_simulation_runs(limit=25):
                         transmitter_pattern,
                         scene_id,
                         scene_name,
+                        scene_bounds_json,
                         cell_size_m,
                         bandwidth_mhz,
                         mimo_layers,
@@ -139,6 +141,7 @@ def get_simulation_run(run_id):
                         transmitter_pattern,
                         scene_id,
                         scene_name,
+                        scene_bounds_json,
                         max_depth,
                         samples_per_tx,
                         cell_size_m,
@@ -311,6 +314,14 @@ def ensure_scene_columns(session):
             """
         )
     )
+    session.execute(
+        text(
+            """
+            ALTER TABLE simulation_runs
+            ADD COLUMN IF NOT EXISTS scene_bounds_json JSONB
+            """
+        )
+    )
 
 
 def insert_simulation_run(
@@ -335,6 +346,7 @@ def insert_simulation_run(
                 transmitter_pattern,
                 scene_id,
                 scene_name,
+                scene_bounds_json,
                 max_depth,
                 samples_per_tx,
                 cell_size_m,
@@ -355,6 +367,7 @@ def insert_simulation_run(
                 :transmitter_pattern,
                 :scene_id,
                 :scene_name,
+                CAST(:scene_bounds_json AS JSONB),
                 :max_depth,
                 :samples_per_tx,
                 :cell_size_m,
@@ -384,6 +397,10 @@ def insert_simulation_run(
             "transmitter_pattern": req.transmitter_pattern,
             "scene_id": scene_info.get("id", "munich"),
             "scene_name": scene_info.get("name", "Munich"),
+            "scene_bounds_json": to_json_string(
+                scene_info.get("bounds")
+                or resolve_scene_bounds(scene_info.get("id", "munich"))
+            ),
             "max_depth": solver.max_depth,
             "samples_per_tx": solver.samples_per_tx,
             "cell_size_m": solver.cell_size,
@@ -395,7 +412,7 @@ def insert_simulation_run(
             "bandwidth_mhz": getattr(req, "bandwidth_mhz", None),
             "mimo_layers": getattr(req, "mimo_layers", None),
             "request_json": to_json_string(req),
-            "response_json": to_json_string(summarize_response(result)),
+            "response_json": to_json_string(result),
             "coverage_map_image_url": result.get("coverage_map_image_url"),
             "error_message": result.get("error"),
             "started_at": started_at,
@@ -602,6 +619,10 @@ def serialize_run_summary(row):
         "transmitter_pattern": row["transmitter_pattern"],
         "scene_id": row["scene_id"],
         "scene_name": row["scene_name"],
+        "scene_bounds": resolve_scene_bounds(
+            row["scene_id"],
+            normalize_json_value(row["scene_bounds_json"]),
+        ),
         "cell_size_m": row["cell_size_m"],
         "bandwidth_mhz": row["bandwidth_mhz"],
         "mimo_layers": row["mimo_layers"],
@@ -688,7 +709,29 @@ def serialize_datetime(value):
 
 
 def normalize_json_value(value):
+    if value is None:
+        return None
+
     if isinstance(value, str):
         return json.loads(value)
 
     return value
+
+
+def resolve_scene_bounds(scene_id, stored_bounds=None):
+    if stored_bounds:
+        return stored_bounds
+
+    if not scene_id or not SCENE_REGISTRY_PATH.exists():
+        return None
+
+    try:
+        registry = json.loads(SCENE_REGISTRY_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    for scene in registry.get("scenes", []):
+        if scene.get("id") == scene_id:
+            return scene.get("bounds")
+
+    return None

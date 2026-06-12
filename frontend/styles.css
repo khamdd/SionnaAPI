@@ -1268,6 +1268,21 @@ h2 {
   margin-top: 10px;
 }
 
+.history-scene-3d.scene-3d-preview,
+.comparison-scene-3d.scene-3d-preview {
+  width: 100%;
+  height: 360px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-top: 10px;
+  overflow: hidden;
+}
+
+.history-scene-3d .scene-3d-canvas,
+.comparison-scene-3d .scene-3d-canvas {
+  height: 100%;
+}
+
 .history-detail h3 {
   margin-top: 14px;
   font-size: 13px;
@@ -1334,6 +1349,10 @@ h2 {
 
 .comparison-card img {
   margin-top: 8px;
+}
+
+.comparison-scene-3d.scene-3d-preview {
+  height: 280px;
 }
 
 .comparison-table-wrap {

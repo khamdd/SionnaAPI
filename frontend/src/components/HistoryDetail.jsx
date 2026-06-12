@@ -7,6 +7,7 @@ import {
   formatText,
   formatDateTime,
 } from "../utils/format";
+import Scene3DPreview from "./Scene3DPreview";
 
 export default function HistoryDetail({ item }) {
   const renderer = {
@@ -62,7 +63,11 @@ function CoverageMapHistory({ item }) {
         <dt>Size</dt><dd>{formatPositionValue(request.solver?.size)}</dd>
         <dt>Status</dt><dd>{formatText(response.status || item.status)}</dd>
       </dl>
-      {imageUrl && <img src={imageUrl} alt="Saved coverage map" />}
+      <HistoryCoveragePreview
+        fallbackImageUrl={imageUrl}
+        item={item}
+        mode="coverage_map"
+      />
     </>
   );
 }
@@ -83,7 +88,11 @@ function NetworkCoverageHistory({ item }) {
         <dt>Grid</dt><dd>{grid.rows || "--"} x {grid.cols || "--"}</dd>
         <dt>Cells</dt><dd>{grid.cell_count || "--"}</dd>
       </dl>
-      {imageUrl && <img src={imageUrl} alt="Saved coverage map" />}
+      <HistoryCoveragePreview
+        fallbackImageUrl={imageUrl}
+        item={item}
+        mode="network_coverage"
+      />
       <h3>Antenna snapshot</h3>
       {(item.antennas || []).length ? (
         item.antennas.map((antenna) => (
@@ -100,6 +109,69 @@ function NetworkCoverageHistory({ item }) {
       )}
     </>
   );
+}
+
+function HistoryCoveragePreview({ fallbackImageUrl, item, mode }) {
+  if (item.scene_bounds) {
+    return (
+      <Scene3DPreview
+        antennas={historyPreviewAntennas(item, mode)}
+        bounds={item.scene_bounds}
+        className="history-scene-3d"
+        coverageGrid={historyPreviewGrid(item)}
+        sceneName={item.scene_name}
+        showOverlay={false}
+        solver={historyPreviewSolver(item)}
+        viewMode="top"
+      />
+    );
+  }
+
+  if (fallbackImageUrl) {
+    return <img src={fallbackImageUrl} alt="Saved coverage map" />;
+  }
+
+  return <p className="history-status">No saved preview is available for this run.</p>;
+}
+
+function historyPreviewGrid(item) {
+  const grid = item.response_json?.grid;
+
+  if (!grid || !Array.isArray(grid.cells)) {
+    return null;
+  }
+
+  return grid;
+}
+
+function historyPreviewSolver(item) {
+  return item.response_json?.solver || item.solver || item.request_json?.solver || null;
+}
+
+function historyPreviewAntennas(item, mode) {
+  if (mode === "coverage_map") {
+    const request = item.request_json || {};
+
+    if (!Array.isArray(request.transmitter_position)) {
+      return [];
+    }
+
+    return [{
+      id: "A1",
+      position: request.transmitter_position,
+      azimuth: request.azimuth || 0,
+    }];
+  }
+
+  if (Array.isArray(item.response_json?.antennas)) {
+    return item.response_json.antennas;
+  }
+
+  return (item.antennas || []).map((antenna) => ({
+    id: antenna.antenna_code,
+    position: antenna.position,
+    azimuth: antenna.azimuth_deg,
+  }));
 }
 
 function SinrHistory({ item }) {

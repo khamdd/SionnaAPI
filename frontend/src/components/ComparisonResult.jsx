@@ -5,6 +5,7 @@ import {
   formatPositionValue,
   formatText,
 } from "../utils/format";
+import Scene3DPreview from "./Scene3DPreview";
 
 export default function ComparisonResult({ type, items }) {
   if (type === "coverage_map") {
@@ -45,7 +46,11 @@ function CoverageMapComparison({ items }) {
               <dt>Cell size</dt><dd>{formatMaybeNumber(item.cell_size_m)} m</dd>
               <dt>Area</dt><dd>{formatPositionValue(request.solver?.size)}</dd>
             </dl>
-            {imageUrl && <img src={imageUrl} alt={`Coverage comparison run ${index + 1}`} />}
+            <ComparisonCoveragePreview
+              fallbackImageUrl={imageUrl}
+              item={item}
+              mode="coverage_map"
+            />
           </article>
         );
       })}
@@ -77,7 +82,11 @@ function NetworkCoverageComparison({ items }) {
               <dt>Avg tilt</dt><dd>{formatMaybeNumber(antennaStats.averageTilt)} deg</dd>
               <dt>Avg power</dt><dd>{formatMaybeNumber(antennaStats.averagePower)} dBm</dd>
             </dl>
-            {imageUrl && <img src={imageUrl} alt={`Network coverage comparison run ${index + 1}`} />}
+            <ComparisonCoveragePreview
+              fallbackImageUrl={imageUrl}
+              item={item}
+              mode="network_coverage"
+            />
           </article>
         );
       })}
@@ -176,6 +185,69 @@ function ComparisonTable({ headers, rows }) {
       </table>
     </div>
   );
+}
+
+function ComparisonCoveragePreview({ fallbackImageUrl, item, mode }) {
+  if (item.scene_bounds) {
+    return (
+      <Scene3DPreview
+        antennas={comparisonPreviewAntennas(item, mode)}
+        bounds={item.scene_bounds}
+        className="comparison-scene-3d"
+        coverageGrid={comparisonPreviewGrid(item)}
+        sceneName={item.scene_name}
+        showOverlay={false}
+        solver={comparisonPreviewSolver(item)}
+        viewMode="top"
+      />
+    );
+  }
+
+  if (fallbackImageUrl) {
+    return <img src={fallbackImageUrl} alt="Saved coverage comparison" />;
+  }
+
+  return <p className="history-status">No saved preview is available for this run.</p>;
+}
+
+function comparisonPreviewGrid(item) {
+  const grid = item.response_json?.grid;
+
+  if (!grid || !Array.isArray(grid.cells)) {
+    return null;
+  }
+
+  return grid;
+}
+
+function comparisonPreviewSolver(item) {
+  return item.response_json?.solver || item.solver || item.request_json?.solver || null;
+}
+
+function comparisonPreviewAntennas(item, mode) {
+  if (mode === "coverage_map") {
+    const request = item.request_json || {};
+
+    if (!Array.isArray(request.transmitter_position)) {
+      return [];
+    }
+
+    return [{
+      id: "A1",
+      position: request.transmitter_position,
+      azimuth: request.azimuth || 0,
+    }];
+  }
+
+  if (Array.isArray(item.response_json?.antennas)) {
+    return item.response_json.antennas;
+  }
+
+  return (item.antennas || []).map((antenna) => ({
+    id: antenna.antenna_code,
+    position: antenna.position,
+    azimuth: antenna.azimuth_deg,
+  }));
 }
 
 function summarizeAntennaSnapshot(snapshot) {
