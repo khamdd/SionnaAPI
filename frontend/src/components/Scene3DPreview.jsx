@@ -24,6 +24,7 @@ export default function Scene3DPreview({
   className = "",
   coverageGrid = null,
   onCoverageCellSelect = null,
+  onLoadingChange = null,
   sceneName,
   selectedCoverageCell = null,
   showOverlay = true,
@@ -41,41 +42,60 @@ export default function Scene3DPreview({
 
   useEffect(() => {
     if (!bounds) {
+      setModel(null);
+      onLoadingChange?.(false);
       return undefined;
     }
 
     const controller = new AbortController();
+    let isActive = true;
 
     async function loadBuildings() {
       setStatus("Loading OSM buildings...");
+      onLoadingChange?.(true);
 
       try {
         const buildings = await fetchBuildings(bounds, controller.signal);
 
+        if (!isActive) {
+          return;
+        }
+
         if (buildings.length) {
           setModel(buildModel(bounds, buildings));
           setStatus(buildHeightStatus(buildings));
+          onLoadingChange?.(false);
           return;
         }
 
         const fallback = generateFallbackBuildings(bounds);
         setModel(buildModel(bounds, fallback));
         setStatus("No OSM building footprints found. Showing generated blocks for preview only.");
+        onLoadingChange?.(false);
       } catch (error) {
         if (error.name === "AbortError") {
+          return;
+        }
+
+        if (!isActive) {
           return;
         }
 
         const fallback = generateFallbackBuildings(bounds);
         setModel(buildModel(bounds, fallback));
         setStatus("OSM building lookup failed. Showing generated blocks for preview only.");
+        onLoadingChange?.(false);
       }
     }
 
     loadBuildings();
 
-    return () => controller.abort();
-  }, [bounds]);
+    return () => {
+      isActive = false;
+      controller.abort();
+      onLoadingChange?.(false);
+    };
+  }, [bounds, onLoadingChange]);
 
   useEffect(() => {
     const host = canvasHostRef.current;

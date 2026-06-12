@@ -97,6 +97,64 @@ button.hidden,
   color: #1d4ed8;
 }
 
+.global-progress {
+  position: sticky;
+  top: 59px;
+  z-index: 9;
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1fr);
+  gap: 12px;
+  align-items: center;
+  height: 0;
+  border-bottom: 0 solid transparent;
+  background: rgba(255, 255, 255, 0.96);
+  opacity: 0;
+  overflow: hidden;
+  padding: 0 18px;
+  transition: height 160ms ease, opacity 160ms ease, border-color 160ms ease;
+}
+
+.global-progress.active {
+  height: 36px;
+  border-bottom-width: 1px;
+  border-bottom-color: var(--line);
+  opacity: 1;
+}
+
+.global-progress span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.global-progress div {
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  background: #dbeafe;
+  overflow: hidden;
+}
+
+.global-progress i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 38%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0f766e, #2563eb);
+  animation: progress-slide 1.05s ease-in-out infinite;
+}
+
+@keyframes progress-slide {
+  0% {
+    transform: translateX(-110%);
+  }
+
+  100% {
+    transform: translateX(285%);
+  }
+}
+
 .app-shell {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 390px;

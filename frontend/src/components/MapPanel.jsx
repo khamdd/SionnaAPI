@@ -24,6 +24,7 @@ export default function MapPanel({
   onHover,
   onHoverEnd,
   onRun,
+  onSceneLoadingChange,
   runError,
   runStatus,
   summary,
@@ -61,6 +62,7 @@ export default function MapPanel({
             className="network-scene-3d"
             coverageGrid={latestGrid}
             onCoverageCellSelect={setSelectedCoverageCell}
+            onLoadingChange={onSceneLoadingChange}
             sceneName={activeScene.name}
             selectedCoverageCell={selectedCoverageCell}
             showOverlay={false}

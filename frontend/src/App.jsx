@@ -44,6 +44,18 @@ const ROUTES = [
   { path: "/scenes", label: "Scenes" },
 ];
 
+const DEFAULT_ACTIVE_SCENE = {
+  id: "munich",
+  name: "Munich",
+  is_default: true,
+  bounds: {
+    south: 48.1344,
+    west: 11.5715,
+    north: 48.1404,
+    east: 11.5795,
+  },
+};
+
 function clone(value) {
   return structuredClone(value);
 }
@@ -69,7 +81,9 @@ export default function App() {
   const [modalContent, setModalContent] = useState(null);
   const [sceneChooserOpen, setSceneChooserOpen] = useState(false);
   const [scenes, setScenes] = useState([]);
-  const [activeScene, setActiveScene] = useState({ id: "munich", name: "Munich" });
+  const [activeScene, setActiveScene] = useState(() => clone(DEFAULT_ACTIVE_SCENE));
+  const [isSceneListLoading, setIsSceneListLoading] = useState(false);
+  const [isSceneLoading, setIsSceneLoading] = useState(false);
   const [sceneNotice, setSceneNoticeState] = useState(null);
   const [hover, setHover] = useState(null);
 
@@ -112,10 +126,28 @@ export default function App() {
   }, [comparisonSceneId, comparisonType]);
 
   const loadScenes = useCallback(async () => {
-    const result = await listScenes();
-    setScenes(result.scenes || []);
-    setActiveScene(result.active_scene || { id: result.active_scene_id || "munich", name: "Munich" });
-    return result;
+    setIsSceneListLoading(true);
+
+    try {
+      const result = await listScenes();
+      const nextScenes = (result.scenes || []).map(enrichScene);
+      const nextActiveScene = enrichScene(
+        result.active_scene || {
+          id: result.active_scene_id || DEFAULT_ACTIVE_SCENE.id,
+          name: DEFAULT_ACTIVE_SCENE.name,
+        },
+      );
+
+      setScenes(nextScenes);
+      setActiveScene(nextActiveScene);
+      return {
+        ...result,
+        active_scene: nextActiveScene,
+        scenes: nextScenes,
+      };
+    } finally {
+      setIsSceneListLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -281,7 +313,7 @@ export default function App() {
   }
 
   function handleSceneActivated(scene) {
-    setActiveScene(scene);
+    setActiveScene(enrichScene(scene));
     setSceneChooserOpen(false);
     setSceneNotice(`${scene.name} is now active.`);
     loadScenes().catch(() => {});
@@ -409,6 +441,14 @@ export default function App() {
     });
   }
 
+  const busyLabel = isRunning
+    ? "Running simulation..."
+    : isSceneLoading
+      ? "Loading scene..."
+      : isSceneListLoading
+        ? "Loading scenes..."
+        : "";
+
   return (
     <div className="app-frame">
       <Navbar
@@ -417,6 +457,7 @@ export default function App() {
         route={route}
         onNavigate={navigate}
       />
+      <GlobalProgress active={Boolean(busyLabel)} label={busyLabel} />
       {route === "/network" && (
         <NetworkCoveragePage
           activeScene={activeScene}
@@ -432,6 +473,7 @@ export default function App() {
           onHoverEnd={() => setHover(null)}
           onResetAntennas={resetAntennas}
           onRun={runSimulation}
+          onSceneLoadingChange={setIsSceneLoading}
           onUpdateAntenna={updateAntenna}
           runError={runError}
           runStatus={runStatus}
@@ -519,6 +561,21 @@ function Navbar({ activeScene, onChooseScene, onNavigate, route }) {
   );
 }
 
+function GlobalProgress({ active, label }) {
+  return (
+    <div
+      className={`global-progress ${active ? "active" : ""}`}
+      aria-hidden={!active}
+      role="status"
+    >
+      <span>{label}</span>
+      <div>
+        <i />
+      </div>
+    </div>
+  );
+}
+
 function NetworkCoveragePage({
   activeScene,
   antennas,
@@ -533,6 +590,7 @@ function NetworkCoveragePage({
   onHoverEnd,
   onResetAntennas,
   onRun,
+  onSceneLoadingChange,
   onUpdateAntenna,
   runError,
   runStatus,
@@ -553,6 +611,7 @@ function NetworkCoveragePage({
         onHover={onHover}
         onHoverEnd={onHoverEnd}
         onRun={onRun}
+        onSceneLoadingChange={onSceneLoadingChange}
         runError={runError}
         runStatus={runStatus}
         summary={summary}
@@ -677,6 +736,22 @@ function normalizeRoute(pathname) {
   return ROUTES.some((item) => item.path === pathname)
     ? pathname
     : "/network";
+}
+
+function enrichScene(scene) {
+  if (!scene) {
+    return clone(DEFAULT_ACTIVE_SCENE);
+  }
+
+  if (scene.id === DEFAULT_ACTIVE_SCENE.id && !scene.bounds) {
+    return {
+      ...DEFAULT_ACTIVE_SCENE,
+      ...scene,
+      bounds: DEFAULT_ACTIVE_SCENE.bounds,
+    };
+  }
+
+  return scene;
 }
 
 function toggleSetValue(current, value) {

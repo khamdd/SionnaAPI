@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
@@ -17,6 +18,12 @@ STATIC_DIR = PROJECT_ROOT / "static"
 SCENE_REGISTRY_PATH = STATIC_DIR / "scenes" / "scenes.json"
 DEFAULT_SCENE_ID = "munich"
 DEFAULT_SCENE_NAME = "Munich"
+DEFAULT_SCENE_BOUNDS = {
+    "south": 48.1344,
+    "west": 11.5715,
+    "north": 48.1404,
+    "east": 11.5795,
+}
 
 
 def utc_now():
@@ -37,6 +44,7 @@ def store_simulation_result(
     try:
         with db_session() as session:
             ensure_scene_columns(session)
+            ensure_scene_reference(session, scene_info)
             run_id = insert_simulation_run(
                 session,
                 simulation_type,
@@ -62,7 +70,7 @@ def store_simulation_result(
 
             return run_id
 
-    except SQLAlchemyError:
+    except (SQLAlchemyError, TypeError, ValueError):
         logger.exception("Failed to store simulation result.")
         return None
 
@@ -306,6 +314,42 @@ def ensure_scene_columns(session):
     )
 
 
+def ensure_scene_reference(session, scene_info=None):
+    scene_info = scene_info or {}
+    table_name = session.execute(
+        text("SELECT to_regclass('public.scenes')")
+    ).scalar()
+
+    if table_name is None:
+        return
+
+    scene_id = scene_info.get("id", DEFAULT_SCENE_ID)
+    scene_name = scene_info.get("name") or (
+        DEFAULT_SCENE_NAME if scene_id == DEFAULT_SCENE_ID else scene_id
+    )
+
+    session.execute(
+        text(
+            """
+            INSERT INTO scenes (
+                id,
+                name
+            )
+            VALUES (
+                :scene_id,
+                :scene_name
+            )
+            ON CONFLICT (id) DO UPDATE
+            SET name = EXCLUDED.name
+            """
+        ),
+        {
+            "scene_id": scene_id,
+            "scene_name": scene_name,
+        },
+    )
+
+
 def insert_simulation_run(
     session,
     simulation_type,
@@ -519,7 +563,8 @@ def to_json_string(value):
         value = value.model_dump(mode="json")
 
     return json.dumps(
-        value,
+        sanitize_json_value(value),
+        allow_nan=False,
         default=str,
     )
 
@@ -690,10 +735,29 @@ def normalize_json_value(value):
     return value
 
 
+def sanitize_json_value(value):
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+
+    if isinstance(value, dict):
+        return {
+            key: sanitize_json_value(item)
+            for key, item in value.items()
+        }
+
+    if isinstance(value, (list, tuple)):
+        return [
+            sanitize_json_value(item)
+            for item in value
+        ]
+
+    return value
+
+
 def resolve_scene_info(scene_id):
     fallback = {
         "name": DEFAULT_SCENE_NAME if scene_id == DEFAULT_SCENE_ID else scene_id,
-        "bounds": None,
+        "bounds": DEFAULT_SCENE_BOUNDS if scene_id == DEFAULT_SCENE_ID else None,
     }
 
     if not scene_id or not SCENE_REGISTRY_PATH.exists():
@@ -708,7 +772,7 @@ def resolve_scene_info(scene_id):
         if scene.get("id") == scene_id:
             return {
                 "name": scene.get("name") or fallback["name"],
-                "bounds": scene.get("bounds"),
+                "bounds": scene.get("bounds") or fallback["bounds"],
             }
 
     return fallback
