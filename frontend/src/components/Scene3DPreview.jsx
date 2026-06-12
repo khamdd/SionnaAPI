@@ -4,7 +4,15 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 const DEFAULT_HEIGHT_M = 9;
 
-export default function Scene3DPreview({ bounds, sceneName }) {
+export default function Scene3DPreview({
+  antennas = [],
+  bounds,
+  className = "",
+  sceneName,
+  showOverlay = true,
+  solver = null,
+  viewMode = "oblique",
+}) {
   const canvasHostRef = useRef(null);
   const [model, setModel] = useState(null);
   const [status, setStatus] = useState("Loading OSM buildings...");
@@ -54,16 +62,18 @@ export default function Scene3DPreview({ bounds, sceneName }) {
       return undefined;
     }
 
-    return renderThreeScene(host, model);
-  }, [model]);
+    return renderThreeScene(host, model, viewMode, antennas, solver);
+  }, [antennas, model, solver, viewMode]);
 
   return (
-    <div className="scene-3d-preview">
+    <div className={["scene-3d-preview", className].filter(Boolean).join(" ")}>
       <div ref={canvasHostRef} className="scene-3d-canvas" />
-      <div className="scene-3d-overlay">
-        <strong>{sceneName || "Selected scene"}</strong>
-        <span>{status}</span>
-      </div>
+      {showOverlay && (
+        <div className="scene-3d-overlay">
+          <strong>{sceneName || "Selected scene"}</strong>
+          <span>{status}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -230,7 +240,7 @@ function buildModel(bounds, buildings) {
   };
 }
 
-function renderThreeScene(host, model) {
+function renderThreeScene(host, model, viewMode, antennas, solver) {
   host.innerHTML = "";
 
   const width = host.clientWidth || 820;
@@ -238,8 +248,17 @@ function renderThreeScene(host, model) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0xedf2f7);
 
-  const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 4000);
-  camera.position.set(model.width * 0.55, Math.max(model.width, model.depth) * 0.72, model.depth * 0.9);
+  const maxSide = Math.max(model.width, model.depth);
+  const camera = viewMode === "top"
+    ? createTopCamera(width, height, maxSide)
+    : new THREE.PerspectiveCamera(42, width / height, 0.1, 4000);
+
+  if (viewMode === "top") {
+    camera.position.set(maxSide * 0.24, maxSide * 1.38, maxSide * 0.28);
+  } else {
+    camera.position.set(model.width * 0.55, maxSide * 0.72, model.depth * 0.9);
+  }
+
   camera.lookAt(0, 0, 0);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -251,9 +270,13 @@ function renderThreeScene(host, model) {
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(0, 0, 0);
   controls.enableDamping = true;
+  controls.enablePan = true;
+  controls.enableZoom = true;
+  controls.enableRotate = true;
   controls.minDistance = 80;
-  controls.maxDistance = 1200;
-  controls.maxPolarAngle = Math.PI / 2.15;
+  controls.maxDistance = 1600;
+  controls.minPolarAngle = 0.05;
+  controls.maxPolarAngle = Math.PI / 2.02;
 
   scene.add(new THREE.HemisphereLight(0xffffff, 0x94a3b8, 1.25));
   const sun = new THREE.DirectionalLight(0xffffff, 1.7);
@@ -285,10 +308,12 @@ function renderThreeScene(host, model) {
     }
   });
 
+  addAntennas(scene, model, antennas, solver);
+
   const observer = new ResizeObserver(() => {
     const nextWidth = host.clientWidth || width;
     const nextHeight = host.clientHeight || height;
-    camera.aspect = nextWidth / nextHeight;
+    updateCameraForSize(camera, viewMode, nextWidth, nextHeight, maxSide);
     camera.updateProjectionMatrix();
     renderer.setSize(nextWidth, nextHeight);
   });
@@ -317,6 +342,151 @@ function renderThreeScene(host, model) {
     });
     host.innerHTML = "";
   };
+}
+
+function addAntennas(scene, model, antennas, solver) {
+  if (!Array.isArray(antennas) || !solver) {
+    return;
+  }
+
+  const group = new THREE.Group();
+  const sizeX = solver.size?.[0] || 300;
+  const sizeY = solver.size?.[1] || 300;
+  const centerX = solver.center?.[0] || 0;
+  const centerY = solver.center?.[1] || 0;
+
+  antennas.forEach((antenna, index) => {
+    const x = ((antenna.position[0] - centerX) / sizeX) * model.width;
+    const z = -((antenna.position[1] - centerY) / sizeY) * model.depth;
+    const mastHeight = clamp((antenna.position[2] || 25) * model.scale, 18, 74);
+    const marker = createAntennaObject(antenna, index, mastHeight);
+    marker.position.set(x, 0, z);
+    group.add(marker);
+  });
+
+  scene.add(group);
+}
+
+function createAntennaObject(antenna, index, mastHeight) {
+  const group = new THREE.Group();
+  const mastMaterial = new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.55 });
+  const headMaterial = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.4 });
+  const darkMaterial = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.6 });
+
+  const mast = new THREE.Mesh(
+    new THREE.CylinderGeometry(2, 2, mastHeight, 12),
+    mastMaterial,
+  );
+  mast.position.y = mastHeight / 2;
+  mast.castShadow = true;
+  group.add(mast);
+
+  const head = new THREE.Mesh(
+    new THREE.SphereGeometry(6, 20, 20),
+    headMaterial,
+  );
+  head.position.y = mastHeight + 4;
+  head.castShadow = true;
+  group.add(head);
+
+  const azimuthRad = ((antenna.azimuth || 0) * Math.PI) / 180;
+  const dirX = Math.sin(azimuthRad);
+  const dirZ = -Math.cos(azimuthRad);
+  const arrowLength = 28;
+  const arrowGeometry = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0, mastHeight + 4, 0),
+    new THREE.Vector3(dirX * arrowLength, mastHeight + 4, dirZ * arrowLength),
+  ]);
+  const arrow = new THREE.Line(
+    arrowGeometry,
+    new THREE.LineBasicMaterial({ color: 0xb91c1c, linewidth: 2 }),
+  );
+  group.add(arrow);
+
+  const cone = new THREE.Mesh(
+    new THREE.ConeGeometry(4, 10, 16),
+    mastMaterial,
+  );
+  cone.position.set(dirX * arrowLength, mastHeight + 4, dirZ * arrowLength);
+  cone.lookAt(
+    dirX * (arrowLength + 1),
+    mastHeight + 4,
+    dirZ * (arrowLength + 1),
+  );
+  cone.rotateX(Math.PI / 2);
+  group.add(cone);
+
+  const label = new THREE.Sprite(createAntennaLabelMaterial(antenna.id || `A${index + 1}`));
+  label.position.y = mastHeight + 18;
+  label.scale.set(24, 24, 1);
+  group.add(label);
+
+  const base = new THREE.Mesh(
+    new THREE.CylinderGeometry(5, 5, 2, 16),
+    darkMaterial,
+  );
+  base.position.y = 1;
+  group.add(base);
+
+  return group;
+}
+
+function createAntennaLabelMaterial(labelText) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 128;
+  canvas.height = 128;
+  const context = canvas.getContext("2d");
+  const number = String(labelText).replace(/^A/i, "");
+
+  context.fillStyle = "#111827";
+  context.beginPath();
+  context.arc(64, 64, 46, 0, Math.PI * 2);
+  context.fill();
+  context.lineWidth = 8;
+  context.strokeStyle = "#ffffff";
+  context.stroke();
+  context.fillStyle = "#ffffff";
+  context.font = "700 44px Arial";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(number, 64, 66);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+
+  return new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    depthTest: false,
+  });
+}
+
+function createTopCamera(width, height, maxSide) {
+  const aspect = width / Math.max(height, 1);
+  const frustumHeight = maxSide * 1.12;
+
+  return new THREE.OrthographicCamera(
+    (-frustumHeight * aspect) / 2,
+    (frustumHeight * aspect) / 2,
+    frustumHeight / 2,
+    -frustumHeight / 2,
+    0.1,
+    4000,
+  );
+}
+
+function updateCameraForSize(camera, viewMode, width, height, maxSide) {
+  if (viewMode !== "top") {
+    camera.aspect = width / Math.max(height, 1);
+    return;
+  }
+
+  const aspect = width / Math.max(height, 1);
+  const frustumHeight = maxSide * 1.12;
+  camera.left = (-frustumHeight * aspect) / 2;
+  camera.right = (frustumHeight * aspect) / 2;
+  camera.top = frustumHeight / 2;
+  camera.bottom = -frustumHeight / 2;
 }
 
 function createBuildingMesh(building) {

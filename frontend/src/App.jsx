@@ -419,6 +419,7 @@ export default function App() {
       />
       {route === "/network" && (
         <NetworkCoveragePage
+          activeScene={activeScene}
           antennas={antennas}
           canvasRef={canvasRef}
           coverageImageUrl={coverageImageUrl}
@@ -518,6 +519,7 @@ function Navbar({ activeScene, onChooseScene, onNavigate, route }) {
 }
 
 function NetworkCoveragePage({
+  activeScene,
   antennas,
   canvasRef,
   coverageImageUrl,
@@ -537,6 +539,7 @@ function NetworkCoveragePage({
   return (
     <main className="app-shell">
       <MapPanel
+        activeScene={activeScene}
         antennas={antennas}
         coverageImageUrl={coverageImageUrl}
         canvasRef={canvasRef}

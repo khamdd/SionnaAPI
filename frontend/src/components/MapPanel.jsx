@@ -8,8 +8,10 @@ import {
   worldToPercentX,
   worldToPercentY,
 } from "../utils/map";
+import Scene3DPreview from "./Scene3DPreview";
 
 export default function MapPanel({
+  activeScene,
   antennas,
   coverageImageUrl,
   canvasRef,
@@ -24,6 +26,8 @@ export default function MapPanel({
   runStatus,
   summary,
 }) {
+  const showPreSimulationScene = Boolean(activeScene?.bounds && !coverageImageUrl);
+
   return (
     <section className="map-panel" aria-label="Coverage map">
       <div className="topbar">
@@ -44,16 +48,33 @@ export default function MapPanel({
       <div ref={mapStageRef} className="map-stage">
         {coverageImageUrl ? (
           <img id="coverage-image" src={coverageImageUrl} alt="Top-down coverage map" />
+        ) : activeScene?.bounds ? (
+          <Scene3DPreview
+            antennas={antennas}
+            bounds={activeScene.bounds}
+            className="network-scene-3d"
+            sceneName={activeScene.name}
+            showOverlay={false}
+            solver={latestSolver}
+            viewMode="top"
+          />
         ) : (
-          <img id="coverage-image" alt="Top-down coverage map" />
+          <div className="network-scene-empty">
+            <strong>{activeScene?.name || "Munich"}</strong>
+            <span>Run a simulation to render the Sionna coverage map.</span>
+          </div>
         )}
-        <canvas
-          id="heat-layer"
-          ref={canvasRef}
-          onMouseMove={onHover}
-          onMouseLeave={onHoverEnd}
-        />
-        <AntennaLayer antennas={antennas} solver={latestSolver} />
+        {!showPreSimulationScene && (
+          <>
+            <canvas
+              id="heat-layer"
+              ref={canvasRef}
+              onMouseMove={onHover}
+              onMouseLeave={onHoverEnd}
+            />
+            <AntennaLayer antennas={antennas} solver={latestSolver} />
+          </>
+        )}
         {hover && <HoverCard hover={hover} />}
       </div>
 
