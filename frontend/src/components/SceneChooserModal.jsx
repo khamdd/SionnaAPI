@@ -406,9 +406,6 @@ export default function SceneChooserModal({
           <h2>Choose Scene Area</h2>
           <p className={error ? "error-text" : ""}>{status}</p>
         </div>
-        <button className="ghost-button" type="button" onClick={cancelSelection}>
-          Close
-        </button>
       </div>
 
       {!previewScene && (
