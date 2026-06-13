@@ -34,6 +34,7 @@ function HistoryHeader({ item }) {
     <>
       <strong>{formatSimulationType(item.simulation_type)}</strong>
       <dl className="detail-grid">
+        <dt>Scene</dt><dd>{formatText(item.scene_name || item.scene_id)}</dd>
         <dt>Status</dt><dd>{formatText(item.status)}</dd>
         <dt>Created</dt><dd>{formatDateTime(item.created_at)}</dd>
         <dt>Pattern</dt><dd>{formatText(item.transmitter_pattern)}</dd>
