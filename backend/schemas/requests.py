@@ -22,6 +22,9 @@ class SolverConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_grid_size(self):
+        if self.size[0] <= 0 or self.size[1] <= 0:
+            raise ValueError("solver size values must be greater than 0")
+
         cells = (self.size[0] / self.cell_size) * (self.size[1] / self.cell_size)
         if cells > MAX_GRID_CELLS:
             raise ValueError("simulation grid is too large")

@@ -199,15 +199,15 @@ function SolverFields({ solver, onChange }) {
   return (
     <FormSection title="Solver">
       <NumberField label="Max depth" value={solver.max_depth} min={0} max={10} step={1} onChange={(value) => updateObject(onChange, solver, "max_depth", value)} />
-      <NumberField label="Samples per TX" value={solver.samples_per_tx} min={1} step={1000} onChange={(value) => updateObject(onChange, solver, "samples_per_tx", value)} />
-      <NumberField label="Cell size" unit="m" value={solver.cell_size} min={1} onChange={(value) => updateObject(onChange, solver, "cell_size", value)} />
+      <NumberField label="Samples per TX" value={solver.samples_per_tx} min={1} max={10000000} step={1} onChange={(value) => updateObject(onChange, solver, "samples_per_tx", value)} />
+      <NumberField label="Cell size" unit="m" value={solver.cell_size} min={0.1} max={50} step="any" onChange={(value) => updateObject(onChange, solver, "cell_size", value)} />
       <PositionField label="Center" value={solver.center} onChange={(value) => updateObject(onChange, solver, "center", value)} />
       <SizeField label="Size" value={solver.size} onChange={(value) => updateObject(onChange, solver, "size", value)} />
     </FormSection>
   );
 }
 
-function NumberField({ label, max, min, onChange, step = 0.5, unit = "", value }) {
+function NumberField({ label, max, min, onChange, step = "any", unit = "", value }) {
   return (
     <label className="form-field">
       <span>{label}</span>
@@ -218,7 +218,8 @@ function NumberField({ label, max, min, onChange, step = 0.5, unit = "", value }
           min={min}
           max={max}
           step={step}
-          onChange={(event) => onChange(Number(event.target.value))}
+          required
+          onChange={(event) => onChange(parseNumericInput(event.target.value))}
         />
         {unit && <small>{unit}</small>}
       </div>
@@ -237,8 +238,9 @@ function PositionField({ label, onChange, value }) {
             type="number"
             aria-label={`${label} ${axis}`}
             value={value[index]}
-            step="0.5"
-            onChange={(event) => onChange(replaceArrayValue(value, index, Number(event.target.value)))}
+            step="any"
+            required
+            onChange={(event) => onChange(replaceArrayValue(value, index, parseNumericInput(event.target.value)))}
           />
         ))}
       </div>
@@ -258,8 +260,9 @@ function SizeField({ label, onChange, value }) {
             aria-label={`${label} ${axis}`}
             value={value[index]}
             min="1"
-            step="5"
-            onChange={(event) => onChange(replaceArrayValue(value, index, Number(event.target.value)))}
+            step="any"
+            required
+            onChange={(event) => onChange(replaceArrayValue(value, index, parseNumericInput(event.target.value)))}
           />
         ))}
       </div>
@@ -365,4 +368,8 @@ function replaceArrayValue(values, index, value) {
   return values.map((item, itemIndex) => (
     itemIndex === index ? value : item
   ));
+}
+
+function parseNumericInput(value) {
+  return value === "" ? "" : Number(value);
 }
