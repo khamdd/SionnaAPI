@@ -480,9 +480,9 @@ export default function App() {
           summary={summary}
         />
       )}
-      {route === "/coverage" && <CoverageApiPage />}
-      {route === "/sinr" && <SinrApiPage />}
-      {route === "/throughput" && <ThroughputApiPage />}
+      {route === "/coverage" && <CoverageApiPage activeScene={activeScene} />}
+      {route === "/sinr" && <SinrApiPage activeScene={activeScene} />}
+      {route === "/throughput" && <ThroughputApiPage activeScene={activeScene} />}
       {route === "/history" && (
         <HistoryRoutePage
           comparisonType={comparisonType}

@@ -78,11 +78,29 @@ def calculate_coverage_map_service(req: CoverageRequest, base_url, scene):
             radio_map=radio_map,
         )
 
+        grid = build_single_transmitter_grid(
+            radio_map,
+            req,
+        )
+
         return {
             "status": "success",
             "coverage_map_image_url": (
                 f"{str(base_url).rstrip('/')}/static/{filename}"
             ),
+            "grid": grid,
+            "solver": {
+                "cell_size": req.solver.cell_size,
+                "center": req.solver.center,
+                "size": req.solver.size,
+            },
+            "antennas": [
+                {
+                    "id": "TX",
+                    "position": req.transmitter_position,
+                    "azimuth": 0,
+                },
+            ],
         }
 
     except Exception as e:
@@ -343,6 +361,68 @@ def build_network_grid(
                         req.bandwidth_mhz,
                         req.mimo_layers,
                     ),
+                }
+            )
+
+    return {
+        "rows": rows,
+        "cols": cols,
+        "cells": cells,
+    }
+
+
+def build_single_transmitter_grid(
+    radio_map,
+    req: CoverageRequest,
+):
+    sinr = np.asarray(
+        radio_map.sinr.numpy(),
+        dtype=float,
+    )
+    rss = np.asarray(
+        radio_map.rss.numpy(),
+        dtype=float,
+    )
+
+    if sinr.ndim != 3 or rss.ndim != 3:
+        raise ValueError(
+            "Expected radio map SINR/RSS matrices with shape (tx, rows, cols)."
+        )
+
+    rows = sinr.shape[1]
+    cols = sinr.shape[2]
+    x_min = req.solver.center[0] - req.solver.size[0] / 2.0
+    y_min = req.solver.center[1] - req.solver.size[1] / 2.0
+    cells = []
+
+    for row in range(rows):
+        for col in range(cols):
+            linear_sinr = float(sinr[0, row, col])
+            signal_watts = float(rss[0, row, col])
+
+            cells.append(
+                {
+                    "row": row,
+                    "col": col,
+                    "x": round(
+                        x_min + (col + 0.5) * req.solver.cell_size,
+                        2,
+                    ),
+                    "y": round(
+                        y_min + (row + 0.5) * req.solver.cell_size,
+                        2,
+                    ),
+                    "serving_antenna": "TX",
+                    "sinr_db": round(
+                        linear_to_db(linear_sinr),
+                        2,
+                    ),
+                    "signal_dbm": round(
+                        watts_to_dbm(signal_watts),
+                        2,
+                    ),
+                    "neighbors": [],
+                    "throughput_mbps": None,
                 }
             )
 

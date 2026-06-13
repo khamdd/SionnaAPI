@@ -13,13 +13,14 @@ import {
   formatPositionValue,
   formatText,
 } from "../utils/format";
+import Scene3DPreview from "./Scene3DPreview";
 
 const DEFAULT_CAMERA = {
   position: [-1.5, -137, 115],
   look_at: [0, 0, 10],
 };
 
-export function CoverageApiPage() {
+export function CoverageApiPage({ activeScene }) {
   const [form, setForm] = useState(() => ({
     tilt: 8,
     transmitter_position: [-45, -40, 30],
@@ -42,7 +43,7 @@ export function CoverageApiPage() {
       title="Coverage API"
       description="Render a single-transmitter coverage map for a selected transmitter position, tilt, and power."
       resultState={resultState}
-      renderResult={(result) => <CoverageResult result={result} />}
+      renderResult={(result) => <CoverageResult activeScene={activeScene} result={result} />}
     >
       <form className="api-form" onSubmit={submit}>
         <FormSection title="Transmitter">
@@ -59,7 +60,7 @@ export function CoverageApiPage() {
   );
 }
 
-export function SinrApiPage() {
+export function SinrApiPage({ activeScene }) {
   const [form, setForm] = useState(() => ({
     tilt: 8,
     transmitter_position: [0, 0, 30],
@@ -84,7 +85,7 @@ export function SinrApiPage() {
       title="SINR API"
       description="Evaluate signal quality at one receiver point with one serving transmitter and one interferer."
       resultState={resultState}
-      renderResult={(result) => <SinrResult result={result} />}
+      renderResult={(result) => <SinrResult activeScene={activeScene} result={result} />}
     >
       <form className="api-form" onSubmit={submit}>
         <FormSection title="Serving transmitter">
@@ -106,7 +107,7 @@ export function SinrApiPage() {
   );
 }
 
-export function ThroughputApiPage() {
+export function ThroughputApiPage({ activeScene }) {
   const [form, setForm] = useState(() => ({
     base_tilt: 6,
     target_tilt: 12,
@@ -134,7 +135,7 @@ export function ThroughputApiPage() {
       title="Throughput API"
       description="Compare estimated receiver throughput between two transmitter tilt settings."
       resultState={resultState}
-      renderResult={(result) => <ThroughputResult result={result} />}
+      renderResult={(result) => <ThroughputResult activeScene={activeScene} result={result} />}
     >
       <form className="api-form" onSubmit={submit}>
         <FormSection title="Tilt comparison">
@@ -270,46 +271,78 @@ function SizeField({ label, onChange, value }) {
   );
 }
 
-function CoverageResult({ result }) {
+function CoverageResult({ activeScene, result }) {
   return (
     <div className="result-summary">
+      <ApiResultScene
+        activeScene={activeScene}
+        fallbackImageUrl={result.coverage_map_image_url}
+        result={result}
+      />
       <dl className="detail-grid">
         <dt>Status</dt><dd>{formatText(result.status)}</dd>
+        <dt>Grid</dt><dd>{result.grid ? `${result.grid.rows} x ${result.grid.cols}` : "--"}</dd>
       </dl>
-      {result.coverage_map_image_url && (
-        <img src={result.coverage_map_image_url} alt="Coverage API result" />
-      )}
     </div>
   );
 }
 
-function SinrResult({ result }) {
+function SinrResult({ activeScene, result }) {
   return (
-    <dl className="detail-grid">
-      <dt>Status</dt><dd>{formatText(result.status)}</dd>
-      <dt>SINR</dt><dd>{formatMaybeNumber(result.sinr_db)} dB</dd>
-      <dt>Signal power</dt><dd>{formatMaybeNumber(result.signal_power)} dBm</dd>
-      <dt>Noise power</dt><dd>{formatMaybeNumber(result.noise_power)} dBm</dd>
-      <dt>Receiver</dt><dd>{formatPositionValue(result.receiver_position)}</dd>
-    </dl>
+    <div className="result-summary">
+      <ApiResultScene activeScene={activeScene} result={result} />
+      <dl className="detail-grid">
+        <dt>Status</dt><dd>{formatText(result.status)}</dd>
+        <dt>SINR</dt><dd>{formatMaybeNumber(result.sinr_db)} dB</dd>
+        <dt>Signal power</dt><dd>{formatMaybeNumber(result.signal_power)} dBm</dd>
+        <dt>Noise power</dt><dd>{formatMaybeNumber(result.noise_power)} dBm</dd>
+        <dt>Receiver</dt><dd>{formatPositionValue(result.receiver_position)}</dd>
+      </dl>
+    </div>
   );
 }
 
-function ThroughputResult({ result }) {
+function ThroughputResult({ activeScene, result }) {
   const comparison = result.comparison || {};
 
   return (
-    <dl className="detail-grid">
-      <dt>Status</dt><dd>{formatText(result.status)}</dd>
-      <dt>Base tilt</dt><dd>{formatMaybeNumber(comparison.base_tilt_deg)} deg</dd>
-      <dt>Target tilt</dt><dd>{formatMaybeNumber(comparison.target_tilt_deg)} deg</dd>
-      <dt>Base throughput</dt><dd>{formatMaybeNumber(comparison.base_throughput_mbps)} Mbps</dd>
-      <dt>Target throughput</dt><dd>{formatMaybeNumber(comparison.target_throughput_mbps)} Mbps</dd>
-      <dt>Delta</dt><dd>{formatMaybeNumber(comparison.delta_mbps)} Mbps</dd>
-      <dt>Change</dt><dd>{formatMaybeNumber(comparison.percentage_change)}%</dd>
-      <dt>Direction</dt><dd>{formatText(comparison.direction)}</dd>
-    </dl>
+    <div className="result-summary">
+      <ApiResultScene activeScene={activeScene} result={result} />
+      <dl className="detail-grid">
+        <dt>Status</dt><dd>{formatText(result.status)}</dd>
+        <dt>Base tilt</dt><dd>{formatMaybeNumber(comparison.base_tilt_deg)} deg</dd>
+        <dt>Target tilt</dt><dd>{formatMaybeNumber(comparison.target_tilt_deg)} deg</dd>
+        <dt>Base throughput</dt><dd>{formatMaybeNumber(comparison.base_throughput_mbps)} Mbps</dd>
+        <dt>Target throughput</dt><dd>{formatMaybeNumber(comparison.target_throughput_mbps)} Mbps</dd>
+        <dt>Delta</dt><dd>{formatMaybeNumber(comparison.delta_mbps)} Mbps</dd>
+        <dt>Change</dt><dd>{formatMaybeNumber(comparison.percentage_change)}%</dd>
+        <dt>Direction</dt><dd>{formatText(comparison.direction)}</dd>
+      </dl>
+    </div>
   );
+}
+
+function ApiResultScene({ activeScene, fallbackImageUrl = "", result }) {
+  if (activeScene?.bounds) {
+    return (
+      <Scene3DPreview
+        antennas={result.antennas || []}
+        bounds={activeScene.bounds}
+        className="api-result-scene-3d"
+        coverageGrid={result.grid}
+        sceneName={activeScene.name}
+        showOverlay={false}
+        solver={result.solver}
+        viewMode="top"
+      />
+    );
+  }
+
+  if (fallbackImageUrl) {
+    return <img src={fallbackImageUrl} alt="API result preview" />;
+  }
+
+  return <p className="history-status">No scene preview is available for this result.</p>;
 }
 
 function useApiResult() {

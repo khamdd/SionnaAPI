@@ -1251,6 +1251,17 @@ h2 {
   border-radius: 8px;
 }
 
+.api-result-scene-3d.scene-3d-preview {
+  width: 100%;
+  height: 340px;
+  min-height: 340px;
+  margin-bottom: 12px;
+}
+
+.api-result-scene-3d .scene-3d-canvas {
+  height: 100%;
+}
+
 .scene-preview-map {
   width: 100%;
   height: 420px;

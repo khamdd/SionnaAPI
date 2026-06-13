@@ -82,6 +82,25 @@ def calculate_sinr_service(req: SINRRequest, scene):
                 watts_to_dbm(interference_plus_noise),
                 2,
             ),
+            "receiver_position": req.receiver_position,
+            "solver": solver_metadata(req.solver),
+            "antennas": [
+                {
+                    "id": "TX",
+                    "position": req.transmitter_position,
+                    "azimuth": 0,
+                },
+                {
+                    "id": "INT",
+                    "position": req.interferer_position,
+                    "azimuth": 0,
+                },
+                {
+                    "id": "RX",
+                    "position": req.receiver_position,
+                    "azimuth": 0,
+                },
+            ],
         }
 
     except ClientInputError as e:
@@ -103,3 +122,14 @@ def calculate_sinr_service(req: SINRRequest, scene):
 
         remove_entity(scene, "tx0")
         remove_entity(scene, "tx_interferer")
+
+
+def solver_metadata(solver):
+    if not all(hasattr(solver, attr) for attr in ("cell_size", "center", "size")):
+        return None
+
+    return {
+        "cell_size": solver.cell_size,
+        "center": solver.center,
+        "size": solver.size,
+    }
