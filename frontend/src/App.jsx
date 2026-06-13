@@ -474,11 +474,16 @@ export default function App() {
     });
   }
 
+  const modalProgressLabel = modalContent
+    ? historyProgressLabel
+      || (historyPreviewLoadCount > 0 ? "Loading history preview..." : "")
+    : "";
+
   const busyLabel = isRunning
     ? "Running simulation..."
     : apiProgressLabel
-      || historyProgressLabel
-      || (historyPreviewLoadCount > 0 ? "Loading history preview..." : "")
+      || (!modalContent ? historyProgressLabel : "")
+      || (!modalContent && historyPreviewLoadCount > 0 ? "Loading history preview..." : "")
       || (isSceneLoading ? "Loading scene..." : "")
       || (isSceneListLoading ? "Loading scenes..." : "");
 
@@ -562,7 +567,10 @@ export default function App() {
       )}
 
       {modalContent && (
-        <HistoryModal onClose={closeModal}>
+        <HistoryModal
+          onClose={closeModal}
+          progressLabel={modalProgressLabel}
+        >
           {modalContent}
         </HistoryModal>
       )}

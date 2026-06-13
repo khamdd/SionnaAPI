@@ -1042,6 +1042,51 @@ h2 {
   padding-right: 34px;
 }
 
+.modal-progress {
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1fr);
+  gap: 12px;
+  align-items: center;
+  height: 0;
+  border-bottom: 0 solid transparent;
+  opacity: 0;
+  overflow: hidden;
+  padding: 0 42px 0 0;
+  transition: height 160ms ease, opacity 160ms ease, border-color 160ms ease, margin 160ms ease;
+}
+
+.modal-progress.active {
+  height: 36px;
+  border-bottom-width: 1px;
+  border-bottom-color: var(--line);
+  margin: -4px 0 14px;
+  opacity: 1;
+}
+
+.modal-progress span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.modal-progress div {
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  background: #dbeafe;
+  overflow: hidden;
+}
+
+.modal-progress i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 38%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0f766e, #2563eb);
+  animation: progress-slide 1.05s ease-in-out infinite;
+}
+
 .scene-modal {
   width: min(820px, calc(100vw - 80px));
 }

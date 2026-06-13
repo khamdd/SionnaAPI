@@ -1,6 +1,6 @@
 import { CloseIcon } from "./Icons";
 
-export default function HistoryModal({ children, onClose }) {
+export default function HistoryModal({ children, onClose, progressLabel = "" }) {
   return (
     <section className="history-detail" onClick={onClose}>
       <div
@@ -18,11 +18,27 @@ export default function HistoryModal({ children, onClose }) {
         >
           <CloseIcon />
         </button>
+        <ModalProgress active={Boolean(progressLabel)} label={progressLabel} />
         <div className="history-modal-body">
           {children}
         </div>
       </div>
     </section>
+  );
+}
+
+function ModalProgress({ active, label }) {
+  return (
+    <div
+      className={`modal-progress ${active ? "active" : ""}`}
+      aria-hidden={!active}
+      role="status"
+    >
+      <span>{label}</span>
+      <div>
+        <i />
+      </div>
+    </div>
   );
 }
 
