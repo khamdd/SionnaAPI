@@ -21,7 +21,7 @@ const DEFAULT_CAMERA = {
 };
 const EMPTY_ARRAY = Object.freeze([]);
 
-export function CoverageApiPage({ activeScene }) {
+export function CoverageApiPage({ activeScene, onProgressChange }) {
   const [form, setForm] = useState(() => ({
     tilt: 8,
     transmitter_position: [-45, -40, 30],
@@ -29,7 +29,10 @@ export function CoverageApiPage({ activeScene }) {
     solver: DEFAULT_SOLVER,
     camera: DEFAULT_CAMERA,
   }));
-  const [resultState, setResultState] = useApiResult();
+  const [resultState, setResultState] = useApiResult(
+    onProgressChange,
+    "Running Coverage API...",
+  );
 
   async function submit(event) {
     event.preventDefault();
@@ -65,7 +68,7 @@ export function CoverageApiPage({ activeScene }) {
   );
 }
 
-export function SinrApiPage({ activeScene }) {
+export function SinrApiPage({ activeScene, onProgressChange }) {
   const [form, setForm] = useState(() => ({
     tilt: 8,
     transmitter_position: [0, 0, 30],
@@ -75,7 +78,10 @@ export function SinrApiPage({ activeScene }) {
     tx_power: 30,
     solver: DEFAULT_SOLVER,
   }));
-  const [resultState, setResultState] = useApiResult();
+  const [resultState, setResultState] = useApiResult(
+    onProgressChange,
+    "Running SINR API...",
+  );
 
   async function submit(event) {
     event.preventDefault();
@@ -116,7 +122,7 @@ export function SinrApiPage({ activeScene }) {
   );
 }
 
-export function ThroughputApiPage({ activeScene }) {
+export function ThroughputApiPage({ activeScene, onProgressChange }) {
   const [form, setForm] = useState(() => ({
     base_tilt: 6,
     target_tilt: 12,
@@ -129,7 +135,10 @@ export function ThroughputApiPage({ activeScene }) {
     mimo_layers: 4,
     solver: DEFAULT_SOLVER,
   }));
-  const [resultState, setResultState] = useApiResult();
+  const [resultState, setResultState] = useApiResult(
+    onProgressChange,
+    "Running Throughput API...",
+  );
 
   async function submit(event) {
     event.preventDefault();
@@ -588,7 +597,7 @@ function ApiCoverageCellDialog({ cell, onClose }) {
   );
 }
 
-function useApiResult() {
+function useApiResult(onProgressChange, progressLabel) {
   const [state, setState] = useState({
     error: "",
     loading: false,
@@ -596,6 +605,7 @@ function useApiResult() {
   });
 
   async function run(requestFactory) {
+    onProgressChange?.(true, progressLabel);
     setState({
       error: "",
       loading: true,
@@ -620,6 +630,8 @@ function useApiResult() {
         loading: false,
         result: null,
       });
+    } finally {
+      onProgressChange?.(false, progressLabel);
     }
   }
 

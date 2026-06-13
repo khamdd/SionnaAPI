@@ -9,10 +9,20 @@ import {
 } from "../utils/format";
 import Scene3DPreview from "./Scene3DPreview";
 
-export default function HistoryDetail({ item }) {
+export default function HistoryDetail({ item, onPreviewLoadingChange }) {
   const renderer = {
-    coverage_map: <CoverageMapHistory item={item} />,
-    network_coverage: <NetworkCoverageHistory item={item} />,
+    coverage_map: (
+      <CoverageMapHistory
+        item={item}
+        onPreviewLoadingChange={onPreviewLoadingChange}
+      />
+    ),
+    network_coverage: (
+      <NetworkCoverageHistory
+        item={item}
+        onPreviewLoadingChange={onPreviewLoadingChange}
+      />
+    ),
     sinr: <SinrHistory item={item} />,
     throughput_comparison: <ThroughputHistory item={item} />,
   }[item.simulation_type];
@@ -43,7 +53,7 @@ function HistoryHeader({ item }) {
   );
 }
 
-function CoverageMapHistory({ item }) {
+function CoverageMapHistory({ item, onPreviewLoadingChange }) {
   const request = item.request_json || {};
   const response = item.response_json || {};
   const imageUrl = item.coverage_map_image_url || firstArtifactUrl(item.artifacts);
@@ -68,12 +78,13 @@ function CoverageMapHistory({ item }) {
         fallbackImageUrl={imageUrl}
         item={item}
         mode="coverage_map"
+        onPreviewLoadingChange={onPreviewLoadingChange}
       />
     </>
   );
 }
 
-function NetworkCoverageHistory({ item }) {
+function NetworkCoverageHistory({ item, onPreviewLoadingChange }) {
   const response = item.response_json || {};
   const grid = response.grid || {};
   const imageUrl = item.coverage_map_image_url || firstArtifactUrl(item.artifacts);
@@ -93,6 +104,7 @@ function NetworkCoverageHistory({ item }) {
         fallbackImageUrl={imageUrl}
         item={item}
         mode="network_coverage"
+        onPreviewLoadingChange={onPreviewLoadingChange}
       />
       <h3>Antenna snapshot</h3>
       {(item.antennas || []).length ? (
@@ -112,7 +124,12 @@ function NetworkCoverageHistory({ item }) {
   );
 }
 
-function HistoryCoveragePreview({ fallbackImageUrl, item, mode }) {
+function HistoryCoveragePreview({
+  fallbackImageUrl,
+  item,
+  mode,
+  onPreviewLoadingChange,
+}) {
   const grid = historyPreviewGrid(item);
 
   if (item.scene_bounds) {
@@ -123,6 +140,7 @@ function HistoryCoveragePreview({ fallbackImageUrl, item, mode }) {
         className="history-scene-3d"
         coverageGrid={grid}
         coverageImageUrl={grid ? "" : fallbackImageUrl}
+        onLoadingChange={onPreviewLoadingChange}
         sceneName={item.scene_name}
         showOverlay={false}
         solver={historyPreviewSolver(item)}

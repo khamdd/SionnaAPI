@@ -71,6 +71,9 @@ export default function App() {
   const [isRunning, setIsRunning] = useState(false);
   const [historyStatus, setHistoryStatus] = useState("No history loaded.");
   const [historyError, setHistoryError] = useState(false);
+  const [apiProgressLabel, setApiProgressLabel] = useState("");
+  const [historyProgressLabel, setHistoryProgressLabel] = useState("");
+  const [historyPreviewLoadCount, setHistoryPreviewLoadCount] = useState(0);
   const [latestHistory, setLatestHistory] = useState([]);
   const [selectedHistoryId, setSelectedHistoryId] = useState(null);
   const [comparisonType, setComparisonType] = useState(null);
@@ -91,7 +94,16 @@ export default function App() {
   const mapStageRef = useRef(null);
   const summary = useMemo(() => summarizeGrid(latestGrid), [latestGrid]);
 
+  const handleApiProgressChange = useCallback((active, label) => {
+    setApiProgressLabel(active ? label : "");
+  }, []);
+
+  const handleHistoryPreviewLoadingChange = useCallback((active) => {
+    setHistoryPreviewLoadCount((current) => Math.max(0, current + (active ? 1 : -1)));
+  }, []);
+
   const loadHistory = useCallback(async () => {
+    setHistoryProgressLabel("Loading history...");
     setHistoryStatus("Loading history...");
     setHistoryError(false);
 
@@ -122,6 +134,8 @@ export default function App() {
     } catch (error) {
       setHistoryStatus(`History failed: ${error.message}`);
       setHistoryError(true);
+    } finally {
+      setHistoryProgressLabel("");
     }
   }, [comparisonSceneId, comparisonType]);
 
@@ -331,6 +345,7 @@ export default function App() {
       return;
     }
 
+    setHistoryProgressLabel("Loading comparison...");
     setHistoryStatus("Loading comparison...");
     setHistoryError(false);
 
@@ -343,7 +358,11 @@ export default function App() {
       setComparisonDetails(details);
       setModalContent(
         <HistoryModalBody title={`Comparison: ${formatSimulationType(comparisonType)}`}>
-          <ComparisonResult type={comparisonType} items={items} />
+          <ComparisonResult
+            items={items}
+            onPreviewLoadingChange={handleHistoryPreviewLoadingChange}
+            type={comparisonType}
+          />
         </HistoryModalBody>,
       );
       cancelComparison();
@@ -352,11 +371,14 @@ export default function App() {
     } catch (error) {
       setHistoryStatus(`Comparison failed: ${error.message}`);
       setHistoryError(true);
+    } finally {
+      setHistoryProgressLabel("");
     }
   }
 
   async function openHistoryDetail(runId) {
     setSelectedHistoryId(runId);
+    setHistoryProgressLabel("Loading history detail...");
     setModalContent(<p className="history-status">Loading detail...</p>);
 
     try {
@@ -376,9 +398,16 @@ export default function App() {
         return;
       }
 
-      setModalContent(<HistoryDetail item={result.item} />);
+      setModalContent(
+        <HistoryDetail
+          item={result.item}
+          onPreviewLoadingChange={handleHistoryPreviewLoadingChange}
+        />,
+      );
     } catch (error) {
       setModalContent(<p className="history-status error-text">Detail failed: {error.message}</p>);
+    } finally {
+      setHistoryProgressLabel("");
     }
   }
 
@@ -391,6 +420,7 @@ export default function App() {
       return;
     }
 
+    setHistoryProgressLabel("Deleting history...");
     setHistoryStatus("Deleting history...");
     setHistoryError(false);
 
@@ -408,12 +438,15 @@ export default function App() {
     } catch (error) {
       setHistoryStatus(`Delete failed: ${error.message}`);
       setHistoryError(true);
+    } finally {
+      setHistoryProgressLabel("");
     }
   }
 
   function closeModal() {
     setModalContent(null);
     setSelectedHistoryId(null);
+    setHistoryPreviewLoadCount(0);
   }
 
   function handleHover(event) {
@@ -443,11 +476,11 @@ export default function App() {
 
   const busyLabel = isRunning
     ? "Running simulation..."
-    : isSceneLoading
-      ? "Loading scene..."
-      : isSceneListLoading
-        ? "Loading scenes..."
-        : "";
+    : apiProgressLabel
+      || historyProgressLabel
+      || (historyPreviewLoadCount > 0 ? "Loading history preview..." : "")
+      || (isSceneLoading ? "Loading scene..." : "")
+      || (isSceneListLoading ? "Loading scenes..." : "");
 
   return (
     <div className="app-frame">
@@ -480,9 +513,24 @@ export default function App() {
           summary={summary}
         />
       )}
-      {route === "/coverage" && <CoverageApiPage activeScene={activeScene} />}
-      {route === "/sinr" && <SinrApiPage activeScene={activeScene} />}
-      {route === "/throughput" && <ThroughputApiPage activeScene={activeScene} />}
+      {route === "/coverage" && (
+        <CoverageApiPage
+          activeScene={activeScene}
+          onProgressChange={handleApiProgressChange}
+        />
+      )}
+      {route === "/sinr" && (
+        <SinrApiPage
+          activeScene={activeScene}
+          onProgressChange={handleApiProgressChange}
+        />
+      )}
+      {route === "/throughput" && (
+        <ThroughputApiPage
+          activeScene={activeScene}
+          onProgressChange={handleApiProgressChange}
+        />
+      )}
       {route === "/history" && (
         <HistoryRoutePage
           comparisonType={comparisonType}

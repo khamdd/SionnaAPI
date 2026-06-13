@@ -7,13 +7,23 @@ import {
 } from "../utils/format";
 import Scene3DPreview from "./Scene3DPreview";
 
-export default function ComparisonResult({ type, items }) {
+export default function ComparisonResult({ type, items, onPreviewLoadingChange }) {
   if (type === "coverage_map") {
-    return <CoverageMapComparison items={items} />;
+    return (
+      <CoverageMapComparison
+        items={items}
+        onPreviewLoadingChange={onPreviewLoadingChange}
+      />
+    );
   }
 
   if (type === "network_coverage") {
-    return <NetworkCoverageComparison items={items} />;
+    return (
+      <NetworkCoverageComparison
+        items={items}
+        onPreviewLoadingChange={onPreviewLoadingChange}
+      />
+    );
   }
 
   if (type === "sinr") {
@@ -27,7 +37,7 @@ export default function ComparisonResult({ type, items }) {
   return <p className="history-status">No comparison view is available for this simulation type.</p>;
 }
 
-function CoverageMapComparison({ items }) {
+function CoverageMapComparison({ items, onPreviewLoadingChange }) {
   return (
     <div className="comparison-grid">
       {items.map((item, index) => {
@@ -50,6 +60,7 @@ function CoverageMapComparison({ items }) {
               fallbackImageUrl={imageUrl}
               item={item}
               mode="coverage_map"
+              onPreviewLoadingChange={onPreviewLoadingChange}
             />
           </article>
         );
@@ -58,7 +69,7 @@ function CoverageMapComparison({ items }) {
   );
 }
 
-function NetworkCoverageComparison({ items }) {
+function NetworkCoverageComparison({ items, onPreviewLoadingChange }) {
   return (
     <div className="comparison-grid">
       {items.map((item, index) => {
@@ -86,6 +97,7 @@ function NetworkCoverageComparison({ items }) {
               fallbackImageUrl={imageUrl}
               item={item}
               mode="network_coverage"
+              onPreviewLoadingChange={onPreviewLoadingChange}
             />
           </article>
         );
@@ -187,7 +199,12 @@ function ComparisonTable({ headers, rows }) {
   );
 }
 
-function ComparisonCoveragePreview({ fallbackImageUrl, item, mode }) {
+function ComparisonCoveragePreview({
+  fallbackImageUrl,
+  item,
+  mode,
+  onPreviewLoadingChange,
+}) {
   const grid = comparisonPreviewGrid(item);
 
   if (item.scene_bounds) {
@@ -198,6 +215,7 @@ function ComparisonCoveragePreview({ fallbackImageUrl, item, mode }) {
         className="comparison-scene-3d"
         coverageGrid={grid}
         coverageImageUrl={grid ? "" : fallbackImageUrl}
+        onLoadingChange={onPreviewLoadingChange}
         sceneName={item.scene_name}
         showOverlay={false}
         solver={comparisonPreviewSolver(item)}

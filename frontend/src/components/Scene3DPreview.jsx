@@ -52,10 +52,20 @@ export default function Scene3DPreview({
 
     const controller = new AbortController();
     let isActive = true;
+    let loadingReported = false;
+
+    function reportLoading(nextValue) {
+      if (loadingReported === nextValue) {
+        return;
+      }
+
+      loadingReported = nextValue;
+      onLoadingChange?.(nextValue);
+    }
 
     async function loadBuildings() {
       setStatus("Loading OSM buildings...");
-      onLoadingChange?.(true);
+      reportLoading(true);
 
       try {
         const buildings = await fetchBuildings(bounds, controller.signal);
@@ -67,14 +77,14 @@ export default function Scene3DPreview({
         if (buildings.length) {
           setModel(buildModel(bounds, buildings));
           setStatus(buildHeightStatus(buildings));
-          onLoadingChange?.(false);
+          reportLoading(false);
           return;
         }
 
         const fallback = generateFallbackBuildings(bounds);
         setModel(buildModel(bounds, fallback));
         setStatus("No OSM building footprints found. Showing generated blocks for preview only.");
-        onLoadingChange?.(false);
+        reportLoading(false);
       } catch (error) {
         if (error.name === "AbortError") {
           return;
@@ -87,7 +97,7 @@ export default function Scene3DPreview({
         const fallback = generateFallbackBuildings(bounds);
         setModel(buildModel(bounds, fallback));
         setStatus("OSM building lookup failed. Showing generated blocks for preview only.");
-        onLoadingChange?.(false);
+        reportLoading(false);
       }
     }
 
@@ -96,7 +106,7 @@ export default function Scene3DPreview({
     return () => {
       isActive = false;
       controller.abort();
-      onLoadingChange?.(false);
+      reportLoading(false);
     };
   }, [bounds, onLoadingChange]);
 
