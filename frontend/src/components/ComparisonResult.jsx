@@ -188,13 +188,16 @@ function ComparisonTable({ headers, rows }) {
 }
 
 function ComparisonCoveragePreview({ fallbackImageUrl, item, mode }) {
+  const grid = comparisonPreviewGrid(item);
+
   if (item.scene_bounds) {
     return (
       <Scene3DPreview
         antennas={comparisonPreviewAntennas(item, mode)}
         bounds={item.scene_bounds}
         className="comparison-scene-3d"
-        coverageGrid={comparisonPreviewGrid(item)}
+        coverageGrid={grid}
+        coverageImageUrl={grid ? "" : fallbackImageUrl}
         sceneName={item.scene_name}
         showOverlay={false}
         solver={comparisonPreviewSolver(item)}

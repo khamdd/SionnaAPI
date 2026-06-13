@@ -112,13 +112,16 @@ function NetworkCoverageHistory({ item }) {
 }
 
 function HistoryCoveragePreview({ fallbackImageUrl, item, mode }) {
+  const grid = historyPreviewGrid(item);
+
   if (item.scene_bounds) {
     return (
       <Scene3DPreview
         antennas={historyPreviewAntennas(item, mode)}
         bounds={item.scene_bounds}
         className="history-scene-3d"
-        coverageGrid={historyPreviewGrid(item)}
+        coverageGrid={grid}
+        coverageImageUrl={grid ? "" : fallbackImageUrl}
         sceneName={item.scene_name}
         showOverlay={false}
         solver={historyPreviewSolver(item)}

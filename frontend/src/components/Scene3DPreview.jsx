@@ -23,6 +23,7 @@ export default function Scene3DPreview({
   bounds,
   className = "",
   coverageGrid = null,
+  coverageImageUrl = "",
   onCoverageCellSelect = null,
   onLoadingChange = null,
   sceneName,
@@ -111,10 +112,11 @@ export default function Scene3DPreview({
       antennas,
       solver,
       coverageGrid,
+      coverageImageUrl,
       selectedCoverageCellRef,
       onCoverageCellSelect,
     );
-  }, [antennas, coverageGrid, model, onCoverageCellSelect, solver, viewMode]);
+  }, [antennas, coverageGrid, coverageImageUrl, model, onCoverageCellSelect, solver, viewMode]);
 
   return (
     <div className={["scene-3d-preview", className].filter(Boolean).join(" ")}>
@@ -298,6 +300,7 @@ function renderThreeScene(
   antennas,
   solver,
   coverageGrid,
+  coverageImageUrl,
   selectedCoverageCellRef,
   onCoverageCellSelect,
 ) {
@@ -360,7 +363,10 @@ function renderThreeScene(
   scene.add(edge);
 
   addRoadLines(scene, model);
-  const coverageMesh = addCoverageGrid(scene, model, coverageGrid, solver);
+  const coverageMesh = (
+    addCoverageGrid(scene, model, coverageGrid, solver)
+    || addCoverageImage(scene, model, coverageImageUrl)
+  );
   const selectedCellGroup = new THREE.Group();
   const hoveredCellGroup = new THREE.Group();
   scene.add(selectedCellGroup);
@@ -496,7 +502,11 @@ function renderThreeScene(
         object.geometry.dispose();
       }
       if (object.material) {
-        object.material.dispose();
+        if (Array.isArray(object.material)) {
+          object.material.forEach(disposeMaterial);
+        } else {
+          disposeMaterial(object.material);
+        }
       }
     });
     host.innerHTML = "";
@@ -549,6 +559,47 @@ function addCoverageGrid(scene, model, grid, solver) {
   mesh.position.y = 1.8;
   mesh.renderOrder = 5;
   scene.add(mesh);
+  return mesh;
+}
+
+function addCoverageImage(scene, model, imageUrl) {
+  if (!imageUrl) {
+    return null;
+  }
+
+  const material = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.72,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(model.width, model.depth),
+    material,
+  );
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.y = 1.8;
+  mesh.renderOrder = 5;
+  scene.add(mesh);
+
+  const loader = new THREE.TextureLoader();
+  loader.setCrossOrigin("anonymous");
+  loader.load(
+    imageUrl,
+    (texture) => {
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.needsUpdate = true;
+      material.map = texture;
+      material.needsUpdate = true;
+    },
+    undefined,
+    () => {
+      material.color.set(0x60a5fa);
+      material.opacity = 0.22;
+    },
+  );
+
   return mesh;
 }
 
@@ -611,10 +662,18 @@ function disposeThreeObject(object) {
   }
 
   if (Array.isArray(object.material)) {
-    object.material.forEach((material) => material.dispose());
+    object.material.forEach(disposeMaterial);
   } else if (object.material) {
-    object.material.dispose();
+    disposeMaterial(object.material);
   }
+}
+
+function disposeMaterial(material) {
+  if (material.map) {
+    material.map.dispose();
+  }
+
+  material.dispose();
 }
 
 function createCoverageTexture(grid) {

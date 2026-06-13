@@ -1251,6 +1251,15 @@ h2 {
   border-radius: 8px;
 }
 
+.result-summary h3 {
+  margin-top: 14px;
+  font-size: 13px;
+}
+
+.api-result-scene-wrap {
+  position: relative;
+}
+
 .api-result-scene-3d.scene-3d-preview {
   width: 100%;
   height: 340px;

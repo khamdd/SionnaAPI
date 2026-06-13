@@ -32,9 +32,13 @@ export function CoverageApiPage({ activeScene }) {
 
   async function submit(event) {
     event.preventDefault();
-    await setResultState(() => runCoverageMap({
+    const payload = {
       ...form,
       transmitter_pattern: TRANSMITTER_PATTERN,
+    };
+    await setResultState(async () => ({
+      ...(await runCoverageMap(payload)),
+      request: payload,
     }));
   }
 
@@ -74,9 +78,13 @@ export function SinrApiPage({ activeScene }) {
 
   async function submit(event) {
     event.preventDefault();
-    await setResultState(() => runSinr({
+    const payload = {
       ...form,
       transmitter_pattern: TRANSMITTER_PATTERN,
+    };
+    await setResultState(async () => ({
+      ...(await runSinr(payload)),
+      request: payload,
     }));
   }
 
@@ -124,9 +132,13 @@ export function ThroughputApiPage({ activeScene }) {
 
   async function submit(event) {
     event.preventDefault();
-    await setResultState(() => runThroughputComparison({
+    const payload = {
       ...form,
       transmitter_pattern: TRANSMITTER_PATTERN,
+    };
+    await setResultState(async () => ({
+      ...(await runThroughputComparison(payload)),
+      request: payload,
     }));
   }
 
@@ -272,42 +284,95 @@ function SizeField({ label, onChange, value }) {
 }
 
 function CoverageResult({ activeScene, result }) {
+  const request = result.request || {};
+  const solver = result.solver || request.solver || {};
+
   return (
     <div className="result-summary">
       <ApiResultScene
         activeScene={activeScene}
+        antennas={coverageResultAntennas(result, request)}
         fallbackImageUrl={result.coverage_map_image_url}
+        coverageGrid={result.grid}
         result={result}
+        solver={solver}
       />
+      <h3>Transmitter</h3>
+      <dl className="detail-grid">
+        <dt>Position</dt><dd>{formatPositionValue(request.transmitter_position)}</dd>
+        <dt>Tilt</dt><dd>{formatMaybeNumber(request.tilt)} deg</dd>
+        <dt>Power</dt><dd>{formatMaybeNumber(request.tx_power)} dBm</dd>
+        <dt>Pattern</dt><dd>{formatText(request.transmitter_pattern)}</dd>
+      </dl>
+      <h3>Coverage map</h3>
       <dl className="detail-grid">
         <dt>Status</dt><dd>{formatText(result.status)}</dd>
-        <dt>Grid</dt><dd>{result.grid ? `${result.grid.rows} x ${result.grid.cols}` : "--"}</dd>
+        <dt>Grid</dt><dd>{result.grid ? `${result.grid.rows} x ${result.grid.cols}` : "PNG preview only"}</dd>
+        <dt>Layer source</dt><dd>{result.grid ? "Cell grid" : "Rendered image"}</dd>
+        <dt>Cell size</dt><dd>{formatMaybeNumber(solver.cell_size)} m</dd>
+        <dt>Center</dt><dd>{formatPositionValue(solver.center)}</dd>
+        <dt>Size</dt><dd>{formatPositionValue(solver.size)}</dd>
       </dl>
     </div>
   );
 }
 
 function SinrResult({ activeScene, result }) {
+  const request = result.request || {};
+
   return (
     <div className="result-summary">
-      <ApiResultScene activeScene={activeScene} result={result} />
+      <ApiResultScene
+        activeScene={activeScene}
+        antennas={linkResultAntennas(result, request)}
+        result={result}
+        solver={result.solver || request.solver}
+      />
+      <h3>Serving transmitter</h3>
+      <dl className="detail-grid">
+        <dt>Position</dt><dd>{formatPositionValue(request.transmitter_position)}</dd>
+        <dt>Tilt</dt><dd>{formatMaybeNumber(request.tilt)} deg</dd>
+        <dt>Power</dt><dd>{formatMaybeNumber(request.tx_power)} dBm</dd>
+      </dl>
+      <h3>Receiver result</h3>
       <dl className="detail-grid">
         <dt>Status</dt><dd>{formatText(result.status)}</dd>
+        <dt>Receiver</dt><dd>{formatPositionValue(result.receiver_position || request.receiver_position)}</dd>
         <dt>SINR</dt><dd>{formatMaybeNumber(result.sinr_db)} dB</dd>
         <dt>Signal power</dt><dd>{formatMaybeNumber(result.signal_power)} dBm</dd>
         <dt>Noise power</dt><dd>{formatMaybeNumber(result.noise_power)} dBm</dd>
-        <dt>Receiver</dt><dd>{formatPositionValue(result.receiver_position)}</dd>
+      </dl>
+      <h3>Interferer</h3>
+      <dl className="detail-grid">
+        <dt>Position</dt><dd>{formatPositionValue(request.interferer_position)}</dd>
+        <dt>Tilt</dt><dd>{formatMaybeNumber(request.interferer_tilt)} deg</dd>
       </dl>
     </div>
   );
 }
 
 function ThroughputResult({ activeScene, result }) {
+  const request = result.request || {};
   const comparison = result.comparison || {};
 
   return (
     <div className="result-summary">
-      <ApiResultScene activeScene={activeScene} result={result} />
+      <ApiResultScene
+        activeScene={activeScene}
+        antennas={linkResultAntennas(result, request)}
+        result={result}
+        solver={result.solver || request.solver}
+      />
+      <h3>Radio link</h3>
+      <dl className="detail-grid">
+        <dt>Transmitter</dt><dd>{formatPositionValue(request.transmitter_position)}</dd>
+        <dt>Receiver</dt><dd>{formatPositionValue(result.receiver_position || request.receiver_position)}</dd>
+        <dt>Interferer</dt><dd>{formatPositionValue(request.interferer_position)}</dd>
+        <dt>Power</dt><dd>{formatMaybeNumber(request.tx_power)} dBm</dd>
+        <dt>Bandwidth</dt><dd>{formatMaybeNumber(request.bandwidth_mhz)} MHz</dd>
+        <dt>MIMO layers</dt><dd>{request.mimo_layers || "--"}</dd>
+      </dl>
+      <h3>Throughput comparison</h3>
       <dl className="detail-grid">
         <dt>Status</dt><dd>{formatText(result.status)}</dd>
         <dt>Base tilt</dt><dd>{formatMaybeNumber(comparison.base_tilt_deg)} deg</dd>
@@ -322,19 +387,39 @@ function ThroughputResult({ activeScene, result }) {
   );
 }
 
-function ApiResultScene({ activeScene, fallbackImageUrl = "", result }) {
+function ApiResultScene({
+  activeScene,
+  antennas = [],
+  coverageGrid = null,
+  fallbackImageUrl = "",
+  result,
+  solver = null,
+}) {
+  const [selectedCell, setSelectedCell] = useState(null);
+
   if (activeScene?.bounds) {
     return (
-      <Scene3DPreview
-        antennas={result.antennas || []}
+      <div className="api-result-scene-wrap">
+        <Scene3DPreview
+        antennas={antennas}
         bounds={activeScene.bounds}
         className="api-result-scene-3d"
-        coverageGrid={result.grid}
+        coverageGrid={coverageGrid}
+        coverageImageUrl={coverageGrid ? "" : fallbackImageUrl}
+        onCoverageCellSelect={setSelectedCell}
         sceneName={activeScene.name}
-        showOverlay={false}
-        solver={result.solver}
-        viewMode="top"
-      />
+          selectedCoverageCell={selectedCell}
+          showOverlay={false}
+          solver={solver}
+          viewMode="top"
+        />
+        {selectedCell && (
+          <ApiCoverageCellDialog
+            cell={selectedCell}
+            onClose={() => setSelectedCell(null)}
+          />
+        )}
+      </div>
     );
   }
 
@@ -343,6 +428,80 @@ function ApiResultScene({ activeScene, fallbackImageUrl = "", result }) {
   }
 
   return <p className="history-status">No scene preview is available for this result.</p>;
+}
+
+function coverageResultAntennas(result, request) {
+  if (Array.isArray(result.antennas) && result.antennas.length > 0) {
+    return result.antennas;
+  }
+
+  if (!Array.isArray(request.transmitter_position)) {
+    return [];
+  }
+
+  return [
+    {
+      id: "TX",
+      position: request.transmitter_position,
+      azimuth: 0,
+    },
+  ];
+}
+
+function linkResultAntennas(result, request) {
+  if (Array.isArray(result.antennas) && result.antennas.length > 0) {
+    return result.antennas;
+  }
+
+  const antennas = [];
+
+  if (Array.isArray(request.transmitter_position)) {
+    antennas.push({
+      id: "TX",
+      position: request.transmitter_position,
+      azimuth: 0,
+    });
+  }
+
+  if (Array.isArray(request.interferer_position)) {
+    antennas.push({
+      id: "INT",
+      position: request.interferer_position,
+      azimuth: 0,
+    });
+  }
+
+  if (Array.isArray(request.receiver_position)) {
+    antennas.push({
+      id: "RX",
+      position: request.receiver_position,
+      azimuth: 0,
+    });
+  }
+
+  return antennas;
+}
+
+function ApiCoverageCellDialog({ cell, onClose }) {
+  return (
+    <div className="coverage-cell-dialog" role="dialog" aria-label="Coverage cell detail">
+      <button
+        className="coverage-cell-close"
+        type="button"
+        aria-label="Close cell detail"
+        onClick={onClose}
+      >
+        x
+      </button>
+      <strong>Cell ({formatMaybeNumber(cell.x)} m, {formatMaybeNumber(cell.y)} m)</strong>
+      <dl>
+        <dt>Serving</dt><dd>{formatText(cell.serving_antenna)}</dd>
+        <dt>SINR</dt><dd>{formatMaybeNumber(cell.sinr_db)} dB</dd>
+        <dt>Signal</dt><dd>{formatMaybeNumber(cell.signal_dbm)} dBm</dd>
+        <dt>Throughput</dt><dd>{formatMaybeNumber(cell.throughput_mbps)} Mbps</dd>
+      </dl>
+    </div>
+  );
 }
 
 function useApiResult() {
