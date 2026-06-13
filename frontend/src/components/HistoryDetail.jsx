@@ -1,6 +1,8 @@
+import { useState } from "react";
 import {
   firstArtifactUrl,
   formatMaybeNumber,
+  formatNeighborDelta,
   formatPositionValue,
   formatRange,
   formatSimulationType,
@@ -131,21 +133,32 @@ function HistoryCoveragePreview({
   onPreviewLoadingChange,
 }) {
   const grid = historyPreviewGrid(item);
+  const [selectedCell, setSelectedCell] = useState(null);
 
   if (item.scene_bounds) {
     return (
-      <Scene3DPreview
-        antennas={historyPreviewAntennas(item, mode)}
-        bounds={item.scene_bounds}
-        className="history-scene-3d"
-        coverageGrid={grid}
-        coverageImageUrl={grid ? "" : fallbackImageUrl}
-        onLoadingChange={onPreviewLoadingChange}
-        sceneName={item.scene_name}
-        showOverlay={false}
-        solver={historyPreviewSolver(item)}
-        viewMode="top"
-      />
+      <div className="history-coverage-preview">
+        <Scene3DPreview
+          antennas={historyPreviewAntennas(item, mode)}
+          bounds={item.scene_bounds}
+          className="history-scene-3d"
+          coverageGrid={grid}
+          coverageImageUrl={grid ? "" : fallbackImageUrl}
+          onCoverageCellSelect={setSelectedCell}
+          onLoadingChange={onPreviewLoadingChange}
+          sceneName={item.scene_name}
+          selectedCoverageCell={selectedCell}
+          showOverlay={false}
+          solver={historyPreviewSolver(item)}
+          viewMode="top"
+        />
+        {selectedCell && (
+          <HistoryCoverageCellDialog
+            cell={selectedCell}
+            onClose={() => setSelectedCell(null)}
+          />
+        )}
+      </div>
     );
   }
 
@@ -164,6 +177,48 @@ function historyPreviewGrid(item) {
   }
 
   return grid;
+}
+
+function HistoryCoverageCellDialog({ cell, onClose }) {
+  return (
+    <div className="coverage-cell-dialog" role="dialog" aria-label="Coverage cell detail">
+      <button
+        className="coverage-cell-close"
+        type="button"
+        aria-label="Close cell detail"
+        onClick={onClose}
+      >
+        x
+      </button>
+      <strong>Cell ({formatMaybeNumber(cell.x)} m, {formatMaybeNumber(cell.y)} m)</strong>
+      <dl>
+        <dt>Serving</dt><dd>{formatText(cell.serving_antenna)}</dd>
+        <dt>SINR</dt><dd>{formatMaybeNumber(cell.sinr_db)} dB</dd>
+        <dt>Signal</dt><dd>{formatMaybeNumber(cell.signal_dbm)} dBm</dd>
+        <dt>Throughput</dt><dd>{formatMaybeNumber(cell.throughput_mbps)} Mbps</dd>
+      </dl>
+      <CellNeighbors neighbors={cell.neighbors} />
+    </div>
+  );
+}
+
+function CellNeighbors({ neighbors }) {
+  if (!Array.isArray(neighbors) || neighbors.length === 0) {
+    return <p className="neighbor-empty">No close neighbors</p>;
+  }
+
+  return (
+    <div className="neighbor-list">
+      <span>Neighbors</span>
+      {neighbors.map((neighbor) => (
+        <div key={neighbor.antenna}>
+          <strong>{formatText(neighbor.antenna)}</strong>
+          <small>{formatNeighborDelta(neighbor.weaker_than_serving_db)}</small>
+          <small>{formatMaybeNumber(neighbor.signal_dbm)} dBm</small>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function historyPreviewSolver(item) {

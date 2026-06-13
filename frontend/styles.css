@@ -1459,6 +1459,14 @@ h2 {
   height: 100%;
 }
 
+.history-coverage-preview {
+  position: relative;
+}
+
+.comparison-coverage-preview {
+  position: relative;
+}
+
 .history-detail h3 {
   margin-top: 14px;
   font-size: 13px;
