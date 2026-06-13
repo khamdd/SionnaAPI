@@ -326,6 +326,8 @@ function SinrResult({ activeScene, result }) {
         activeScene={activeScene}
         antennas={linkResultAntennas(result, request)}
         result={result}
+        sceneBadges={sinrSceneBadges(result)}
+        signalLinks={radioLinkVisuals(request)}
         solver={result.solver || request.solver}
       />
       <h3>Serving transmitter</h3>
@@ -361,6 +363,8 @@ function ThroughputResult({ activeScene, result }) {
         activeScene={activeScene}
         antennas={linkResultAntennas(result, request)}
         result={result}
+        sceneBadges={throughputSceneBadges(result)}
+        signalLinks={radioLinkVisuals(request)}
         solver={result.solver || request.solver}
       />
       <h3>Radio link</h3>
@@ -393,6 +397,8 @@ function ApiResultScene({
   coverageGrid = null,
   fallbackImageUrl = "",
   result,
+  sceneBadges = [],
+  signalLinks = [],
   solver = null,
 }) {
   const [selectedCell, setSelectedCell] = useState(null);
@@ -401,18 +407,29 @@ function ApiResultScene({
     return (
       <div className="api-result-scene-wrap">
         <Scene3DPreview
-        antennas={antennas}
-        bounds={activeScene.bounds}
-        className="api-result-scene-3d"
-        coverageGrid={coverageGrid}
-        coverageImageUrl={coverageGrid ? "" : fallbackImageUrl}
-        onCoverageCellSelect={setSelectedCell}
-        sceneName={activeScene.name}
+          antennas={antennas}
+          bounds={activeScene.bounds}
+          className="api-result-scene-3d"
+          coverageGrid={coverageGrid}
+          coverageImageUrl={coverageGrid ? "" : fallbackImageUrl}
+          onCoverageCellSelect={setSelectedCell}
+          sceneName={activeScene.name}
           selectedCoverageCell={selectedCell}
           showOverlay={false}
+          signalLinks={signalLinks}
           solver={solver}
           viewMode="top"
         />
+        {sceneBadges.length > 0 && (
+          <div className="api-result-scene-badges">
+            {sceneBadges.map((badge) => (
+              <div key={badge.label}>
+                <span>{badge.label}</span>
+                <strong>{badge.value}</strong>
+              </div>
+            ))}
+          </div>
+        )}
         {selectedCell && (
           <ApiCoverageCellDialog
             cell={selectedCell}
@@ -428,6 +445,72 @@ function ApiResultScene({
   }
 
   return <p className="history-status">No scene preview is available for this result.</p>;
+}
+
+function radioLinkVisuals(request) {
+  const links = [];
+
+  if (
+    Array.isArray(request.transmitter_position)
+    && Array.isArray(request.receiver_position)
+  ) {
+    links.push({
+      from: request.transmitter_position,
+      label: "Serving",
+      to: request.receiver_position,
+      type: "serving",
+    });
+  }
+
+  if (
+    Array.isArray(request.interferer_position)
+    && Array.isArray(request.receiver_position)
+  ) {
+    links.push({
+      from: request.interferer_position,
+      label: "Interference",
+      to: request.receiver_position,
+      type: "interference",
+    });
+  }
+
+  return links;
+}
+
+function sinrSceneBadges(result) {
+  return [
+    {
+      label: "SINR",
+      value: `${formatMaybeNumber(result.sinr_db)} dB`,
+    },
+    {
+      label: "Signal",
+      value: `${formatMaybeNumber(result.signal_power)} dBm`,
+    },
+    {
+      label: "Noise + interference",
+      value: `${formatMaybeNumber(result.noise_power)} dBm`,
+    },
+  ];
+}
+
+function throughputSceneBadges(result) {
+  const comparison = result.comparison || {};
+
+  return [
+    {
+      label: "Target throughput",
+      value: `${formatMaybeNumber(comparison.target_throughput_mbps)} Mbps`,
+    },
+    {
+      label: "Delta",
+      value: `${formatMaybeNumber(comparison.delta_mbps)} Mbps`,
+    },
+    {
+      label: "Change",
+      value: `${formatMaybeNumber(comparison.percentage_change)}%`,
+    },
+  ];
 }
 
 function coverageResultAntennas(result, request) {

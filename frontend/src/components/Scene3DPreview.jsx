@@ -29,6 +29,7 @@ export default function Scene3DPreview({
   sceneName,
   selectedCoverageCell = null,
   showOverlay = true,
+  signalLinks = [],
   solver = null,
   viewMode = "oblique",
 }) {
@@ -113,10 +114,11 @@ export default function Scene3DPreview({
       solver,
       coverageGrid,
       coverageImageUrl,
+      signalLinks,
       selectedCoverageCellRef,
       onCoverageCellSelect,
     );
-  }, [antennas, coverageGrid, coverageImageUrl, model, onCoverageCellSelect, solver, viewMode]);
+  }, [antennas, coverageGrid, coverageImageUrl, model, onCoverageCellSelect, signalLinks, solver, viewMode]);
 
   return (
     <div className={["scene-3d-preview", className].filter(Boolean).join(" ")}>
@@ -301,6 +303,7 @@ function renderThreeScene(
   solver,
   coverageGrid,
   coverageImageUrl,
+  signalLinks,
   selectedCoverageCellRef,
   onCoverageCellSelect,
 ) {
@@ -382,6 +385,7 @@ function renderThreeScene(
   });
 
   addAntennas(scene, model, antennas, solver);
+  addSignalLinks(scene, model, signalLinks, solver);
 
   const observer = new ResizeObserver(() => {
     const nextWidth = host.clientWidth || width;
@@ -763,17 +767,17 @@ function addAntennas(scene, model, antennas, solver) {
   }
 
   const group = new THREE.Group();
-  const sizeX = solver.size?.[0] || 300;
-  const sizeY = solver.size?.[1] || 300;
-  const centerX = solver.center?.[0] || 0;
-  const centerY = solver.center?.[1] || 0;
 
   antennas.forEach((antenna, index) => {
-    const x = ((antenna.position[0] - centerX) / sizeX) * model.width;
-    const z = -((antenna.position[1] - centerY) / sizeY) * model.depth;
+    const position = scenePointFromWorld(model, solver, antenna.position, 0);
+
+    if (!position) {
+      return;
+    }
+
     const mastHeight = clamp((antenna.position[2] || 25) * model.scale, 18, 74);
     const marker = createAntennaObject(antenna, index, mastHeight);
-    marker.position.set(x, 0, z);
+    marker.position.set(position.x, 0, position.z);
     group.add(marker);
   });
 
@@ -782,8 +786,9 @@ function addAntennas(scene, model, antennas, solver) {
 
 function createAntennaObject(antenna, index, mastHeight) {
   const group = new THREE.Group();
-  const mastMaterial = new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.55 });
-  const headMaterial = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.4 });
+  const palette = antennaPalette(antenna.id);
+  const mastMaterial = new THREE.MeshStandardMaterial({ color: palette.mast, roughness: 0.55 });
+  const headMaterial = new THREE.MeshStandardMaterial({ color: palette.head, roughness: 0.4 });
   const darkMaterial = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.6 });
 
   const mast = new THREE.Mesh(
@@ -812,7 +817,7 @@ function createAntennaObject(antenna, index, mastHeight) {
   ]);
   const arrow = new THREE.Line(
     arrowGeometry,
-    new THREE.LineBasicMaterial({ color: 0xb91c1c, linewidth: 2 }),
+    new THREE.LineBasicMaterial({ color: palette.mast, linewidth: 2 }),
   );
   group.add(arrow);
 
@@ -829,7 +834,7 @@ function createAntennaObject(antenna, index, mastHeight) {
   cone.rotateX(Math.PI / 2);
   group.add(cone);
 
-  const label = new THREE.Sprite(createAntennaLabelMaterial(antenna.id || `A${index + 1}`));
+  const label = new THREE.Sprite(createAntennaLabelMaterial(antenna.id || `A${index + 1}`, palette.label));
   label.position.y = mastHeight + 18;
   label.scale.set(24, 24, 1);
   group.add(label);
@@ -844,14 +849,156 @@ function createAntennaObject(antenna, index, mastHeight) {
   return group;
 }
 
-function createAntennaLabelMaterial(labelText) {
+function addSignalLinks(scene, model, signalLinks, solver) {
+  if (!Array.isArray(signalLinks) || !signalLinks.length || !solver) {
+    return;
+  }
+
+  const group = new THREE.Group();
+  const receiverPositions = new Map();
+
+  signalLinks.forEach((link) => {
+    const start = scenePointFromWorld(model, solver, link.from, 6);
+    const end = scenePointFromWorld(model, solver, link.to, 6);
+
+    if (!start || !end) {
+      return;
+    }
+
+    const palette = signalLinkPalette(link.type);
+    const horizontalDistance = Math.hypot(start.x - end.x, start.z - end.z);
+    const arcHeight = clamp(horizontalDistance * 0.12, 18, 70);
+    const midpoint = new THREE.Vector3(
+      (start.x + end.x) / 2,
+      Math.max(start.y, end.y) + arcHeight,
+      (start.z + end.z) / 2,
+    );
+    const curve = new THREE.CatmullRomCurve3([
+      start,
+      midpoint,
+      end,
+    ]);
+    const geometry = new THREE.TubeGeometry(curve, 36, palette.radius, 8, false);
+    const material = new THREE.MeshBasicMaterial({
+      color: palette.color,
+      depthTest: false,
+      transparent: true,
+      opacity: palette.opacity,
+      depthWrite: false,
+    });
+    const tube = new THREE.Mesh(geometry, material);
+    tube.renderOrder = 10;
+    group.add(tube);
+
+    if (link.label) {
+      const label = new THREE.Sprite(createTextSpriteMaterial(link.label, palette.color));
+      label.position.copy(midpoint);
+      label.position.y += 10;
+      label.scale.set(68, 22, 1);
+      group.add(label);
+    }
+
+    receiverPositions.set(`${end.x.toFixed(2)}:${end.z.toFixed(2)}`, end);
+  });
+
+  receiverPositions.forEach((position) => {
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(13, 1.7, 10, 48),
+      new THREE.MeshBasicMaterial({
+        color: 0x2563eb,
+        depthTest: false,
+        transparent: true,
+        opacity: 0.78,
+        depthWrite: false,
+      }),
+    );
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(position.x, 4.2, position.z);
+    ring.renderOrder = 11;
+    group.add(ring);
+  });
+
+  scene.add(group);
+}
+
+function scenePointFromWorld(model, solver, position, yOffset = 0) {
+  if (!Array.isArray(position) || position.length < 2) {
+    return null;
+  }
+
+  const sizeX = solver.size?.[0] || 300;
+  const sizeY = solver.size?.[1] || 300;
+  const centerX = solver.center?.[0] || 0;
+  const centerY = solver.center?.[1] || 0;
+  const x = ((Number(position[0]) - centerX) / sizeX) * model.width;
+  const z = -((Number(position[1]) - centerY) / sizeY) * model.depth;
+  const y = clamp((Number(position[2]) || 0) * model.scale + yOffset, 6, 90);
+
+  if (!Number.isFinite(x) || !Number.isFinite(z) || !Number.isFinite(y)) {
+    return null;
+  }
+
+  return new THREE.Vector3(x, y, z);
+}
+
+function antennaPalette(id = "") {
+  const normalized = String(id).toUpperCase();
+
+  if (normalized.includes("RX")) {
+    return {
+      head: 0x2563eb,
+      label: "#1d4ed8",
+      mast: 0x1d4ed8,
+    };
+  }
+
+  if (normalized.includes("INT")) {
+    return {
+      head: 0xf97316,
+      label: "#c2410c",
+      mast: 0xea580c,
+    };
+  }
+
+  return {
+    head: 0xef4444,
+    label: "#111827",
+    mast: 0xb91c1c,
+  };
+}
+
+function signalLinkPalette(type = "") {
+  if (type === "interference") {
+    return {
+      color: 0xef4444,
+      opacity: 0.82,
+      radius: 1.6,
+    };
+  }
+
+  if (type === "comparison") {
+    return {
+      color: 0x38bdf8,
+      opacity: 0.7,
+      radius: 1.5,
+    };
+  }
+
+  return {
+    color: 0x22c55e,
+    opacity: 0.82,
+    radius: 2.1,
+  };
+}
+
+function createAntennaLabelMaterial(labelText, fillStyle = "#111827") {
   const canvas = document.createElement("canvas");
   canvas.width = 128;
   canvas.height = 128;
   const context = canvas.getContext("2d");
   const number = String(labelText).replace(/^A/i, "");
 
-  context.fillStyle = "#111827";
+  context.fillStyle = fillStyle;
   context.beginPath();
   context.arc(64, 64, 46, 0, Math.PI * 2);
   context.fill();
@@ -872,6 +1019,48 @@ function createAntennaLabelMaterial(labelText) {
     transparent: true,
     depthTest: false,
   });
+}
+
+function createTextSpriteMaterial(text, color) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 384;
+  canvas.height = 128;
+  const context = canvas.getContext("2d");
+
+  context.fillStyle = "rgba(255,255,255,0.92)";
+  roundRect(context, 12, 28, 360, 70, 18);
+  context.fill();
+  context.lineWidth = 6;
+  context.strokeStyle = `#${color.toString(16).padStart(6, "0")}`;
+  context.stroke();
+  context.fillStyle = "#111827";
+  context.font = "700 32px Arial";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(text, 192, 64);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+
+  return new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    depthTest: false,
+  });
+}
+
+function roundRect(context, x, y, width, height, radius) {
+  context.beginPath();
+  context.moveTo(x + radius, y);
+  context.lineTo(x + width - radius, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + radius);
+  context.lineTo(x + width, y + height - radius);
+  context.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  context.lineTo(x + radius, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - radius);
+  context.lineTo(x, y + radius);
+  context.quadraticCurveTo(x, y, x + radius, y);
+  context.closePath();
 }
 
 function createTopCamera(width, height, maxSide) {
