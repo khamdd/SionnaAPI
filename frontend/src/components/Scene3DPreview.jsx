@@ -17,9 +17,10 @@ const HOVER_CELL_OUTLINE = {
   renderOrder: 9,
   y: 4.0,
 };
+const EMPTY_ARRAY = Object.freeze([]);
 
 export default function Scene3DPreview({
-  antennas = [],
+  antennas = EMPTY_ARRAY,
   bounds,
   className = "",
   coverageGrid = null,
@@ -29,7 +30,7 @@ export default function Scene3DPreview({
   sceneName,
   selectedCoverageCell = null,
   showOverlay = true,
-  signalLinks = [],
+  signalLinks = EMPTY_ARRAY,
   solver = null,
   viewMode = "oblique",
 }) {

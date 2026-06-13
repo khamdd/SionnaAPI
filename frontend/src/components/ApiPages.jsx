@@ -19,6 +19,7 @@ const DEFAULT_CAMERA = {
   position: [-1.5, -137, 115],
   look_at: [0, 0, 10],
 };
+const EMPTY_ARRAY = Object.freeze([]);
 
 export function CoverageApiPage({ activeScene }) {
   const [form, setForm] = useState(() => ({
@@ -393,12 +394,12 @@ function ThroughputResult({ activeScene, result }) {
 
 function ApiResultScene({
   activeScene,
-  antennas = [],
+  antennas = EMPTY_ARRAY,
   coverageGrid = null,
   fallbackImageUrl = "",
   result,
-  sceneBadges = [],
-  signalLinks = [],
+  sceneBadges = EMPTY_ARRAY,
+  signalLinks = EMPTY_ARRAY,
   solver = null,
 }) {
   const [selectedCell, setSelectedCell] = useState(null);
