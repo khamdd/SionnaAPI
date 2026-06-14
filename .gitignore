@@ -15,7 +15,7 @@ backend/.sionna-venv/
 # Local configuration and secrets
 .env
 .env.*
-!.env.example
+.env.example
 *.local
 
 # Generated simulation assets

@@ -137,6 +137,63 @@ GET /api/v1/simulation-runs
 GET /api/v1/simulation-runs/{run_id}
 ```
 
+## Optional Elasticsearch Logging
+
+The backend can send operational logs to Elasticsearch. This is optional; the app runs normally when logging is disabled.
+
+Logged events currently include:
+
+- `http_request`: normal API request/response log.
+- `http_request_failed`: unhandled API exception.
+- `user_registered`: successful account registration.
+- `register_failed`: failed account registration.
+- `login_success`: successful login.
+- `login_failed`: failed login.
+- `simulation_started`: simulation request started.
+- `simulation_completed`: simulation finished successfully.
+- `simulation_failed`: simulation returned failure or raised an exception.
+
+Logs include useful fields such as request path, status code, duration, username, simulation type, scene id, scene name, and error message. Passwords, tokens, database URLs, and password hashes are redacted. Request bodies and query strings are not logged.
+
+### Run Elasticsearch locally
+
+This is for local development only. The compose file binds Elasticsearch and Kibana to `127.0.0.1`, so they are reachable only from your own machine.
+
+```powershell
+cd project_dir
+docker compose -f docker-compose.elasticsearch.yml up -d
+```
+
+Open Kibana:
+
+```text
+http://127.0.0.1:5601
+```
+
+Then enable logging in `.env`:
+
+```text
+ELASTICSEARCH_ENABLED=true
+ELASTICSEARCH_URL=http://localhost:9200
+ELASTICSEARCH_INDEX=sionna-logs-dev
+```
+
+Restart the backend after changing `.env`.
+
+To stop the local logging stack:
+
+```powershell
+docker compose -f docker-compose.elasticsearch.yml down
+```
+
+To remove local log data too:
+
+```powershell
+docker compose -f docker-compose.elasticsearch.yml down -v
+```
+
+Do not expose this local Elasticsearch service to the public internet. For production, use a secured Elasticsearch service with authentication, TLS, index retention, and restricted access.
+
 ## Start the Frontend
 
 After the backend is running, open another PowerShell window:
