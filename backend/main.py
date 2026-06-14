@@ -6,8 +6,11 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.api.auth import router as auth_router
 from backend.api.sinr import router as sinr_router
+from backend.middleware.request_logging import RequestLoggingMiddleware
 
 app = FastAPI(title="SionnaAPI")
+
+app.add_middleware(RequestLoggingMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
