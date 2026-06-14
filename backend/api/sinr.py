@@ -35,6 +35,7 @@ from backend.services.scene_service import (
     get_active_scene,
     list_scenes,
 )
+from backend.services.event_logger import log_event
 
 from backend.simulations.sionna_engine import engine
 
@@ -63,8 +64,34 @@ def run_and_store(
     simulation_fn,
 ):
     started_at = utc_now()
-    result = simulation_fn()
+    scene_info = get_engine_scene_info()
+    log_simulation_event(
+        "simulation_started",
+        simulation_type,
+        scene_info,
+    )
+    try:
+        result = simulation_fn()
+    except Exception as exc:
+        finished_at = utc_now()
+        log_simulation_event(
+            "simulation_failed",
+            simulation_type,
+            scene_info,
+            duration_ms=round(
+                (finished_at - started_at).total_seconds() * 1000,
+                2,
+            ),
+            status="exception",
+            error=str(exc),
+        )
+        raise
+
     finished_at = utc_now()
+    duration_ms = round(
+        (finished_at - started_at).total_seconds() * 1000,
+        2,
+    )
 
     store_simulation_result(
         simulation_type,
@@ -72,10 +99,47 @@ def run_and_store(
         result,
         started_at,
         finished_at,
-        scene_info=get_engine_scene_info(),
+        scene_info=scene_info,
     )
 
+    status = str(result.get("status", "")).lower()
+    if status.startswith("failure"):
+        log_simulation_event(
+            "simulation_failed",
+            simulation_type,
+            scene_info,
+            duration_ms=duration_ms,
+            status=result.get("status"),
+            error=result.get("error"),
+        )
+    else:
+        log_simulation_event(
+            "simulation_completed",
+            simulation_type,
+            scene_info,
+            duration_ms=duration_ms,
+            status=result.get("status"),
+        )
+
     return return_or_raise(result)
+
+
+def log_simulation_event(
+    event,
+    simulation_type,
+    scene_info,
+    **data,
+):
+    log_event(
+        event,
+        level="ERROR" if event == "simulation_failed" else "INFO",
+        data={
+            "simulation_type": simulation_type,
+            "scene_id": scene_info.get("id"),
+            "scene_name": scene_info.get("name"),
+            **data,
+        },
+    )
 
 
 def get_engine_scene_info():

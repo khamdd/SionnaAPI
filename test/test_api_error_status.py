@@ -172,3 +172,84 @@ def test_throughput_client_input_failure_returns_http_400(monkeypatch):
 
     assert response.status_code == 400
     assert response.json()["detail"]["status"] == "failure"
+
+
+def test_simulation_success_logs_started_and_completed(monkeypatch):
+    events = []
+    monkeypatch.setattr(
+        api_module,
+        "store_simulation_result",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        api_module,
+        "log_event",
+        lambda event, level="INFO", data=None: events.append((event, level, data)),
+    )
+    monkeypatch.setattr(
+        api_module,
+        "calculate_sinr_service",
+        lambda req, scene: {
+            "status": "success",
+            "sinr_db": 12.3,
+        },
+    )
+
+    response = client.post(
+        "/api/v1/sinr",
+        json={
+            "tilt": 8.0,
+            "transmitter_position": [0.0, 0.0, 25.0],
+            "receiver_position": [10.0, 10.0, 1.5],
+        },
+    )
+
+    assert response.status_code == 200
+    assert [event[0] for event in events] == [
+        "simulation_started",
+        "simulation_completed",
+    ]
+    assert events[1][1] == "INFO"
+    assert events[1][2]["simulation_type"] == "sinr"
+    assert events[1][2]["scene_id"] == "munich"
+    assert events[1][2]["status"] == "success"
+    assert "duration_ms" in events[1][2]
+    assert "request" not in events[1][2]
+
+
+def test_simulation_failure_logs_failed(monkeypatch):
+    events = []
+    monkeypatch.setattr(
+        api_module,
+        "store_simulation_result",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        api_module,
+        "log_event",
+        lambda event, level="INFO", data=None: events.append((event, level, data)),
+    )
+    monkeypatch.setattr(
+        api_module,
+        "calculate_sinr_service",
+        lambda req, scene: failure_payload(),
+    )
+
+    response = client.post(
+        "/api/v1/sinr",
+        json={
+            "tilt": 8.0,
+            "transmitter_position": [0.0, 0.0, 25.0],
+            "receiver_position": [10.0, 10.0, 1.5],
+        },
+    )
+
+    assert response.status_code == 500
+    assert [event[0] for event in events] == [
+        "simulation_started",
+        "simulation_failed",
+    ]
+    assert events[1][1] == "ERROR"
+    assert events[1][2]["simulation_type"] == "sinr"
+    assert events[1][2]["status"] == "failure"
+    assert events[1][2]["error"] == "forced failure"
