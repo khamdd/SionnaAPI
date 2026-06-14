@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from backend.database import db_session, is_database_configured
+from backend.services.event_logger import log_event
 
 
 HASH_ALGORITHM = "pbkdf2_sha256"
@@ -15,14 +16,20 @@ SALT_BYTES = 16
 
 
 def create_user(username, password):
+    clean_username = normalize_username(username)
+
     if not is_database_configured():
+        log_auth_event(
+            "register_failed",
+            clean_username,
+            level="WARNING",
+            reason="database_not_configured",
+        )
         return {
             "status": "failure",
             "status_code": 503,
             "error": "Database is not configured.",
         }
-
-    clean_username = normalize_username(username)
 
     try:
         with db_session() as session:
@@ -49,12 +56,23 @@ def create_user(username, password):
                 },
             ).mappings().first()
 
+        log_auth_event(
+            "user_registered",
+            row["username"],
+            user_id=str(row["id"]),
+        )
         return {
             "status": "success",
             "user": serialize_user(row),
         }
 
     except IntegrityError:
+        log_auth_event(
+            "register_failed",
+            clean_username,
+            level="WARNING",
+            reason="username_exists",
+        )
         return {
             "status": "failure",
             "status_code": 409,
@@ -62,6 +80,12 @@ def create_user(username, password):
         }
 
     except SQLAlchemyError:
+        log_auth_event(
+            "register_failed",
+            clean_username,
+            level="ERROR",
+            reason="database_error",
+        )
         return {
             "status": "failure",
             "status_code": 500,
@@ -70,7 +94,15 @@ def create_user(username, password):
 
 
 def login_user(username, password):
+    clean_username = normalize_username(username)
+
     if not is_database_configured():
+        log_auth_event(
+            "login_failed",
+            clean_username,
+            level="WARNING",
+            reason="database_not_configured",
+        )
         return {
             "status": "failure",
             "status_code": 503,
@@ -93,7 +125,7 @@ def login_user(username, password):
                     """
                 ),
                 {
-                    "username": normalize_username(username),
+                    "username": clean_username,
                 },
             ).mappings().first()
 
@@ -102,6 +134,12 @@ def login_user(username, password):
                 or not row["is_active"]
                 or not verify_password(password, row["password_hash"])
             ):
+                log_auth_event(
+                    "login_failed",
+                    clean_username,
+                    level="WARNING",
+                    reason="invalid_credentials",
+                )
                 return invalid_login()
 
             session.execute(
@@ -117,12 +155,23 @@ def login_user(username, password):
                 },
             )
 
+        log_auth_event(
+            "login_success",
+            row["username"],
+            user_id=str(row["id"]),
+        )
         return {
             "status": "success",
             "user": serialize_user(row),
         }
 
     except SQLAlchemyError:
+        log_auth_event(
+            "login_failed",
+            clean_username,
+            level="ERROR",
+            reason="database_error",
+        )
         return {
             "status": "failure",
             "status_code": 500,
@@ -132,6 +181,17 @@ def login_user(username, password):
 
 def normalize_username(username):
     return username.strip()
+
+
+def log_auth_event(event, username, level="INFO", **data):
+    log_event(
+        event,
+        level=level,
+        data={
+            "username": username,
+            **data,
+        },
+    )
 
 
 def hash_password(password):
