@@ -142,6 +142,34 @@ def log_simulation_event(
     )
 
 
+def log_business_event(
+    event,
+    level="INFO",
+    **data,
+):
+    log_event(
+        event,
+        level=level,
+        data=data,
+    )
+
+
+def log_failed_business_event(
+    event,
+    result,
+    **data,
+):
+    status_code = result.get("status_code", 500)
+    level = "ERROR" if status_code >= 500 else "WARNING"
+    log_business_event(
+        event,
+        level=level,
+        status_code=status_code,
+        error=result.get("error"),
+        **data,
+    )
+
+
 def get_engine_scene_info():
     get_active_scene_info = getattr(engine, "get_active_scene_info", None)
 
@@ -241,6 +269,12 @@ def delete_simulation_run_history(run_id: str):
     result = delete_simulation_run(run_id)
 
     if result.get("error"):
+        log_business_event(
+            "simulation_history_delete_failed",
+            level="ERROR",
+            run_id=run_id,
+            error=result.get("error"),
+        )
         raise HTTPException(
             status_code=500,
             detail=result,
@@ -250,10 +284,25 @@ def delete_simulation_run_history(run_id: str):
         result.get("database_configured")
         and not result.get("deleted")
     ):
+        log_business_event(
+            "simulation_history_delete_failed",
+            level="WARNING",
+            run_id=run_id,
+            status_code=404,
+            error="Simulation run not found.",
+        )
         raise HTTPException(
             status_code=404,
             detail="Simulation run not found.",
         )
+
+    log_business_event(
+        "simulation_history_deleted",
+        run_id=run_id,
+        database_configured=result.get("database_configured"),
+        deleted=result.get("deleted"),
+        deleted_files=result.get("deleted_files"),
+    )
 
     return result
 
@@ -271,16 +320,61 @@ def active_scene():
 @router.post("/scenes/preview")
 def preview_scene(req: SceneBoundsRequest, request: Request):
     result = create_scene_preview(req, request.base_url)
+
+    if str(result.get("status", "")).lower().startswith("failure"):
+        log_failed_business_event(
+            "scene_preview_failed",
+            result,
+            scene_name=req.name,
+        )
+        return return_or_raise(result)
+
+    scene = result.get("scene", {})
+    metrics = scene.get("metrics") or {}
+    log_business_event(
+        "scene_preview_created",
+        scene_id=scene.get("id"),
+        scene_name=scene.get("name"),
+        area_km2=metrics.get("area_km2"),
+        width_m=metrics.get("width_m"),
+        height_m=metrics.get("height_m"),
+    )
+
     return return_or_raise(result)
 
 
 @router.post("/scenes/{scene_id}/activate")
 def activate_scene_route(scene_id: str):
     result = activate_scene(scene_id)
+
+    if str(result.get("status", "")).lower().startswith("failure"):
+        log_failed_business_event(
+            "scene_activation_failed",
+            result,
+            scene_id=scene_id,
+        )
+        return return_or_raise(result)
+
     scene = return_or_raise(result)["scene"]
 
-    with engine.lock:
-        engine.set_active_scene(scene)
+    try:
+        with engine.lock:
+            engine.set_active_scene(scene)
+    except Exception as exc:
+        log_business_event(
+            "scene_activation_failed",
+            level="ERROR",
+            scene_id=scene.get("id"),
+            scene_name=scene.get("name"),
+            error=str(exc),
+        )
+        raise
+
+    log_business_event(
+        "scene_activated",
+        scene_id=scene.get("id"),
+        scene_name=scene.get("name"),
+    )
 
     return {
         "status": "success",
@@ -291,4 +385,18 @@ def activate_scene_route(scene_id: str):
 @router.delete("/scenes/{scene_id}")
 def delete_scene_route(scene_id: str):
     result = delete_scene(scene_id)
+
+    if str(result.get("status", "")).lower().startswith("failure"):
+        log_failed_business_event(
+            "scene_delete_failed",
+            result,
+            scene_id=scene_id,
+        )
+        return return_or_raise(result)
+
+    log_business_event(
+        "scene_deleted",
+        scene_id=scene_id,
+    )
+
     return return_or_raise(result)
