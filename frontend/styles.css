@@ -97,6 +97,99 @@ button.hidden,
   color: #1d4ed8;
 }
 
+.app-navbar .logout-button {
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: #b42318;
+}
+
+.login-page {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  background:
+    linear-gradient(rgba(238, 241, 244, 0.92), rgba(238, 241, 244, 0.92)),
+    linear-gradient(135deg, #dbeafe, #ccfbf1);
+  padding: 18px;
+}
+
+.login-panel {
+  display: grid;
+  gap: 18px;
+  width: min(440px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 22px;
+}
+
+.login-panel > div:first-child {
+  display: grid;
+  gap: 6px;
+}
+
+.login-panel > div:first-child strong {
+  color: var(--accent-dark);
+  font-size: 13px;
+}
+
+.login-panel p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.login-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.login-tabs button {
+  min-height: 38px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.login-tabs button:last-child {
+  border-right: 0;
+}
+
+.login-tabs button.active {
+  background: #f0fdfa;
+  color: var(--accent-dark);
+}
+
+.login-form {
+  display: grid;
+  gap: 14px;
+}
+
+.login-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.login-form input {
+  min-height: 38px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 0 12px;
+}
+
 .global-progress {
   position: sticky;
   top: 59px;

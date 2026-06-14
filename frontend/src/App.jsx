@@ -21,6 +21,7 @@ import ComparisonResult from "./components/ComparisonResult";
 import HistoryDetail from "./components/HistoryDetail";
 import HistoryModal, { HistoryModalBody } from "./components/HistoryModal";
 import HistoryPanel from "./components/HistoryPanel";
+import LoginPage from "./components/LoginPage";
 import MapPanel from "./components/MapPanel";
 import SceneChooserModal from "./components/SceneChooserModal";
 import ScenesPage from "./components/ScenesPage";
@@ -55,12 +56,14 @@ const DEFAULT_ACTIVE_SCENE = {
     east: 11.5795,
   },
 };
+const USER_STORAGE_KEY = "sionna_user";
 
 function clone(value) {
   return structuredClone(value);
 }
 
 export default function App() {
+  const [currentUser, setCurrentUser] = useState(() => readStoredUser());
   const [route, setRoute] = useState(() => normalizeRoute(window.location.pathname));
   const [antennas, setAntennas] = useState(() => clone(DEFAULT_ANTENNAS));
   const [latestGrid, setLatestGrid] = useState(null);
@@ -93,6 +96,16 @@ export default function App() {
   const canvasRef = useRef(null);
   const mapStageRef = useRef(null);
   const summary = useMemo(() => summarizeGrid(latestGrid), [latestGrid]);
+
+  function authenticate(user) {
+    setCurrentUser(user);
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+  }
+
+  function logout() {
+    localStorage.removeItem(USER_STORAGE_KEY);
+    setCurrentUser(null);
+  }
 
   const handleApiProgressChange = useCallback((active, label) => {
     setApiProgressLabel(active ? label : "");
@@ -487,11 +500,17 @@ export default function App() {
       || (isSceneLoading ? "Loading scene..." : "")
       || (isSceneListLoading ? "Loading scenes..." : "");
 
+  if (!currentUser) {
+    return <LoginPage onAuthenticated={authenticate} />;
+  }
+
   return (
     <div className="app-frame">
       <Navbar
         activeScene={activeScene}
+        currentUser={currentUser}
         onChooseScene={chooseScene}
+        onLogout={logout}
         route={route}
         onNavigate={navigate}
       />
@@ -591,7 +610,14 @@ export default function App() {
   );
 }
 
-function Navbar({ activeScene, onChooseScene, onNavigate, route }) {
+function Navbar({
+  activeScene,
+  currentUser,
+  onChooseScene,
+  onLogout,
+  onNavigate,
+  route,
+}) {
   return (
     <header className="app-navbar">
       <div>
@@ -612,9 +638,20 @@ function Navbar({ activeScene, onChooseScene, onNavigate, route }) {
         <button className="scene-picker-button" type="button" onClick={onChooseScene}>
           Choose scene
         </button>
+        <button className="logout-button" type="button" onClick={onLogout}>
+          {currentUser?.username || "Logout"} | Logout
+        </button>
       </nav>
     </header>
   );
+}
+
+function readStoredUser() {
+  try {
+    return JSON.parse(localStorage.getItem(USER_STORAGE_KEY));
+  } catch {
+    return null;
+  }
 }
 
 function GlobalProgress({ active, label }) {

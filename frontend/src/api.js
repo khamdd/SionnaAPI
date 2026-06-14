@@ -50,6 +50,26 @@ export function runThroughputComparison(payload) {
   });
 }
 
+export function registerUser(payload) {
+  return requestJson("/api/v1/auth/register", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function loginUser(payload) {
+  return requestJson("/api/v1/auth/login", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
 export function listSimulationRuns(limit = 25) {
   return requestJson(`/api/v1/simulation-runs?limit=${limit}`);
 }
