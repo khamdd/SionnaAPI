@@ -1,6 +1,12 @@
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import List, Tuple
-from backend.constants import DEFAULT_TRANSMITTER_PATTERN, MAX_GRID_CELLS
+from backend.constants import (
+    DEFAULT_RSRP_USER_COUNT,
+    DEFAULT_TRANSMITTER_PATTERN,
+    DEFAULT_USER_HEIGHT_M,
+    MAX_GRID_CELLS,
+    MAX_RSRP_USER_COUNT,
+)
 
 
 class SolverConfig(BaseModel):
@@ -129,6 +135,36 @@ class NetworkCoverageRequest(BaseModel):
     mimo_layers: int = Field(
         default=4,
         gt=0,
+    )
+
+
+class RSRPRequest(BaseModel):
+    antennas: List[AntennaConfig] = Field(
+        min_length=1,
+        max_length=10,
+    )
+
+    transmitter_pattern: str = DEFAULT_TRANSMITTER_PATTERN
+
+    solver: SolverConfig = Field(
+        default_factory=SolverConfig
+    )
+
+    user_count: int = Field(
+        default=DEFAULT_RSRP_USER_COUNT,
+        ge=1,
+        le=MAX_RSRP_USER_COUNT,
+    )
+
+    user_height_m: float = Field(
+        default=DEFAULT_USER_HEIGHT_M,
+        ge=0.5,
+        le=10.0,
+    )
+
+    random_seed: int = Field(
+        default=42,
+        ge=0,
     )
 
 

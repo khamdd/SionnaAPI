@@ -17,6 +17,7 @@ import {
 import AntennaPanel from "./components/AntennaPanel";
 import {
   CoverageApiPage,
+  RsrpSimulationPage,
   SinrApiPage,
   ThroughputApiPage,
 } from "./components/ApiPages";
@@ -521,6 +522,13 @@ export default function App() {
       {route === "/coverage" && (
         <CoverageApiPage
           activeScene={activeScene}
+          onProgressChange={handleApiProgressChange}
+        />
+      )}
+      {route === "/rsrp" && (
+        <RsrpSimulationPage
+          activeScene={activeScene}
+          antennas={antennas}
           onProgressChange={handleApiProgressChange}
         />
       )}

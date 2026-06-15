@@ -9,9 +9,12 @@ from backend.constants.paths import (
     STATIC_DIR,
 )
 from backend.constants.radio import (
+    DEFAULT_RSRP_USER_COUNT,
     DEFAULT_TRANSMITTER_PATTERN,
+    DEFAULT_USER_HEIGHT_M,
     GENERATED_IMAGE_QUOTA_BYTES,
     MAX_GRID_CELLS,
+    MAX_RSRP_USER_COUNT,
     MIN_NEIGHBOR_SIGNAL_DBM,
     NEIGHBOR_SIGNAL_WINDOW_DB,
 )

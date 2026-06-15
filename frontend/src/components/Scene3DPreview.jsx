@@ -16,8 +16,11 @@ export default function Scene3DPreview({
   coverageImageUrl = "",
   onCoverageCellSelect = null,
   onLoadingChange = null,
+  onRsrpUserSelect = null,
+  rsrpUsers = EMPTY_ARRAY,
   sceneName,
   selectedCoverageCell = null,
+  selectedRsrpUser = null,
   showOverlay = true,
   signalLinks = EMPTY_ARRAY,
   solver = null,
@@ -25,12 +28,17 @@ export default function Scene3DPreview({
 }) {
   const canvasHostRef = useRef(null);
   const selectedCoverageCellRef = useRef(selectedCoverageCell);
+  const selectedRsrpUserRef = useRef(selectedRsrpUser);
   const [model, setModel] = useState(null);
   const [status, setStatus] = useState("Loading OSM buildings...");
 
   useEffect(() => {
     selectedCoverageCellRef.current = selectedCoverageCell;
   }, [selectedCoverageCell]);
+
+  useEffect(() => {
+    selectedRsrpUserRef.current = selectedRsrpUser;
+  }, [selectedRsrpUser]);
 
   useEffect(() => {
     if (!bounds) {
@@ -115,10 +123,13 @@ export default function Scene3DPreview({
       coverageGrid,
       coverageImageUrl,
       signalLinks,
+      rsrpUsers,
       selectedCoverageCellRef,
+      selectedRsrpUserRef,
       onCoverageCellSelect,
+      onRsrpUserSelect,
     );
-  }, [antennas, coverageGrid, coverageImageUrl, model, onCoverageCellSelect, signalLinks, solver, viewMode]);
+  }, [antennas, coverageGrid, coverageImageUrl, model, onCoverageCellSelect, onRsrpUserSelect, rsrpUsers, signalLinks, solver, viewMode]);
 
   return (
     <div className={["scene-3d-preview", className].filter(Boolean).join(" ")}>
@@ -304,8 +315,11 @@ function renderThreeScene(
   coverageGrid,
   coverageImageUrl,
   signalLinks,
+  rsrpUsers,
   selectedCoverageCellRef,
+  selectedRsrpUserRef,
   onCoverageCellSelect,
+  onRsrpUserSelect,
 ) {
   host.innerHTML = "";
 
@@ -386,6 +400,10 @@ function renderThreeScene(
 
   addAntennas(scene, model, antennas, solver);
   addSignalLinks(scene, model, signalLinks, solver);
+  const rsrpUserObjects = addRsrpUsers(scene, model, rsrpUsers, solver);
+  const selectedRsrpUserGroup = new THREE.Group();
+  scene.add(selectedRsrpUserGroup);
+  let lastSelectedRsrpUser = null;
 
   const observer = new ResizeObserver(() => {
     const nextWidth = host.clientWidth || width;
@@ -423,6 +441,21 @@ function renderThreeScene(
       return;
     }
 
+    const user = pickRsrpUserFromEvent(
+      event,
+      renderer,
+      camera,
+      raycaster,
+      pointer,
+      rsrpUserObjects,
+    );
+
+    if (user) {
+      setHoveredCell(null);
+      renderer.domElement.style.cursor = "pointer";
+      return;
+    }
+
     setHoveredCell(pickCoverageCellFromEvent(
       event,
       renderer,
@@ -456,6 +489,20 @@ function renderThreeScene(
       return;
     }
 
+    const user = pickRsrpUserFromEvent(
+      event,
+      renderer,
+      camera,
+      raycaster,
+      pointer,
+      rsrpUserObjects,
+    );
+
+    if (user && onRsrpUserSelect) {
+      onRsrpUserSelect(user);
+      return;
+    }
+
     if (!onCoverageCellSelect) {
       return;
     }
@@ -486,6 +533,9 @@ function renderThreeScene(
     controls.update();
     syncSelectedCellOutline(selectedCellGroup, model, selectedCoverageCellRef, solver, lastSelectedCell, (cell) => {
       lastSelectedCell = cell;
+    });
+    syncSelectedRsrpUserOutline(selectedRsrpUserGroup, model, selectedRsrpUserRef, solver, lastSelectedRsrpUser, (user) => {
+      lastSelectedRsrpUser = user;
     });
     renderer.render(scene, camera);
     animationId = window.requestAnimationFrame(animate);
@@ -919,6 +969,150 @@ function addSignalLinks(scene, model, signalLinks, solver) {
   });
 
   scene.add(group);
+}
+
+function addRsrpUsers(scene, model, users, solver) {
+  if (!Array.isArray(users) || !users.length || !solver) {
+    return [];
+  }
+
+  const group = new THREE.Group();
+  const materials = new Map();
+  const objects = [];
+
+  users.forEach((user) => {
+    const position = scenePointFromWorld(model, solver, user.position, 7);
+
+    if (!position) {
+      return;
+    }
+
+    const material = getRsrpUserMaterial(materials, user.quality);
+    const sprite = new THREE.Sprite(material);
+    sprite.position.copy(position);
+    sprite.scale.set(8.5, 8.5, 1);
+    sprite.renderOrder = 12;
+    sprite.userData.rsrpUser = user;
+    group.add(sprite);
+    objects.push(sprite);
+  });
+
+  scene.add(group);
+  return objects;
+}
+
+function getRsrpUserMaterial(materials, quality) {
+  const key = quality || "no_coverage";
+
+  if (!materials.has(key)) {
+    materials.set(
+      key,
+      new THREE.SpriteMaterial({
+        map: createRsrpDotTexture(rsrpQualityColor(key)),
+        transparent: true,
+        depthTest: false,
+      }),
+    );
+  }
+
+  return materials.get(key);
+}
+
+function createRsrpDotTexture(color) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 64;
+  canvas.height = 64;
+  const context = canvas.getContext("2d");
+
+  context.clearRect(0, 0, 64, 64);
+  context.fillStyle = "rgba(255,255,255,0.86)";
+  context.beginPath();
+  context.arc(32, 32, 24, 0, Math.PI * 2);
+  context.fill();
+  context.fillStyle = color;
+  context.beginPath();
+  context.arc(32, 32, 18, 0, Math.PI * 2);
+  context.fill();
+  context.lineWidth = 5;
+  context.strokeStyle = "rgba(15,23,42,0.24)";
+  context.stroke();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+function rsrpQualityColor(quality) {
+  if (quality === "excellent") {
+    return "#16a34a";
+  }
+  if (quality === "good") {
+    return "#84cc16";
+  }
+  if (quality === "fair") {
+    return "#facc15";
+  }
+  if (quality === "poor") {
+    return "#f97316";
+  }
+  return "#ef4444";
+}
+
+function pickRsrpUserFromEvent(
+  event,
+  renderer,
+  camera,
+  raycaster,
+  pointer,
+  rsrpUserObjects,
+) {
+  if (!rsrpUserObjects.length) {
+    return null;
+  }
+
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -(((event.clientY - rect.top) / rect.height) * 2 - 1);
+  raycaster.setFromCamera(pointer, camera);
+
+  const hit = raycaster.intersectObjects(rsrpUserObjects, false)[0];
+  return hit?.object?.userData?.rsrpUser || null;
+}
+
+function syncSelectedRsrpUserOutline(group, model, selectedRsrpUserRef, solver, lastSelectedRsrpUser, setLastSelectedRsrpUser) {
+  const user = selectedRsrpUserRef?.current || null;
+
+  if (user === lastSelectedRsrpUser) {
+    return;
+  }
+
+  while (group.children.length) {
+    const child = group.children[0];
+    group.remove(child);
+    disposeThreeObject(child);
+  }
+
+  if (user && solver) {
+    const position = scenePointFromWorld(model, solver, user.position, 6.8);
+
+    if (position) {
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(8.5, 1.5, 12, 48),
+        new THREE.MeshBasicMaterial({
+          color: 0x0f172a,
+          depthTest: false,
+          transparent: true,
+          opacity: 0.9,
+        }),
+      );
+      ring.rotation.x = Math.PI / 2;
+      ring.position.copy(position);
+      ring.renderOrder = 13;
+      group.add(ring);
+    }
+  }
+
+  setLastSelectedRsrpUser(user);
 }
 
 function scenePointFromWorld(model, solver, position, yOffset = 0) {

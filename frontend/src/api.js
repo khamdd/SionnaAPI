@@ -30,6 +30,16 @@ export function runCoverageMap(payload) {
   });
 }
 
+export function runRsrpSimulation(payload) {
+  return requestJson("/api/v1/rsrp-simulation", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
 export function runSinr(payload) {
   return requestJson("/api/v1/sinr", {
     method: "POST",

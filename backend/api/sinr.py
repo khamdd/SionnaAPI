@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, Request
 from backend.schemas.requests import (
     CoverageRequest,
     NetworkCoverageRequest,
+    RSRPRequest,
     SceneBoundsRequest,
     SINRRequest,
     ThroughputRequest,
@@ -15,6 +16,9 @@ from backend.services.coverage_service import (
 
 from backend.services.sinr_service import (
     calculate_sinr_service,
+)
+from backend.services.rsrp_service import (
+    calculate_rsrp_service,
 )
 
 from backend.services.throughput_service import (
@@ -213,6 +217,19 @@ def network_coverage(req: NetworkCoverageRequest, request: Request):
                 request.base_url,
                 scene,
             ),
+        )
+
+
+@router.post("/rsrp-simulation")
+def rsrp_simulation(req: RSRPRequest):
+
+    with engine.lock:
+        scene = engine.get_scene()
+
+        return run_and_store(
+            "rsrp_simulation",
+            req,
+            lambda: calculate_rsrp_service(req, scene),
         )
 
 

@@ -1,13 +1,18 @@
 import { useState } from "react";
 import {
   runCoverageMap,
+  runRsrpSimulation,
   runSinr,
   runThroughputComparison,
 } from "../api";
 import {
   DEFAULT_CAMERA,
+  DEFAULT_RSRP_RANDOM_SEED,
+  DEFAULT_RSRP_USER_COUNT,
   DEFAULT_SOLVER,
+  DEFAULT_USER_HEIGHT_M,
   EMPTY_ARRAY,
+  MAX_RSRP_USER_COUNT,
   TRANSMITTER_PATTERN,
 } from "../constants";
 import {
@@ -118,6 +123,117 @@ export function SinrApiPage({ activeScene, onProgressChange }) {
   );
 }
 
+export function RsrpSimulationPage({ activeScene, antennas, onProgressChange }) {
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [form, setForm] = useState(() => ({
+    user_count: suggestUserCount(DEFAULT_SOLVER),
+    user_height_m: DEFAULT_USER_HEIGHT_M,
+    random_seed: DEFAULT_RSRP_RANDOM_SEED,
+    solver: DEFAULT_SOLVER,
+  }));
+  const [resultState, setResultState] = useApiResult(
+    onProgressChange,
+    "Running RSRP simulation...",
+  );
+
+  async function submit(event) {
+    event.preventDefault();
+    setSelectedUser(null);
+    const payload = {
+      antennas,
+      transmitter_pattern: TRANSMITTER_PATTERN,
+      ...form,
+    };
+    await setResultState(async () => ({
+      ...(await runRsrpSimulation(payload)),
+      request: payload,
+    }));
+  }
+
+  const result = resultState.result;
+  const solver = result?.solver || form.solver;
+
+  return (
+    <section className="api-page">
+      <div className="page-title">
+        <h1>RSRP Simulation</h1>
+        <p>Generate user spots across the active scene and calculate the received reference-signal power from each antenna.</p>
+      </div>
+      <div className="api-layout rsrp-layout">
+        <div className="api-panel">
+          <form className="api-form" onSubmit={submit}>
+            <FormSection title="Users">
+              <NumberField
+                label="User count"
+                value={form.user_count}
+                min={1}
+                max={MAX_RSRP_USER_COUNT}
+                step={1}
+                onChange={(value) => updateForm(setForm, "user_count", value)}
+              />
+              <NumberField
+                label="User height"
+                unit="m"
+                value={form.user_height_m}
+                min={0.5}
+                max={10}
+                onChange={(value) => updateForm(setForm, "user_height_m", value)}
+              />
+              <NumberField
+                label="Random seed"
+                value={form.random_seed}
+                min={0}
+                step={1}
+                onChange={(value) => updateForm(setForm, "random_seed", value)}
+              />
+              <p className="form-help">
+                Suggested count for this area: {suggestUserCount(form.solver)} users. 1000 is a good demo default for the current 300 m x 300 m planner area.
+              </p>
+            </FormSection>
+            <SolverFields solver={form.solver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
+            <button className="primary-button" type="submit" disabled={resultState.loading}>
+              {resultState.loading ? "Running..." : "Run RSRP simulation"}
+            </button>
+          </form>
+        </div>
+        <div className="api-result-panel">
+          <h2>Result</h2>
+          {resultState.error && <p className="history-status error-text">{resultState.error}</p>}
+          {!resultState.error && resultState.loading && <p className="history-status">Waiting for backend...</p>}
+          {!resultState.error && !resultState.loading && !result && (
+            <p className="history-status">Run the simulation to place generated users on the 3D scene.</p>
+          )}
+          {!resultState.error && result && (
+            <div className="result-summary">
+              <div className="api-result-scene-wrap rsrp-scene-wrap">
+                <Scene3DPreview
+                  antennas={result.antennas || antennas}
+                  bounds={activeScene?.bounds}
+                  className="api-result-scene-3d"
+                  onRsrpUserSelect={setSelectedUser}
+                  rsrpUsers={result.users || EMPTY_ARRAY}
+                  sceneName={activeScene?.name}
+                  selectedRsrpUser={selectedUser}
+                  showOverlay={false}
+                  solver={solver}
+                  viewMode="top"
+                />
+                {selectedUser && (
+                  <RsrpUserDialog
+                    user={selectedUser}
+                    onClose={() => setSelectedUser(null)}
+                  />
+                )}
+              </div>
+              <RsrpSummary result={result} />
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function ThroughputApiPage({ activeScene, onProgressChange }) {
   const [form, setForm] = useState(() => ({
     base_tilt: 6,
@@ -177,6 +293,114 @@ export function ThroughputApiPage({ activeScene, onProgressChange }) {
         </button>
       </form>
     </ApiPageShell>
+  );
+}
+
+function RsrpSummary({ result }) {
+  const summary = result.summary || {};
+  const qualityCounts = summary.quality_counts || {};
+
+  return (
+    <>
+      <h3>Overall user coverage</h3>
+      <dl className="detail-grid">
+        <dt>Status</dt><dd>{formatText(result.status)}</dd>
+        <dt>Users</dt><dd>{summary.user_count || result.user_count || "--"}</dd>
+        <dt>Covered users</dt><dd>{summary.covered_user_count ?? "--"}</dd>
+        <dt>Coverage</dt><dd>{formatMaybeNumber(summary.coverage_percent)}%</dd>
+        <dt>Average best RSRP</dt><dd>{formatMaybeNumber(summary.average_best_rsrp_dbm)} dBm</dd>
+        <dt>Seed</dt><dd>{result.random_seed}</dd>
+      </dl>
+      <div className="rsrp-quality-strip">
+        {["excellent", "good", "fair", "poor", "no_coverage"].map((quality) => (
+          <div key={quality} className={`rsrp-quality ${quality}`}>
+            <span>{qualityLabel(quality)}</span>
+            <strong>{qualityCounts[quality] || 0}</strong>
+          </div>
+        ))}
+      </div>
+      <h3>Antenna average RSRP</h3>
+      <table className="rsrp-table">
+        <thead>
+          <tr>
+            <th>Antenna</th>
+            <th>Avg all users</th>
+            <th>Avg serving users</th>
+            <th>Served</th>
+            <th>Measured</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(result.antenna_summary || []).map((item) => (
+            <tr key={item.antenna}>
+              <td>{item.antenna}</td>
+              <td>{formatMaybeNumber(item.average_rsrp_dbm)} dBm</td>
+              <td>{formatMaybeNumber(item.average_serving_rsrp_dbm)} dBm</td>
+              <td>{item.served_user_count}</td>
+              <td>{item.measured_user_count}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  );
+}
+
+function RsrpUserDialog({ onClose, user }) {
+  return (
+    <div className="coverage-cell-dialog rsrp-user-dialog" role="dialog" aria-label="RSRP user detail">
+      <button
+        className="coverage-cell-close"
+        type="button"
+        aria-label="Close user detail"
+        onClick={onClose}
+      >
+        x
+      </button>
+      <strong>{user.id} - {qualityLabel(user.quality)}</strong>
+      <dl>
+        <dt>Position</dt><dd>{formatPositionValue(user.position)}</dd>
+        <dt>Serving antenna</dt><dd>{formatText(user.serving_antenna)}</dd>
+        <dt>Best RSRP</dt><dd>{formatMaybeNumber(user.rsrp_dbm)} dBm</dd>
+        <dt>Grid cell</dt><dd>{user.grid ? `${user.grid.row}, ${user.grid.col}` : "--"}</dd>
+      </dl>
+      <div className="neighbor-list">
+        <span>Neighbors</span>
+        {user.neighbors?.length ? user.neighbors.map((neighbor) => (
+          <div key={neighbor.antenna}>
+            <strong>{neighbor.antenna}</strong>
+            <span>{formatMaybeNumber(neighbor.rsrp_dbm)} dBm</span>
+            <small>{formatMaybeNumber(neighbor.weaker_than_serving_db)} dB weaker</small>
+          </div>
+        )) : (
+          <p className="neighbor-empty">No close neighbor antenna for this user.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function qualityLabel(quality) {
+  return String(quality || "unknown")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function suggestUserCount(solver) {
+  const size = solver?.size || DEFAULT_SOLVER.size;
+  const area = Math.max(Number(size[0]) || 0, 1) * Math.max(Number(size[1]) || 0, 1);
+  const estimated = Math.round(area / 90);
+
+  if (!Number.isFinite(estimated) || estimated <= 0) {
+    return DEFAULT_RSRP_USER_COUNT;
+  }
+
+  return Math.min(
+    MAX_RSRP_USER_COUNT,
+    Math.max(
+      250,
+      estimated,
+    ),
   );
 }
 
