@@ -15,6 +15,7 @@ export default function HistoryPanel({
   comparisonType,
   historyError,
   historyStatus,
+  isLoading = false,
   items,
   onCancelComparison,
   onDelete,
@@ -29,6 +30,7 @@ export default function HistoryPanel({
       <p className={`history-status ${historyError ? "error-text" : ""}`}>{historyStatus}</p>
       <ComparisonPanel
         comparisonType={comparisonType}
+        isLoading={isLoading}
         selectedCount={selectedComparisonIds.size}
         onCancel={onCancelComparison}
         onShow={onShowComparison}
@@ -43,6 +45,7 @@ export default function HistoryPanel({
             comparisonType={comparisonType}
             isSelectedForComparison={selectedComparisonIds.has(item.id)}
             isSelectedHistory={item.id === selectedHistoryId}
+            isLoading={isLoading}
             onDelete={onDelete}
             onOpen={onOpen}
             onToggleCompare={onToggleCompare}
@@ -59,6 +62,7 @@ function HistoryRow({
   comparisonType,
   isSelectedForComparison,
   isSelectedHistory,
+  isLoading,
   item,
   onDelete,
   onOpen,
@@ -82,6 +86,7 @@ function HistoryRow({
       <button
         className={`history-item ${isSelectedHistory ? "active" : ""}`}
         type="button"
+        disabled={isLoading}
         onClick={() => onOpen(item.id)}
       >
         <strong>{formatSimulationType(item.simulation_type)} - {item.status}</strong>
@@ -91,7 +96,7 @@ function HistoryRow({
       <button
         className="history-compare"
         type="button"
-        disabled={!canCompareItem || !isCompatible}
+        disabled={isLoading || !canCompareItem || !isCompatible}
         title={compareButtonTitle(
           item,
           isComparing,
@@ -108,6 +113,7 @@ function HistoryRow({
         type="button"
         title="Delete simulation history"
         aria-label={`Delete ${formatSimulationType(item.simulation_type)} history`}
+        disabled={isLoading}
         onClick={() => onDelete(item)}
       >
         <TrashIcon />
@@ -116,7 +122,7 @@ function HistoryRow({
   );
 }
 
-function ComparisonPanel({ comparisonType, selectedCount, onCancel, onShow }) {
+function ComparisonPanel({ comparisonType, isLoading, selectedCount, onCancel, onShow }) {
   if (!comparisonType) {
     return null;
   }
@@ -128,11 +134,11 @@ function ComparisonPanel({ comparisonType, selectedCount, onCancel, onShow }) {
         <span>{selectedCount} selected. Choose 2 or more saved results.</span>
       </div>
       <div className="comparison-actions">
-        <button className="ghost-button" type="button" onClick={onCancel}>Cancel</button>
+        <button className="ghost-button" type="button" disabled={isLoading} onClick={onCancel}>Cancel</button>
         <button
           className="primary-button"
           type="button"
-          disabled={selectedCount < 2}
+          disabled={isLoading || selectedCount < 2}
           onClick={onShow}
         >
           Show comparison

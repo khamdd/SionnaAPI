@@ -223,6 +223,10 @@ export default function App() {
   }
 
   async function runSimulation() {
+    if (isRunning || isSceneLoading) {
+      return;
+    }
+
     setIsRunning(true);
     setRunError(false);
     setRunStatus("Running GPU simulation...");
@@ -303,6 +307,10 @@ export default function App() {
   }
 
   async function chooseScene() {
+    if (isRunning || apiProgressLabel || historyProgressLabel || historyPreviewLoadCount > 0 || isSceneLoading || isSceneListLoading) {
+      return;
+    }
+
     try {
       const result = await loadScenes();
       const importedCount = result.imported_scene_count || 0;
@@ -336,6 +344,10 @@ export default function App() {
   }
 
   async function showComparisonResult() {
+    if (historyProgressLabel || historyPreviewLoadCount > 0) {
+      return;
+    }
+
     if (!comparisonType || selectedComparisonIds.size < 2) {
       return;
     }
@@ -372,6 +384,10 @@ export default function App() {
   }
 
   async function openHistoryDetail(runId) {
+    if (historyProgressLabel || historyPreviewLoadCount > 0) {
+      return;
+    }
+
     setSelectedHistoryId(runId);
     setHistoryProgressLabel("Loading history detail...");
     setModalContent(<p className="history-status">Loading detail...</p>);
@@ -407,6 +423,10 @@ export default function App() {
   }
 
   async function deleteHistoryItem(item) {
+    if (historyProgressLabel || historyPreviewLoadCount > 0) {
+      return;
+    }
+
     const confirmed = window.confirm(
       `Delete ${formatSimulationType(item.simulation_type)} history from ${formatDateTime(item.created_at)}?`,
     );
@@ -491,6 +511,7 @@ export default function App() {
       <Navbar
         activeScene={activeScene}
         currentUser={currentUser}
+        isBusy={Boolean(busyLabel)}
         onChooseScene={chooseScene}
         onLogout={logout}
         route={route}
@@ -504,6 +525,7 @@ export default function App() {
           canvasRef={canvasRef}
           coverageImageUrl={coverageImageUrl}
           hover={hover}
+          isSceneLoading={isSceneLoading}
           isRunning={isRunning}
           latestGrid={latestGrid}
           latestSolver={latestSolver}
@@ -523,6 +545,7 @@ export default function App() {
         <CoverageApiPage
           activeScene={activeScene}
           onProgressChange={handleApiProgressChange}
+          onSceneLoadingChange={setIsSceneLoading}
         />
       )}
       {route === "/rsrp" && (
@@ -530,18 +553,21 @@ export default function App() {
           activeScene={activeScene}
           antennas={antennas}
           onProgressChange={handleApiProgressChange}
+          onSceneLoadingChange={setIsSceneLoading}
         />
       )}
       {route === "/sinr" && (
         <SinrApiPage
           activeScene={activeScene}
           onProgressChange={handleApiProgressChange}
+          onSceneLoadingChange={setIsSceneLoading}
         />
       )}
       {route === "/throughput" && (
         <ThroughputApiPage
           activeScene={activeScene}
           onProgressChange={handleApiProgressChange}
+          onSceneLoadingChange={setIsSceneLoading}
         />
       )}
       {route === "/history" && (
@@ -549,6 +575,7 @@ export default function App() {
           comparisonType={comparisonType}
           historyError={historyError}
           historyStatus={historyStatus}
+          isLoading={Boolean(historyProgressLabel) || historyPreviewLoadCount > 0}
           items={latestHistory}
           onCancelComparison={cancelComparison}
           onDelete={deleteHistoryItem}
@@ -565,7 +592,7 @@ export default function App() {
       {route === "/scenes" && (
         <ScenesPage
           activeSceneId={activeScene?.id}
-          isLoading={false}
+          isLoading={isSceneListLoading || isSceneLoading}
           notice={sceneNotice}
           onRefresh={loadScenes}
           onSceneActivated={handleSceneActivated}
@@ -602,6 +629,7 @@ export default function App() {
 function Navbar({
   activeScene,
   currentUser,
+  isBusy,
   onChooseScene,
   onLogout,
   onNavigate,
@@ -619,12 +647,13 @@ function Navbar({
             key={item.path}
             className={route === item.path ? "active" : ""}
             type="button"
+            disabled={isBusy}
             onClick={() => onNavigate(item.path)}
           >
             {item.label}
           </button>
         ))}
-        <button className="scene-picker-button" type="button" onClick={onChooseScene}>
+        <button className="scene-picker-button" type="button" disabled={isBusy} onClick={onChooseScene}>
           Choose scene
         </button>
         <button className="logout-button" type="button" onClick={onLogout}>
@@ -664,6 +693,7 @@ function NetworkCoveragePage({
   canvasRef,
   coverageImageUrl,
   hover,
+  isSceneLoading,
   isRunning,
   latestGrid,
   latestSolver,
@@ -686,6 +716,7 @@ function NetworkCoveragePage({
         coverageImageUrl={coverageImageUrl}
         canvasRef={canvasRef}
         hover={hover}
+        isBusy={isRunning || isSceneLoading}
         isRunning={isRunning}
         latestSolver={latestSolver}
         latestGrid={latestGrid}
@@ -702,12 +733,16 @@ function NetworkCoveragePage({
         <div className="panel-header">
           <h2>Antenna sectors</h2>
           <div className="panel-actions">
-            <button className="ghost-button" type="button" onClick={onResetAntennas}>
+            <button className="ghost-button" type="button" disabled={isRunning || isSceneLoading} onClick={onResetAntennas}>
               Reset
             </button>
           </div>
         </div>
-        <AntennaPanel antennas={antennas} onChange={onUpdateAntenna} />
+        <AntennaPanel
+          antennas={antennas}
+          disabled={isRunning || isSceneLoading}
+          onChange={onUpdateAntenna}
+        />
       </aside>
     </main>
   );
@@ -719,6 +754,7 @@ function HistoryRoutePage({
   comparisonType,
   historyError,
   historyStatus,
+  isLoading,
   items,
   onCancelComparison,
   onDelete,
@@ -736,7 +772,7 @@ function HistoryRoutePage({
           <h1>Simulation History</h1>
           <p>Review saved simulation runs, compare matching successful runs, or delete old records.</p>
         </div>
-        <button className="ghost-button" type="button" onClick={onRefresh}>
+        <button className="ghost-button" type="button" disabled={isLoading} onClick={onRefresh}>
           Refresh
         </button>
       </div>
@@ -747,6 +783,7 @@ function HistoryRoutePage({
           comparisonType={comparisonType}
           historyError={historyError}
           historyStatus={historyStatus}
+          isLoading={isLoading}
           items={items}
           onCancelComparison={onCancelComparison}
           onDelete={onDelete}

@@ -418,6 +418,7 @@ export default function SceneChooserModal({
                 value={locationQuery}
                 placeholder="Search location, e.g. Munich, Hanoi, Times Square"
                 autoComplete="off"
+                disabled={isBusy}
                 onBlur={() => window.setTimeout(() => setShowLocationResults(false), 150)}
                 onChange={(event) => {
                   setLocationQuery(event.target.value);
@@ -439,6 +440,7 @@ export default function SceneChooserModal({
                       key={place.place_id}
                       className="scene-location-result"
                       type="button"
+                      disabled={isBusy}
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => selectLocationResult(place)}
                     >
@@ -472,6 +474,7 @@ export default function SceneChooserModal({
               placeholder="Required, e.g. Hanoi test area"
               maxLength={80}
               required
+              disabled={isBusy}
               onChange={(event) => {
                 setSceneName(event.target.value);
                 if (event.target.value.trim()) {

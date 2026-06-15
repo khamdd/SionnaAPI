@@ -17,6 +17,7 @@ export default function MapPanel({
   coverageImageUrl,
   canvasRef,
   hover,
+  isBusy = false,
   isRunning,
   latestGrid,
   latestSolver,
@@ -47,10 +48,10 @@ export default function MapPanel({
         <button
           className="primary-button"
           type="button"
-          disabled={isRunning}
+          disabled={isBusy}
           onClick={onRun}
         >
-          {isRunning ? "Running..." : "Run simulation"}
+          {isRunning ? "Running..." : isBusy ? "Loading..." : "Run simulation"}
         </button>
       </div>
 

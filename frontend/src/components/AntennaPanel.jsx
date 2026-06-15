@@ -1,6 +1,6 @@
 import { formatPosition } from "../utils/format";
 
-export default function AntennaPanel({ antennas, onChange }) {
+export default function AntennaPanel({ antennas, disabled = false, onChange }) {
   return (
     <div className="antenna-list">
       {antennas.map((item, index) => (
@@ -22,6 +22,7 @@ export default function AntennaPanel({ antennas, onChange }) {
               max={item.tilt.max}
               step="0.5"
               value={item.tilt.current}
+              disabled={disabled}
               onChange={(event) => onChange(index, "tilt", Number(event.target.value))}
             />
             <span className="control-value">{item.tilt.current.toFixed(1)}</span>
@@ -35,6 +36,7 @@ export default function AntennaPanel({ antennas, onChange }) {
               max={item.tx_power.max}
               step="0.5"
               value={item.tx_power.current}
+              disabled={disabled}
               onChange={(event) => onChange(index, "tx_power", Number(event.target.value))}
             />
             <span className="control-value">{item.tx_power.current.toFixed(1)}</span>

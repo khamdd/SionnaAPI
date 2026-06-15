@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   runCoverageMap,
   runRsrpSimulation,
@@ -22,7 +22,7 @@ import {
 } from "../utils/format";
 import Scene3DPreview from "./Scene3DPreview";
 
-export function CoverageApiPage({ activeScene, onProgressChange }) {
+export function CoverageApiPage({ activeScene, onProgressChange, onSceneLoadingChange }) {
   const [form, setForm] = useState(() => ({
     tilt: 8,
     transmitter_position: [-45, -40, 30],
@@ -34,9 +34,14 @@ export function CoverageApiPage({ activeScene, onProgressChange }) {
     onProgressChange,
     "Running Coverage API...",
   );
+  const sceneStatus = useScenePreviewStatus(activeScene, onSceneLoadingChange);
 
   async function submit(event) {
     event.preventDefault();
+    if (resultState.loading || !sceneStatus.isSceneReady) {
+      return;
+    }
+
     const payload = {
       ...form,
       transmitter_pattern: TRANSMITTER_PATTERN,
@@ -51,25 +56,40 @@ export function CoverageApiPage({ activeScene, onProgressChange }) {
     <ApiPageShell
       title="Coverage API"
       description="Render a single-transmitter coverage map for a selected transmitter position, tilt, and power."
+      renderPreview={() => (
+        <ApiScenePreview
+          activeScene={activeScene}
+          isSceneReady={sceneStatus.isSceneReady}
+          onSceneLoadingChange={sceneStatus.handleSceneLoadingChange}
+        />
+      )}
       resultState={resultState}
-      renderResult={(result) => <CoverageResult activeScene={activeScene} result={result} />}
+      renderResult={(result) => (
+        <CoverageResult
+          activeScene={activeScene}
+          onSceneLoadingChange={sceneStatus.handleSceneLoadingChange}
+          result={result}
+        />
+      )}
     >
       <form className="api-form" onSubmit={submit}>
-        <FormSection title="Transmitter">
-          <NumberField label="Tilt" unit="deg" value={form.tilt} onChange={(value) => updateForm(setForm, "tilt", value)} />
-          <NumberField label="Power" unit="dBm" value={form.tx_power} onChange={(value) => updateForm(setForm, "tx_power", value)} />
-          <PositionField label="Position" value={form.transmitter_position} onChange={(value) => updateForm(setForm, "transmitter_position", value)} />
-        </FormSection>
-        <SolverFields solver={form.solver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
-        <button className="primary-button" type="submit" disabled={resultState.loading}>
-          {resultState.loading ? "Running..." : "Run coverage"}
-        </button>
+        <fieldset className="api-form-lock" disabled={resultState.loading || !sceneStatus.isSceneReady}>
+          <FormSection title="Transmitter">
+            <NumberField label="Tilt" unit="deg" value={form.tilt} onChange={(value) => updateForm(setForm, "tilt", value)} />
+            <NumberField label="Power" unit="dBm" value={form.tx_power} onChange={(value) => updateForm(setForm, "tx_power", value)} />
+            <PositionField label="Position" value={form.transmitter_position} onChange={(value) => updateForm(setForm, "transmitter_position", value)} />
+          </FormSection>
+          <SolverFields solver={form.solver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
+          <button className="primary-button" type="submit" disabled={resultState.loading || !sceneStatus.isSceneReady}>
+            {resultState.loading ? "Running..." : sceneStatus.isSceneReady ? "Run coverage" : "Loading scene..."}
+          </button>
+        </fieldset>
       </form>
     </ApiPageShell>
   );
 }
 
-export function SinrApiPage({ activeScene, onProgressChange }) {
+export function SinrApiPage({ activeScene, onProgressChange, onSceneLoadingChange }) {
   const [form, setForm] = useState(() => ({
     tilt: 8,
     transmitter_position: [0, 0, 30],
@@ -83,9 +103,14 @@ export function SinrApiPage({ activeScene, onProgressChange }) {
     onProgressChange,
     "Running SINR API...",
   );
+  const sceneStatus = useScenePreviewStatus(activeScene, onSceneLoadingChange);
 
   async function submit(event) {
     event.preventDefault();
+    if (resultState.loading || !sceneStatus.isSceneReady) {
+      return;
+    }
+
     const payload = {
       ...form,
       transmitter_pattern: TRANSMITTER_PATTERN,
@@ -100,30 +125,45 @@ export function SinrApiPage({ activeScene, onProgressChange }) {
     <ApiPageShell
       title="SINR API"
       description="Evaluate signal quality at one receiver point with one serving transmitter and one interferer."
+      renderPreview={() => (
+        <ApiScenePreview
+          activeScene={activeScene}
+          isSceneReady={sceneStatus.isSceneReady}
+          onSceneLoadingChange={sceneStatus.handleSceneLoadingChange}
+        />
+      )}
       resultState={resultState}
-      renderResult={(result) => <SinrResult activeScene={activeScene} result={result} />}
+      renderResult={(result) => (
+        <SinrResult
+          activeScene={activeScene}
+          onSceneLoadingChange={sceneStatus.handleSceneLoadingChange}
+          result={result}
+        />
+      )}
     >
       <form className="api-form" onSubmit={submit}>
-        <FormSection title="Serving transmitter">
-          <NumberField label="Tilt" unit="deg" value={form.tilt} onChange={(value) => updateForm(setForm, "tilt", value)} />
-          <NumberField label="Power" unit="dBm" value={form.tx_power} onChange={(value) => updateForm(setForm, "tx_power", value)} />
-          <PositionField label="Position" value={form.transmitter_position} onChange={(value) => updateForm(setForm, "transmitter_position", value)} />
-        </FormSection>
-        <FormSection title="Receiver and interferer">
-          <PositionField label="Receiver" value={form.receiver_position} onChange={(value) => updateForm(setForm, "receiver_position", value)} />
-          <PositionField label="Interferer" value={form.interferer_position} onChange={(value) => updateForm(setForm, "interferer_position", value)} />
-          <NumberField label="Interferer tilt" unit="deg" value={form.interferer_tilt} onChange={(value) => updateForm(setForm, "interferer_tilt", value)} />
-        </FormSection>
-        <SolverFields solver={form.solver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
-        <button className="primary-button" type="submit" disabled={resultState.loading}>
-          {resultState.loading ? "Running..." : "Calculate SINR"}
-        </button>
+        <fieldset className="api-form-lock" disabled={resultState.loading || !sceneStatus.isSceneReady}>
+          <FormSection title="Serving transmitter">
+            <NumberField label="Tilt" unit="deg" value={form.tilt} onChange={(value) => updateForm(setForm, "tilt", value)} />
+            <NumberField label="Power" unit="dBm" value={form.tx_power} onChange={(value) => updateForm(setForm, "tx_power", value)} />
+            <PositionField label="Position" value={form.transmitter_position} onChange={(value) => updateForm(setForm, "transmitter_position", value)} />
+          </FormSection>
+          <FormSection title="Receiver and interferer">
+            <PositionField label="Receiver" value={form.receiver_position} onChange={(value) => updateForm(setForm, "receiver_position", value)} />
+            <PositionField label="Interferer" value={form.interferer_position} onChange={(value) => updateForm(setForm, "interferer_position", value)} />
+            <NumberField label="Interferer tilt" unit="deg" value={form.interferer_tilt} onChange={(value) => updateForm(setForm, "interferer_tilt", value)} />
+          </FormSection>
+          <SolverFields solver={form.solver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
+          <button className="primary-button" type="submit" disabled={resultState.loading || !sceneStatus.isSceneReady}>
+            {resultState.loading ? "Running..." : sceneStatus.isSceneReady ? "Calculate SINR" : "Loading scene..."}
+          </button>
+        </fieldset>
       </form>
     </ApiPageShell>
   );
 }
 
-export function RsrpSimulationPage({ activeScene, antennas, onProgressChange }) {
+export function RsrpSimulationPage({ activeScene, antennas, onProgressChange, onSceneLoadingChange }) {
   const [selectedUser, setSelectedUser] = useState(null);
   const [form, setForm] = useState(() => ({
     user_count: suggestUserCount(DEFAULT_SOLVER),
@@ -135,9 +175,14 @@ export function RsrpSimulationPage({ activeScene, antennas, onProgressChange }) 
     onProgressChange,
     "Running RSRP simulation...",
   );
+  const sceneStatus = useScenePreviewStatus(activeScene, onSceneLoadingChange);
 
   async function submit(event) {
     event.preventDefault();
+    if (resultState.loading || !sceneStatus.isSceneReady) {
+      return;
+    }
+
     setSelectedUser(null);
     const payload = {
       antennas,
@@ -163,38 +208,40 @@ export function RsrpSimulationPage({ activeScene, antennas, onProgressChange }) 
       <div className="api-layout rsrp-layout">
         <div className="api-panel">
           <form className="api-form" onSubmit={submit}>
-            <FormSection title="Users">
-              <NumberField
-                label="User count"
-                value={form.user_count}
-                min={1}
-                max={MAX_RSRP_USER_COUNT}
-                step={1}
-                onChange={(value) => updateForm(setForm, "user_count", value)}
-              />
-              <NumberField
-                label="User height"
-                unit="m"
-                value={form.user_height_m}
-                min={0.5}
-                max={10}
-                onChange={(value) => updateForm(setForm, "user_height_m", value)}
-              />
-              <NumberField
-                label="Random seed"
-                value={form.random_seed}
-                min={0}
-                step={1}
-                onChange={(value) => updateForm(setForm, "random_seed", value)}
-              />
-              <p className="form-help">
-                Suggested count for this area: {suggestUserCount(form.solver)} users. 1000 is a good demo default for the current 300 m x 300 m planner area.
-              </p>
-            </FormSection>
-            <SolverFields solver={form.solver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
-            <button className="primary-button" type="submit" disabled={resultState.loading}>
-              {resultState.loading ? "Running..." : "Run RSRP simulation"}
-            </button>
+            <fieldset className="api-form-lock" disabled={resultState.loading || !sceneStatus.isSceneReady}>
+              <FormSection title="Users">
+                <NumberField
+                  label="User count"
+                  value={form.user_count}
+                  min={1}
+                  max={MAX_RSRP_USER_COUNT}
+                  step={1}
+                  onChange={(value) => updateForm(setForm, "user_count", value)}
+                />
+                <NumberField
+                  label="User height"
+                  unit="m"
+                  value={form.user_height_m}
+                  min={0.5}
+                  max={10}
+                  onChange={(value) => updateForm(setForm, "user_height_m", value)}
+                />
+                <NumberField
+                  label="Random seed"
+                  value={form.random_seed}
+                  min={0}
+                  step={1}
+                  onChange={(value) => updateForm(setForm, "random_seed", value)}
+                />
+                <p className="form-help">
+                  Suggested count for this area: {suggestUserCount(form.solver)} users. 1000 is a good demo default for the current 300 m x 300 m planner area.
+                </p>
+              </FormSection>
+              <SolverFields solver={form.solver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
+              <button className="primary-button" type="submit" disabled={resultState.loading || !sceneStatus.isSceneReady}>
+                {resultState.loading ? "Running..." : sceneStatus.isSceneReady ? "Run RSRP simulation" : "Loading scene..."}
+              </button>
+            </fieldset>
           </form>
         </div>
         <div className="api-result-panel">
@@ -206,9 +253,10 @@ export function RsrpSimulationPage({ activeScene, antennas, onProgressChange }) 
               {activeScene?.bounds ? (
                 <>
                   <Scene3DPreview
-                    antennas={result?.antennas || antennas}
+                    antennas={result ? result.antennas || antennas : EMPTY_ARRAY}
                     bounds={activeScene.bounds}
                     className="api-result-scene-3d"
+                    onLoadingChange={sceneStatus.handleSceneLoadingChange}
                     onRsrpUserSelect={setSelectedUser}
                     rsrpUsers={rsrpUsers}
                     sceneName={activeScene.name}
@@ -243,7 +291,7 @@ export function RsrpSimulationPage({ activeScene, antennas, onProgressChange }) 
   );
 }
 
-export function ThroughputApiPage({ activeScene, onProgressChange }) {
+export function ThroughputApiPage({ activeScene, onProgressChange, onSceneLoadingChange }) {
   const [form, setForm] = useState(() => ({
     base_tilt: 6,
     target_tilt: 12,
@@ -260,9 +308,14 @@ export function ThroughputApiPage({ activeScene, onProgressChange }) {
     onProgressChange,
     "Running Throughput API...",
   );
+  const sceneStatus = useScenePreviewStatus(activeScene, onSceneLoadingChange);
 
   async function submit(event) {
     event.preventDefault();
+    if (resultState.loading || !sceneStatus.isSceneReady) {
+      return;
+    }
+
     const payload = {
       ...form,
       transmitter_pattern: TRANSMITTER_PATTERN,
@@ -277,29 +330,44 @@ export function ThroughputApiPage({ activeScene, onProgressChange }) {
     <ApiPageShell
       title="Throughput API"
       description="Compare estimated receiver throughput between two transmitter tilt settings."
+      renderPreview={() => (
+        <ApiScenePreview
+          activeScene={activeScene}
+          isSceneReady={sceneStatus.isSceneReady}
+          onSceneLoadingChange={sceneStatus.handleSceneLoadingChange}
+        />
+      )}
       resultState={resultState}
-      renderResult={(result) => <ThroughputResult activeScene={activeScene} result={result} />}
+      renderResult={(result) => (
+        <ThroughputResult
+          activeScene={activeScene}
+          onSceneLoadingChange={sceneStatus.handleSceneLoadingChange}
+          result={result}
+        />
+      )}
     >
       <form className="api-form" onSubmit={submit}>
-        <FormSection title="Tilt comparison">
-          <NumberField label="Base tilt" unit="deg" value={form.base_tilt} onChange={(value) => updateForm(setForm, "base_tilt", value)} />
-          <NumberField label="Target tilt" unit="deg" value={form.target_tilt} onChange={(value) => updateForm(setForm, "target_tilt", value)} />
-          <NumberField label="Power" unit="dBm" value={form.tx_power} onChange={(value) => updateForm(setForm, "tx_power", value)} />
-        </FormSection>
-        <FormSection title="Radio link">
-          <PositionField label="Transmitter" value={form.transmitter_position} onChange={(value) => updateForm(setForm, "transmitter_position", value)} />
-          <PositionField label="Receiver" value={form.receiver_position} onChange={(value) => updateForm(setForm, "receiver_position", value)} />
-          <PositionField label="Interferer" value={form.interferer_position} onChange={(value) => updateForm(setForm, "interferer_position", value)} />
-          <NumberField label="Interferer tilt" unit="deg" value={form.interferer_tilt} onChange={(value) => updateForm(setForm, "interferer_tilt", value)} />
-        </FormSection>
-        <FormSection title="Throughput assumptions">
-          <NumberField label="Bandwidth" unit="MHz" value={form.bandwidth_mhz} min={1} onChange={(value) => updateForm(setForm, "bandwidth_mhz", value)} />
-          <NumberField label="MIMO layers" value={form.mimo_layers} min={1} step={1} onChange={(value) => updateForm(setForm, "mimo_layers", value)} />
-        </FormSection>
-        <SolverFields solver={form.solver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
-        <button className="primary-button" type="submit" disabled={resultState.loading}>
-          {resultState.loading ? "Running..." : "Compare throughput"}
-        </button>
+        <fieldset className="api-form-lock" disabled={resultState.loading || !sceneStatus.isSceneReady}>
+          <FormSection title="Tilt comparison">
+            <NumberField label="Base tilt" unit="deg" value={form.base_tilt} onChange={(value) => updateForm(setForm, "base_tilt", value)} />
+            <NumberField label="Target tilt" unit="deg" value={form.target_tilt} onChange={(value) => updateForm(setForm, "target_tilt", value)} />
+            <NumberField label="Power" unit="dBm" value={form.tx_power} onChange={(value) => updateForm(setForm, "tx_power", value)} />
+          </FormSection>
+          <FormSection title="Radio link">
+            <PositionField label="Transmitter" value={form.transmitter_position} onChange={(value) => updateForm(setForm, "transmitter_position", value)} />
+            <PositionField label="Receiver" value={form.receiver_position} onChange={(value) => updateForm(setForm, "receiver_position", value)} />
+            <PositionField label="Interferer" value={form.interferer_position} onChange={(value) => updateForm(setForm, "interferer_position", value)} />
+            <NumberField label="Interferer tilt" unit="deg" value={form.interferer_tilt} onChange={(value) => updateForm(setForm, "interferer_tilt", value)} />
+          </FormSection>
+          <FormSection title="Throughput assumptions">
+            <NumberField label="Bandwidth" unit="MHz" value={form.bandwidth_mhz} min={1} onChange={(value) => updateForm(setForm, "bandwidth_mhz", value)} />
+            <NumberField label="MIMO layers" value={form.mimo_layers} min={1} step={1} onChange={(value) => updateForm(setForm, "mimo_layers", value)} />
+          </FormSection>
+          <SolverFields solver={form.solver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
+          <button className="primary-button" type="submit" disabled={resultState.loading || !sceneStatus.isSceneReady}>
+            {resultState.loading ? "Running..." : sceneStatus.isSceneReady ? "Compare throughput" : "Loading scene..."}
+          </button>
+        </fieldset>
       </form>
     </ApiPageShell>
   );
@@ -413,7 +481,7 @@ function suggestUserCount(solver) {
   );
 }
 
-function ApiPageShell({ children, description, renderResult, resultState, title }) {
+function ApiPageShell({ children, description, renderPreview, renderResult, resultState, title }) {
   return (
     <section className="api-page">
       <div className="page-title">
@@ -428,14 +496,65 @@ function ApiPageShell({ children, description, renderResult, resultState, title 
           <h2>Result</h2>
           {resultState.error && <p className="history-status error-text">{resultState.error}</p>}
           {!resultState.error && resultState.loading && <p className="history-status">Waiting for backend...</p>}
-          {!resultState.error && !resultState.loading && !resultState.result && (
-            <p className="history-status">Run the API to see the response summary here.</p>
-          )}
+          {!resultState.error && !resultState.result && renderPreview?.()}
           {!resultState.error && resultState.result && renderResult(resultState.result)}
         </div>
       </div>
     </section>
   );
+}
+
+function ApiScenePreview({ activeScene, isSceneReady, onSceneLoadingChange }) {
+  return (
+    <div className="result-summary">
+      <div className="api-result-scene-wrap">
+        {activeScene?.bounds ? (
+          <Scene3DPreview
+            bounds={activeScene.bounds}
+            className="api-result-scene-3d"
+            onLoadingChange={onSceneLoadingChange}
+            sceneName={activeScene.name}
+            showOverlay={false}
+            solver={DEFAULT_SOLVER}
+            viewMode="top"
+          />
+        ) : (
+          <p className="history-status">No 3D scene is available for the active scene.</p>
+        )}
+      </div>
+      <p className="history-status">
+        {isSceneReady
+          ? "Scene is ready. Run the API to see the response summary here."
+          : "Loading the 3D scene before simulation can run..."}
+      </p>
+    </div>
+  );
+}
+
+function useScenePreviewStatus(activeScene, onSceneLoadingChange) {
+  const hasSceneBounds = Boolean(activeScene?.bounds);
+  const [isScenePreviewLoading, setIsScenePreviewLoading] = useState(hasSceneBounds);
+
+  useEffect(() => {
+    setIsScenePreviewLoading(hasSceneBounds);
+    onSceneLoadingChange?.(hasSceneBounds);
+
+    return () => {
+      onSceneLoadingChange?.(false);
+    };
+  }, [activeScene?.id, hasSceneBounds, onSceneLoadingChange]);
+
+  const handleSceneLoadingChange = useCallback((active) => {
+    const nextValue = Boolean(active);
+    setIsScenePreviewLoading(nextValue);
+    onSceneLoadingChange?.(nextValue);
+  }, [onSceneLoadingChange]);
+
+  return {
+    handleSceneLoadingChange,
+    isScenePreviewLoading,
+    isSceneReady: hasSceneBounds && !isScenePreviewLoading,
+  };
 }
 
 function FormSection({ children, title }) {
@@ -522,7 +641,7 @@ function SizeField({ label, onChange, value }) {
   );
 }
 
-function CoverageResult({ activeScene, result }) {
+function CoverageResult({ activeScene, onSceneLoadingChange, result }) {
   const request = result.request || {};
   const solver = result.solver || request.solver || {};
 
@@ -533,6 +652,7 @@ function CoverageResult({ activeScene, result }) {
         antennas={coverageResultAntennas(result, request)}
         fallbackImageUrl={result.coverage_map_image_url}
         coverageGrid={result.grid}
+        onSceneLoadingChange={onSceneLoadingChange}
         result={result}
         solver={solver}
       />
@@ -556,7 +676,7 @@ function CoverageResult({ activeScene, result }) {
   );
 }
 
-function SinrResult({ activeScene, result }) {
+function SinrResult({ activeScene, onSceneLoadingChange, result }) {
   const request = result.request || {};
 
   return (
@@ -565,6 +685,7 @@ function SinrResult({ activeScene, result }) {
         activeScene={activeScene}
         antennas={linkResultAntennas(result, request)}
         result={result}
+        onSceneLoadingChange={onSceneLoadingChange}
         sceneBadges={sinrSceneBadges(result)}
         signalLinks={radioLinkVisuals(request)}
         solver={result.solver || request.solver}
@@ -592,7 +713,7 @@ function SinrResult({ activeScene, result }) {
   );
 }
 
-function ThroughputResult({ activeScene, result }) {
+function ThroughputResult({ activeScene, onSceneLoadingChange, result }) {
   const request = result.request || {};
   const comparison = result.comparison || {};
 
@@ -602,6 +723,7 @@ function ThroughputResult({ activeScene, result }) {
         activeScene={activeScene}
         antennas={linkResultAntennas(result, request)}
         result={result}
+        onSceneLoadingChange={onSceneLoadingChange}
         sceneBadges={throughputSceneBadges(result)}
         signalLinks={radioLinkVisuals(request)}
         solver={result.solver || request.solver}
@@ -635,6 +757,7 @@ function ApiResultScene({
   antennas = EMPTY_ARRAY,
   coverageGrid = null,
   fallbackImageUrl = "",
+  onSceneLoadingChange = null,
   result,
   sceneBadges = EMPTY_ARRAY,
   signalLinks = EMPTY_ARRAY,
@@ -651,6 +774,7 @@ function ApiResultScene({
           className="api-result-scene-3d"
           coverageGrid={coverageGrid}
           coverageImageUrl={coverageGrid ? "" : fallbackImageUrl}
+          onLoadingChange={onSceneLoadingChange}
           onCoverageCellSelect={setSelectedCell}
           sceneName={activeScene.name}
           selectedCoverageCell={selectedCell}
@@ -834,6 +958,10 @@ function useApiResult(onProgressChange, progressLabel) {
   });
 
   async function run(requestFactory) {
+    if (state.loading) {
+      return;
+    }
+
     onProgressChange?.(true, progressLabel);
     setState({
       error: "",

@@ -14,6 +14,10 @@ export default function ScenesPage({
   scenes,
 }) {
   async function loadScene(scene) {
+    if (isLoading) {
+      return;
+    }
+
     onSetNotice("Loading scene...");
 
     try {
@@ -26,6 +30,10 @@ export default function ScenesPage({
   }
 
   async function removeScene(scene) {
+    if (isLoading) {
+      return;
+    }
+
     const confirmed = window.confirm(`Delete scene "${scene.name}"?`);
 
     if (!confirmed) {
@@ -50,7 +58,7 @@ export default function ScenesPage({
           <h1>Scenes</h1>
           <p>Manage imported scenes. Munich is always available as the default scene.</p>
         </div>
-        <button className="ghost-button" type="button" onClick={onRefresh}>
+        <button className="ghost-button" type="button" disabled={isLoading} onClick={onRefresh}>
           Refresh
         </button>
       </div>

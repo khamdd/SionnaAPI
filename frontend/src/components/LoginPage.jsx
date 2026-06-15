@@ -13,6 +13,11 @@ export default function LoginPage({ onAuthenticated }) {
 
   async function submit(event) {
     event.preventDefault();
+
+    if (isLoading) {
+      return;
+    }
+
     setIsLoading(true);
     setStatus(isRegistering ? "Creating account..." : "Signing in...");
 
@@ -32,6 +37,10 @@ export default function LoginPage({ onAuthenticated }) {
   }
 
   function switchMode(nextMode) {
+    if (isLoading) {
+      return;
+    }
+
     setMode(nextMode);
     setStatus("");
   }
@@ -49,6 +58,7 @@ export default function LoginPage({ onAuthenticated }) {
           <button
             className={mode === "login" ? "active" : ""}
             type="button"
+            disabled={isLoading}
             onClick={() => switchMode("login")}
           >
             Login
@@ -56,6 +66,7 @@ export default function LoginPage({ onAuthenticated }) {
           <button
             className={mode === "register" ? "active" : ""}
             type="button"
+            disabled={isLoading}
             onClick={() => switchMode("register")}
           >
             Register
@@ -72,6 +83,7 @@ export default function LoginPage({ onAuthenticated }) {
               maxLength={80}
               autoComplete="username"
               required
+              disabled={isLoading}
               onChange={(event) => setUsername(event.target.value)}
             />
           </label>
@@ -84,6 +96,7 @@ export default function LoginPage({ onAuthenticated }) {
               maxLength={256}
               autoComplete={isRegistering ? "new-password" : "current-password"}
               required
+              disabled={isLoading}
               onChange={(event) => setPassword(event.target.value)}
             />
           </label>
