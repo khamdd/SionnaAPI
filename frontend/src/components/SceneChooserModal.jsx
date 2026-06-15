@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import { activateScene, createScenePreview, deleteScene } from "../api";
+import {
+  MAX_SCENE_AREA_KM2,
+  SCENE_CHOOSER_DEFAULT_CENTER,
+  SCENE_CHOOSER_DEFAULT_ZOOM,
+} from "../constants";
 import { formatMaybeNumber } from "../utils/format";
 import Scene3DPreview from "./Scene3DPreview";
-
-const DEFAULT_CENTER = [48.1374, 11.5755];
-const DEFAULT_ZOOM = 14;
-const MAX_AREA_KM2 = 1;
 
 export default function SceneChooserModal({
   onClose,
@@ -35,7 +36,7 @@ export default function SceneChooserModal({
   const [isBusy, setIsBusy] = useState(false);
 
   const metrics = bounds ? calculateMetrics(bounds) : null;
-  const isTooLarge = metrics && metrics.areaKm2 > MAX_AREA_KM2;
+  const isTooLarge = metrics && metrics.areaKm2 > MAX_SCENE_AREA_KM2;
 
   useEffect(() => {
     const node = mapNodeRef.current;
@@ -46,8 +47,8 @@ export default function SceneChooserModal({
 
     const savedView = mapViewRef.current;
     const map = L.map(node, {
-      center: savedView?.center || DEFAULT_CENTER,
-      zoom: savedView?.zoom || DEFAULT_ZOOM,
+      center: savedView?.center || SCENE_CHOOSER_DEFAULT_CENTER,
+      zoom: savedView?.zoom || SCENE_CHOOSER_DEFAULT_ZOOM,
       minZoom: 2,
       maxZoom: 18,
       scrollWheelZoom: true,

@@ -1,14 +1,13 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-
-const DEFAULT_PADDING = [8, 8];
+import { SCENE_MAP_PREVIEW_PADDING } from "../constants";
 
 export default function SceneMapPreview({
   bounds,
   className = "scene-preview-map",
   maxZoom = 18,
-  padding = DEFAULT_PADDING,
+  padding = SCENE_MAP_PREVIEW_PADDING,
 }) {
   const nodeRef = useRef(null);
 

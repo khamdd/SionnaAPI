@@ -1,23 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-
-const DEFAULT_HEIGHT_M = 9;
-const SELECTED_CELL_OUTLINE = {
-  fillColor: 0xffffff,
-  fillOpacity: 0.22,
-  lineColor: 0xffffff,
-  renderOrder: 8,
-  y: 3.2,
-};
-const HOVER_CELL_OUTLINE = {
-  fillColor: 0xfacc15,
-  fillOpacity: 0.34,
-  lineColor: 0xf59e0b,
-  renderOrder: 9,
-  y: 4.0,
-};
-const EMPTY_ARRAY = Object.freeze([]);
+import {
+  DEFAULT_BUILDING_HEIGHT_M,
+  EMPTY_ARRAY,
+  HOVER_CELL_OUTLINE,
+  SELECTED_CELL_OUTLINE,
+} from "../constants";
 
 export default function Scene3DPreview({
   antennas = EMPTY_ARRAY,
@@ -251,7 +240,7 @@ function estimateHeightFromType(tags = {}) {
     return 24;
   }
 
-  return DEFAULT_HEIGHT_M;
+  return DEFAULT_BUILDING_HEIGHT_M;
 }
 
 function parseMeters(value) {

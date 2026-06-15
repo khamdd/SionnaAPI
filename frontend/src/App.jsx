@@ -8,8 +8,11 @@ import {
 } from "./api";
 import {
   DEFAULT_ANTENNAS,
+  DEFAULT_ACTIVE_SCENE,
   DEFAULT_SOLVER,
+  ROUTES,
   TRANSMITTER_PATTERN,
+  USER_STORAGE_KEY,
 } from "./constants";
 import AntennaPanel from "./components/AntennaPanel";
 import {
@@ -35,28 +38,6 @@ import {
   drawHeatmap,
   summarizeGrid,
 } from "./utils/map";
-
-const ROUTES = [
-  { path: "/network", label: "Network Coverage" },
-  { path: "/coverage", label: "Coverage API" },
-  { path: "/sinr", label: "SINR API" },
-  { path: "/throughput", label: "Throughput API" },
-  { path: "/history", label: "History" },
-  { path: "/scenes", label: "Scenes" },
-];
-
-const DEFAULT_ACTIVE_SCENE = {
-  id: "munich",
-  name: "Munich",
-  is_default: true,
-  bounds: {
-    south: 48.1344,
-    west: 11.5715,
-    north: 48.1404,
-    east: 11.5795,
-  },
-};
-const USER_STORAGE_KEY = "sionna_user";
 
 function clone(value) {
   return structuredClone(value);

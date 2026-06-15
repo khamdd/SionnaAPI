@@ -5,7 +5,9 @@ import {
   runThroughputComparison,
 } from "../api";
 import {
+  DEFAULT_CAMERA,
   DEFAULT_SOLVER,
+  EMPTY_ARRAY,
   TRANSMITTER_PATTERN,
 } from "../constants";
 import {
@@ -14,12 +16,6 @@ import {
   formatText,
 } from "../utils/format";
 import Scene3DPreview from "./Scene3DPreview";
-
-const DEFAULT_CAMERA = {
-  position: [-1.5, -137, 115],
-  look_at: [0, 0, 10],
-};
-const EMPTY_ARRAY = Object.freeze([]);
 
 export function CoverageApiPage({ activeScene, onProgressChange }) {
   const [form, setForm] = useState(() => ({
