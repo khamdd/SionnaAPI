@@ -12,6 +12,7 @@ import {
   DEFAULT_SOLVER,
   ROUTES,
   TRANSMITTER_PATTERN,
+  AUTH_TOKEN_STORAGE_KEY,
   USER_STORAGE_KEY,
 } from "./constants";
 import AntennaPanel from "./components/AntennaPanel";
@@ -79,13 +80,17 @@ export default function App() {
   const mapStageRef = useRef(null);
   const summary = useMemo(() => summarizeGrid(latestGrid), [latestGrid]);
 
-  function authenticate(user) {
+  function authenticate(authResult) {
+    const user = authResult.user;
+
     setCurrentUser(user);
     localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+    localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authResult.access_token);
   }
 
   function logout() {
     localStorage.removeItem(USER_STORAGE_KEY);
+    localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
     setCurrentUser(null);
   }
 
@@ -667,6 +672,10 @@ function Navbar({
 
 function readStoredUser() {
   try {
+    if (!localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)) {
+      return null;
+    }
+
     return JSON.parse(localStorage.getItem(USER_STORAGE_KEY));
   } catch {
     return null;

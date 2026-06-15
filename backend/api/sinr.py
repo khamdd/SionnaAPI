@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
+from backend.api.dependencies import require_current_user
 from backend.schemas.requests import (
     CoverageRequest,
     NetworkCoverageRequest,
@@ -44,7 +45,8 @@ from backend.services.event_logger import log_event
 from backend.simulations.sionna_engine import engine
 
 router = APIRouter(
-    tags=["Sionna"]
+    tags=["Sionna"],
+    dependencies=[Depends(require_current_user)],
 )
 
 

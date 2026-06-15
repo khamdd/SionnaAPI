@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.api import sinr as api_module
+from backend.api.dependencies import require_current_user
 from backend.main import app
 
 
@@ -22,6 +23,16 @@ class FakeEngine:
 @pytest.fixture(autouse=True)
 def fake_sionna_engine(monkeypatch):
     monkeypatch.setattr(api_module, "engine", FakeEngine())
+
+
+@pytest.fixture(autouse=True)
+def authenticated_user():
+    app.dependency_overrides[require_current_user] = lambda: {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "username": "test-user",
+    }
+    yield
+    app.dependency_overrides.pop(require_current_user, None)
 
 
 def failure_payload():

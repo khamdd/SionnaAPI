@@ -30,6 +30,8 @@ from backend.constants.scenes import (
     MAX_SCENE_SIDE_M,
 )
 from backend.constants.security import (
+    ACCESS_TOKEN_EXPIRE_HOURS,
+    ACCESS_TOKEN_VERSION,
     HASH_ALGORITHM,
     HASH_ITERATIONS,
     SALT_BYTES,

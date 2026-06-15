@@ -1,12 +1,21 @@
 import base64
 import hashlib
 import hmac
+import json
 import secrets
+import time
 
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-from backend.constants import HASH_ALGORITHM, HASH_ITERATIONS, SALT_BYTES
+from backend.constants import (
+    ACCESS_TOKEN_EXPIRE_HOURS,
+    ACCESS_TOKEN_VERSION,
+    HASH_ALGORITHM,
+    HASH_ITERATIONS,
+    SALT_BYTES,
+)
+from backend.core.config import get_auth_settings
 from backend.database import db_session, is_database_configured
 from backend.services.event_logger import log_event
 
@@ -60,6 +69,8 @@ def create_user(username, password):
         return {
             "status": "success",
             "user": serialize_user(row),
+            "access_token": create_access_token(row),
+            "token_type": "bearer",
         }
 
     except IntegrityError:
@@ -159,6 +170,8 @@ def login_user(username, password):
         return {
             "status": "success",
             "user": serialize_user(row),
+            "access_token": create_access_token(row),
+            "token_type": "bearer",
         }
 
     except SQLAlchemyError:
@@ -231,11 +244,139 @@ def verify_password(password, encoded_hash):
         return False
 
 
+def create_access_token(row):
+    now = int(time.time())
+    payload = {
+        "version": ACCESS_TOKEN_VERSION,
+        "sub": str(row["id"]),
+        "username": row["username"],
+        "iat": now,
+        "exp": now + ACCESS_TOKEN_EXPIRE_HOURS * 60 * 60,
+    }
+    encoded_payload = base64url_encode(
+        json.dumps(
+            payload,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    )
+    signature = sign_token_payload(encoded_payload)
+
+    return f"{encoded_payload}.{signature}"
+
+
+def authenticate_access_token(token):
+    payload = decode_access_token(token)
+
+    if payload is None:
+        return invalid_token()
+
+    if not is_database_configured():
+        return {
+            "status": "failure",
+            "status_code": 503,
+            "error": "Database is not configured.",
+        }
+
+    try:
+        with db_session() as session:
+            row = session.execute(
+                text(
+                    """
+                    SELECT
+                        id,
+                        username,
+                        is_active,
+                        created_at
+                    FROM app_users
+                    WHERE id = :user_id
+                    """
+                ),
+                {
+                    "user_id": payload["sub"],
+                },
+            ).mappings().first()
+
+        if row is None or not row["is_active"]:
+            return invalid_token()
+
+        return {
+            "status": "success",
+            "user": serialize_user(row),
+        }
+
+    except SQLAlchemyError:
+        return {
+            "status": "failure",
+            "status_code": 500,
+            "error": "Failed to authenticate request.",
+        }
+
+
+def decode_access_token(token):
+    try:
+        encoded_payload, encoded_signature = token.split(".", 1)
+    except ValueError:
+        return None
+
+    expected_signature = sign_token_payload(encoded_payload)
+    if not hmac.compare_digest(encoded_signature, expected_signature):
+        return None
+
+    try:
+        payload = json.loads(base64url_decode(encoded_payload).decode("utf-8"))
+    except (ValueError, TypeError, UnicodeDecodeError):
+        return None
+
+    if payload.get("version") != ACCESS_TOKEN_VERSION:
+        return None
+
+    if not payload.get("sub") or not payload.get("username"):
+        return None
+
+    try:
+        expires_at = int(payload.get("exp", 0))
+    except (TypeError, ValueError):
+        return None
+
+    if expires_at < int(time.time()):
+        return None
+
+    return payload
+
+
+def sign_token_payload(encoded_payload):
+    digest = hmac.new(
+        get_auth_settings().secret_key.encode("utf-8"),
+        encoded_payload.encode("ascii"),
+        hashlib.sha256,
+    ).digest()
+
+    return base64url_encode(digest)
+
+
+def base64url_encode(value):
+    return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
+
+
+def base64url_decode(value):
+    padding = "=" * (-len(value) % 4)
+    return base64.urlsafe_b64decode((value + padding).encode("ascii"))
+
+
 def invalid_login():
     return {
         "status": "failure",
         "status_code": 401,
         "error": "Invalid username or password.",
+    }
+
+
+def invalid_token():
+    return {
+        "status": "failure",
+        "status_code": 401,
+        "error": "Invalid or expired access token.",
     }
 
 

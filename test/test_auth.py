@@ -137,6 +137,8 @@ def test_register_success_logs_user_without_password(monkeypatch):
     result = auth_service.create_user("alice", "password123")
 
     assert result["status"] == "success"
+    assert result["token_type"] == "bearer"
+    assert result["access_token"]
     assert events == [
         (
             "user_registered",
@@ -173,3 +175,10 @@ def test_login_invalid_credentials_logs_failure(monkeypatch):
             },
         )
     ]
+
+
+def test_protected_routes_reject_missing_access_token():
+    response = client.get("/api/v1/simulation-runs")
+
+    assert response.status_code == 401
+    assert response.json()["detail"]["error"] == "Missing access token."

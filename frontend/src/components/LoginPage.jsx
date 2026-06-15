@@ -28,7 +28,7 @@ export default function LoginPage({ onAuthenticated }) {
         password,
       });
 
-      onAuthenticated(result.user);
+      onAuthenticated(result);
     } catch (error) {
       setStatus(error.message);
     } finally {

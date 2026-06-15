@@ -96,6 +96,7 @@ Minimum database example:
 
 ```text
 DATABASE_URL=postgresql+psycopg://postgres:your_password@localhost:5432/sionna_simulation
+AUTH_SECRET_KEY=replace-this-with-a-long-random-secret
 ```
 
 Optional Elasticsearch example:
@@ -113,6 +114,8 @@ VITE_API_BASE_URL=http://127.0.0.1:8000
 ```
 
 If `DATABASE_URL` is not set, the backend still starts, but login/register and history storage will not work.
+
+`AUTH_SECRET_KEY` signs login tokens. Use a long random value before deploying the app. If you leave the default development secret, anyone with the source code can forge tokens.
 
 If `ELASTICSEARCH_ENABLED` is not true, logging silently stays disabled.
 

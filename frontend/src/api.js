@@ -1,7 +1,10 @@
-import { API_BASE_URL } from "./constants";
+import {
+  API_BASE_URL,
+  AUTH_TOKEN_STORAGE_KEY,
+} from "./constants";
 
 async function requestJson(path, options = {}) {
-  const response = await fetch(`${API_BASE_URL}${path}`, options);
+  const response = await fetch(`${API_BASE_URL}${path}`, withAuth(options));
 
   if (!response.ok) {
     throw new Error(await readErrorMessage(response));
@@ -111,6 +114,7 @@ export function activateScene(sceneId) {
 export async function deleteScene(sceneId) {
   const response = await fetch(`${API_BASE_URL}/api/v1/scenes/${sceneId}`, {
     method: "DELETE",
+    headers: authHeaders(),
   });
 
   if (!response.ok) {
@@ -123,6 +127,7 @@ export async function deleteScene(sceneId) {
 export async function deleteSimulationRun(runId) {
   const response = await fetch(`${API_BASE_URL}/api/v1/simulation-runs/${runId}`, {
     method: "DELETE",
+    headers: authHeaders(),
   });
 
   if (!response.ok) {
@@ -130,6 +135,28 @@ export async function deleteSimulationRun(runId) {
   }
 
   return response.json();
+}
+
+function withAuth(options = {}) {
+  return {
+    ...options,
+    headers: {
+      ...authHeaders(),
+      ...(options.headers || {}),
+    },
+  };
+}
+
+function authHeaders() {
+  const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+
+  if (!token) {
+    return {};
+  }
+
+  return {
+    Authorization: `Bearer ${token}`,
+  };
 }
 
 async function readErrorMessage(response) {
