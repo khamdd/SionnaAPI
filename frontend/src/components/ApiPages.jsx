@@ -152,6 +152,7 @@ export function RsrpSimulationPage({ activeScene, antennas, onProgressChange }) 
 
   const result = resultState.result;
   const solver = result?.solver || form.solver;
+  const rsrpUsers = result?.users || EMPTY_ARRAY;
 
   return (
     <section className="api-page">
@@ -200,34 +201,42 @@ export function RsrpSimulationPage({ activeScene, antennas, onProgressChange }) 
           <h2>Result</h2>
           {resultState.error && <p className="history-status error-text">{resultState.error}</p>}
           {!resultState.error && resultState.loading && <p className="history-status">Waiting for backend...</p>}
-          {!resultState.error && !resultState.loading && !result && (
-            <p className="history-status">Run the simulation to place generated users on the 3D scene.</p>
-          )}
-          {!resultState.error && result && (
-            <div className="result-summary">
-              <div className="api-result-scene-wrap rsrp-scene-wrap">
-                <Scene3DPreview
-                  antennas={result.antennas || antennas}
-                  bounds={activeScene?.bounds}
-                  className="api-result-scene-3d"
-                  onRsrpUserSelect={setSelectedUser}
-                  rsrpUsers={result.users || EMPTY_ARRAY}
-                  sceneName={activeScene?.name}
-                  selectedRsrpUser={selectedUser}
-                  showOverlay={false}
-                  solver={solver}
-                  viewMode="top"
-                />
-                {selectedUser && (
-                  <RsrpUserDialog
-                    user={selectedUser}
-                    onClose={() => setSelectedUser(null)}
+          <div className="result-summary">
+            <div className="api-result-scene-wrap rsrp-scene-wrap">
+              {activeScene?.bounds ? (
+                <>
+                  <Scene3DPreview
+                    antennas={result?.antennas || antennas}
+                    bounds={activeScene.bounds}
+                    className="api-result-scene-3d"
+                    onRsrpUserSelect={setSelectedUser}
+                    rsrpUsers={rsrpUsers}
+                    sceneName={activeScene.name}
+                    selectedRsrpUser={selectedUser}
+                    showOverlay={false}
+                    solver={solver}
+                    viewMode="top"
                   />
-                )}
-              </div>
-              <RsrpSummary result={result} />
+                  {selectedUser && (
+                    <RsrpUserDialog
+                      user={selectedUser}
+                      onClose={() => setSelectedUser(null)}
+                    />
+                  )}
+                </>
+              ) : (
+                <p className="history-status">No scene preview is available for this result.</p>
+              )}
             </div>
-          )}
+            {!resultState.error && !resultState.loading && !result && (
+              <p className="history-status">
+                The active scene is ready. Run the simulation to generate and place user dots.
+              </p>
+            )}
+            {!resultState.error && result && (
+              <RsrpSummary result={result} />
+            )}
+          </div>
         </div>
       </div>
     </section>
