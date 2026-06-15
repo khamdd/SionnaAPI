@@ -1,8 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import List, Tuple
-from backend.constants import DEFAULT_TRANSMITTER_PATTERN
-
-MAX_GRID_CELLS = 50000
+from backend.constants import DEFAULT_TRANSMITTER_PATTERN, MAX_GRID_CELLS
 
 
 class SolverConfig(BaseModel):

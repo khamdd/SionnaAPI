@@ -1,166 +1,183 @@
 # Sionna Simulation Planner
 
-This project is a local radio-network planning demo built on top of NVIDIA Sionna RT.
+This project is a local radio-network planning demo built with:
 
-It has two parts:
+- **FastAPI** backend
+- **React/Vite** frontend
+- **NVIDIA Sionna RT** for radio-map simulation
+- Optional **PostgreSQL/PostGIS** storage for users and simulation history
+- Optional **Elasticsearch/Kibana** logging
 
-- `backend/`: a FastAPI server that loads the Sionna Munich scene, runs GPU-backed radio simulations, and returns coverage/SINR/throughput data.
-- `frontend/`: a React/Vite browser UI for editing antenna tilt and transmit power, running a simulation, and inspecting grid-cell metrics on a top-down map.
+The app lets a user log in, choose or preview a scene, edit antenna tilt and transmit power, run Sionna RT simulations, inspect coverage/SINR/throughput results, and compare saved simulation history.
 
-## Requirements
-
-- Windows with an NVIDIA GPU supported by Sionna RT/Mitsuba/Dr.Jit.
-- NVIDIA driver `596.49` or another driver verified to work with Sionna RT OptiX on this machine.
-- Conda environment named `sionna-rt-py311`.
-
-The current verified environment uses:
-
-- Python `3.11`
-- `sionna-rt 2.0.1`
-- FastAPI
-- Uvicorn
-- Pytest
-- Node.js/npm for the React frontend
-
-## Project Structure
+## Current Repository Layout
 
 ```text
 SionnaSimulation/
   backend/
-    main.py
+    main.py                         FastAPI app setup
     api/
-      sinr.py
+      auth.py                       Login/register endpoints
+      sinr.py                       Simulation, history, and scene endpoints
+    core/
+      config.py                     Elasticsearch environment settings
+    middleware/
+      request_logging.py            Request logging middleware
     schemas/
-      requests.py
+      auth.py                       Auth request validation
+      requests.py                   Simulation and scene request validation
     services/
-      coverage_service.py
-      scene_service.py
-      sinr_service.py
-      throughput_service.py
+      auth_service.py               User creation/login logic
+      coverage_service.py           Coverage-map and network-coverage logic
+      event_logger.py               Optional Elasticsearch event logging
+      scene_service.py              Scene registry, preview, activate, delete
+      simulation_store.py           Optional PostgreSQL history storage
+      sinr_service.py               SINR endpoint logic
+      throughput_service.py         Throughput comparison logic
     simulations/
-      sionna_engine.py
-      antenna_factory.py
-      radio_calculator.py
+      antenna_factory.py            Add/update/remove Sionna transmitters
+      radio_calculator.py           Grid indexing, dB/dBm, throughput math
+      sionna_engine.py              Lazy-loaded shared Sionna scene
+    requirements.txt
   frontend/
     package.json
     index.html
     styles.css
     src/
-      main.jsx
-      App.jsx
-      api.js
-      constants.js
-      components/
-        ApiPages.jsx
-        AntennaPanel.jsx
-        ComparisonResult.jsx
-        HistoryDetail.jsx
-        HistoryModal.jsx
-        HistoryPanel.jsx
-        MapPanel.jsx
-        SceneChooserModal.jsx
-        ScenesPage.jsx
-      utils/
-        format.js
-        history.js
-        map.js
-  test/
-    test_radio_calculator.py
-    test_request_schemas.py
+      App.jsx                       Main app state, routes, workflow glue
+      api.js                        Frontend API client
+      constants.js                  Default solver and antenna settings
+      components/                   UI components
+      utils/                        Formatting, history, and map helpers
+  test/                             Pytest tests for backend logic
+  docker-compose.elasticsearch.yml  Optional local Elasticsearch/Kibana
+  README.md
 ```
+
+Generated runtime files are intentionally ignored by Git:
+
+- `.env`
+- `static/`
+- frontend `node_modules/`
+- frontend build output such as `dist/`
+
+There is currently no committed `.env.example` file.
+
+## Requirements
+
+The backend expects a Windows machine with an NVIDIA GPU and a Sionna-compatible driver/environment.
+
+The environment used for this project is:
+
+- Python `3.11`
+- Conda environment named `sionna-rt-py311`
+- `sionna-rt==2.0.1`
+- FastAPI/Uvicorn
+- Pytest
+- Node.js/npm for the React frontend
+
+Python dependencies are listed in:
+
+```text
+backend/requirements.txt
+```
+
+Frontend dependencies are listed in:
+
+```text
+frontend/package.json
+```
+
+## Environment Variables
+
+Create a local `.env` file in the project root when you need database storage or Elasticsearch logging.
+
+Minimum database example:
+
+```text
+DATABASE_URL=postgresql+psycopg://postgres:your_password@localhost:5432/sionna_simulation
+```
+
+Optional Elasticsearch example:
+
+```text
+ELASTICSEARCH_ENABLED=true
+ELASTICSEARCH_URL=http://localhost:9200
+ELASTICSEARCH_INDEX=sionna-logs-dev
+```
+
+The frontend can be pointed at a different backend by creating `frontend/.env`:
+
+```text
+VITE_API_BASE_URL=http://127.0.0.1:8000
+```
+
+If `DATABASE_URL` is not set, the backend still starts, but login/register and history storage will not work.
+
+If `ELASTICSEARCH_ENABLED` is not true, logging silently stays disabled.
 
 ## Start the Backend
 
 Open PowerShell:
 
 ```powershell
-cd project_dir
+cd D:\Workspace\Viettel\Miniproject\SionnaSimulation
 conda activate sionna-rt-py311
 python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
 
-The backend API docs will be available at:
+FastAPI docs:
 
 ```text
 http://127.0.0.1:8000/docs
 ```
 
-## Connect Postgres/PostGIS
-
-The backend can store simulation history in PostgreSQL with PostGIS enabled. The schema stores local Sionna coordinates as PostGIS geometry values:
-
-- antenna positions use `scene_position GEOMETRY(PointZ, 0)`
-- simulation centers use `center_position GEOMETRY(PointZ, 0)`
-- simulation areas use `area_geom GEOMETRY(Polygon, 0)`
-
-The app uses these project tables:
-
-- `sites`
-- `antennas`
-- `simulation_runs`
-- `simulation_run_antennas`
-- `simulation_artifacts`
-
-PostGIS also creates metadata tables/views such as `spatial_ref_sys`, `geometry_columns`, and `geography_columns`. Those are expected and should not be deleted.
-
-Create a local `.env` file in the project root:
+The backend serves generated images and scene previews from:
 
 ```text
-DATABASE_URL=postgresql+psycopg://postgres:your_password@localhost:5432/sionna_simulation
+http://127.0.0.1:8000/static/...
 ```
 
-Replace:
+## Start the Frontend
 
-- `postgres` with your database username.
-- `your_password` with your pgAdmin/Postgres password.
-- `sionna_simulation` with your database name if you used a different one.
+Open another PowerShell window:
 
-The `.env` file is ignored by Git. Use `.env.example` as the template.
+```powershell
+cd D:\Workspace\Viettel\Miniproject\SionnaSimulation\frontend
+npm install
+npm run dev
+```
 
-If `DATABASE_URL` is not set, the app still runs but skips database storage.
-
-When the DB is configured, every simulation request stores:
-
-- one row in `simulation_runs`
-- antenna snapshots in `simulation_run_antennas` for `/api/v1/network-coverage`
-- generated coverage image metadata in `simulation_artifacts` when a PNG is returned
-- active scene metadata (`scene_id`, `scene_name`) on the simulation run
-
-The app does not use a `coverage_cells` table. Coverage grid detail stays in the API response for the active simulation, while the database stores the request, summarized response, image URL, and antenna snapshots.
-
-If your existing `simulation_runs` table does not have `scene_id` and `scene_name`, the backend adds those two columns automatically when history is stored or read.
-
-The frontend History tab reads from:
+Vite normally starts at:
 
 ```text
-GET /api/v1/simulation-runs
-GET /api/v1/simulation-runs/{run_id}
+http://127.0.0.1:5173
 ```
+
+## Optional Database
+
+The backend uses PostgreSQL/PostGIS through SQLAlchemy when `DATABASE_URL` is configured.
+
+Database-backed features:
+
+- Login/register through `app_users`
+- Saved simulation history through `simulation_runs`
+- Network antenna snapshots through `simulation_run_antennas`
+- Generated image metadata through `simulation_artifacts`
+- Optional scene references through `scenes` if that table exists
+
+The code does not contain a migration tool. The storage layer assumes these tables already exist and adds `simulation_runs.scene_id` automatically if missing.
+
+Simulation grid cells are not stored in their own table. Full grid details stay in the JSON response and in the stored `response_json`.
 
 ## Optional Elasticsearch Logging
 
-The backend can send operational logs to Elasticsearch. This is optional; the app runs normally when logging is disabled.
+The app can log request, auth, scene, and simulation events to Elasticsearch.
 
-Logged events currently include:
-
-- `http_request`: normal API request/response log.
-- `http_request_failed`: unhandled API exception.
-- `user_registered`: successful account registration.
-- `register_failed`: failed account registration.
-- `login_success`: successful login.
-- `login_failed`: failed login.
-- `simulation_started`: simulation request started.
-- `simulation_completed`: simulation finished successfully.
-- `simulation_failed`: simulation returned failure or raised an exception.
-
-Logs include useful fields such as request path, status code, duration, username, simulation type, scene id, scene name, and error message. Passwords, tokens, database URLs, and password hashes are redacted. Request bodies and query strings are not logged.
-
-### Run Elasticsearch locally
-
-This is for local development only. The compose file binds Elasticsearch and Kibana to `127.0.0.1`, so they are reachable only from your own machine.
+Start the local logging stack:
 
 ```powershell
-cd project_dir
+cd D:\Workspace\Viettel\Miniproject\SionnaSimulation
 docker compose -f docker-compose.elasticsearch.yml up -d
 ```
 
@@ -170,198 +187,232 @@ Open Kibana:
 http://127.0.0.1:5601
 ```
 
-Then enable logging in `.env`:
-
-```text
-ELASTICSEARCH_ENABLED=true
-ELASTICSEARCH_URL=http://localhost:9200
-ELASTICSEARCH_INDEX=sionna-logs-dev
-```
-
-Restart the backend after changing `.env`.
-
-To stop the local logging stack:
+Stop it:
 
 ```powershell
 docker compose -f docker-compose.elasticsearch.yml down
 ```
 
-To remove local log data too:
+Stop it and delete local log data:
 
 ```powershell
 docker compose -f docker-compose.elasticsearch.yml down -v
 ```
 
-Do not expose this local Elasticsearch service to the public internet. For production, use a secured Elasticsearch service with authentication, TLS, index retention, and restricted access.
+The compose file binds Elasticsearch and Kibana to `127.0.0.1`, so they are local-only by default.
 
-## Start the Frontend
+## Main User Flow
 
-After the backend is running, open another PowerShell window:
+1. The user logs in or registers.
+2. The frontend loads the active scene.
+3. The default route is `/network`.
+4. The user edits antenna tilt or transmit power.
+5. Clicking **Run simulation** sends `POST /api/v1/network-coverage`.
+6. The backend locks the shared Sionna engine, loads the active scene if needed, adds transmitters, runs a radio map, renders a coverage image, builds grid-cell metrics, and removes temporary transmitters.
+7. The frontend displays the coverage image or 3D scene preview, overlays grid colors, and shows cell details.
+8. If the database is configured, the simulation is stored and can be viewed from History.
 
-```powershell
-cd project_dir\frontend
-npm install
-npm run dev
-```
+## Important API Endpoints
 
-Open the URL printed by Vite, normally:
-
-```text
-http://127.0.0.1:5173
-```
-
-The frontend calls:
+Auth:
 
 ```text
-http://127.0.0.1:8000/api/v1/network-coverage
+POST /api/v1/auth/register
+POST /api/v1/auth/login
 ```
 
-To point the React app at another backend URL, create `frontend/.env`:
+Simulation:
 
 ```text
-VITE_API_BASE_URL=http://127.0.0.1:8000
+POST /api/v1/network-coverage
+POST /api/v1/coverage-map
+POST /api/v1/sinr
+POST /api/v1/throughput-comparison
 ```
 
-## Main App Flow
-
-1. The frontend starts with the Munich scene as the active global scene.
-2. The active scene name is displayed in the navbar. Use `Choose scene` to select a small area from the map, preview it, then keep or cancel it.
-3. The frontend displays 10 antennas on a top-down planning map.
-4. Each antenna has:
-   - coordinate `(x, y, z)`
-   - tilt range and current tilt
-   - azimuth direction
-   - transmit-power range and current power
-5. Users can edit only:
-   - current tilt
-   - current transmit power
-6. Clicking `Run simulation` sends all antenna settings to the backend.
-7. The backend runs Sionna RT with the active global scene, renders a top-down coverage image, and returns grid metrics.
-8. The frontend overlays a heatmap and shows hover details per cell:
-   - serving antenna
-   - SINR in dB
-   - signal power in dBm
-   - estimated throughput in Mbps
-
-## Scene Management
-
-The Scenes page lists all available scenes. Users can load a scene or delete an imported scene. The active scene and the default Munich scene cannot be deleted.
-
-Imported scenes are limited to 3. If the user tries to choose another map scene after reaching that limit, the app redirects to the Scenes page and asks them to delete one first.
-
-History comparison only allows successful simulation runs with the same API type and the same `scene_id`. This avoids comparing Munich results against another scene.
-
-Current limitation: the map picker validates and stores the selected real-world area, then creates a runnable Sionna demo scene from a bundled Sionna scene template. It does not yet convert OpenStreetMap building geometry into a true Sionna RT scene. That conversion needs an OSM/building importer pipeline before production use.
-
-## API Endpoints
-
-### `POST /api/v1/network-coverage`
-
-Used by the frontend.
-
-Runs a multi-antenna coverage simulation and returns:
-
-- rendered coverage image URL
-- grid metadata
-- hoverable per-cell metrics
-- antenna data
-
-### `POST /api/v1/coverage-map`
-
-Runs a single-transmitter coverage-map render.
-
-### `POST /api/v1/sinr`
-
-Computes SINR at a receiver position.
-
-### `POST /api/v1/throughput-comparison`
-
-Compares estimated throughput between a base tilt and target tilt.
-
-### `GET /api/v1/simulation-runs`
-
-Lists recent stored simulations for the frontend History tab.
-
-### `GET /api/v1/simulation-runs/{run_id}`
-
-Loads one stored simulation, including solver settings, response summary, antenna snapshots, and generated artifacts.
-
-### Scene endpoints
+History:
 
 ```text
-GET /api/v1/scenes
-GET /api/v1/scenes/active
-POST /api/v1/scenes/preview
-POST /api/v1/scenes/{scene_id}/activate
+GET    /api/v1/simulation-runs
+GET    /api/v1/simulation-runs/{run_id}
+DELETE /api/v1/simulation-runs/{run_id}
+```
+
+Scenes:
+
+```text
+GET    /api/v1/scenes
+GET    /api/v1/scenes/active
+POST   /api/v1/scenes/preview
+POST   /api/v1/scenes/{scene_id}/activate
 DELETE /api/v1/scenes/{scene_id}
 ```
 
-## Run Tests
+## Where To Change Common Things
 
-```powershell
-cd project_dir
-conda activate sionna-rt-py311
-python -m pytest test -q
-```
-
-The unit tests cover request validation, grid indexing, dB/dBm conversions, and throughput math. They do not run full GPU simulations because those are slower and hardware-dependent.
-
-## Useful Frontend Settings
-
-The default antennas and solver settings are in:
+Default antennas and solver settings:
 
 ```text
 frontend/src/constants.js
 ```
 
-To change antenna positions, edit `DEFAULT_ANTENNAS`.
+Frontend API base URL and request functions:
 
-To make simulations faster, reduce:
-
-```javascript
-samples_per_tx
-size
+```text
+frontend/src/api.js
 ```
 
-or increase:
+Main frontend routes and app state:
 
-```javascript
-cell_size
+```text
+frontend/src/App.jsx
 ```
 
-Example faster settings:
+Coverage map UI:
 
-```javascript
-const DEFAULT_SOLVER = {
-  max_depth: 1,
-  samples_per_tx: 5000,
-  cell_size: 10,
-  center: [0, 0, 0],
-  size: [200, 200],
-};
+```text
+frontend/src/components/MapPanel.jsx
+frontend/src/components/Scene3DPreview.jsx
+frontend/src/utils/map.js
 ```
+
+Request validation:
+
+```text
+backend/schemas/requests.py
+backend/schemas/auth.py
+```
+
+Simulation endpoint routing:
+
+```text
+backend/api/sinr.py
+backend/api/auth.py
+```
+
+Sionna scene loading:
+
+```text
+backend/simulations/sionna_engine.py
+```
+
+Radio math and grid indexing:
+
+```text
+backend/simulations/radio_calculator.py
+```
+
+Network coverage behavior:
+
+```text
+backend/services/coverage_service.py
+```
+
+History persistence:
+
+```text
+backend/services/simulation_store.py
+```
+
+Scene preview/activate/delete:
+
+```text
+backend/services/scene_service.py
+```
+
+## How Network Coverage Works
+
+The main endpoint is:
+
+```text
+POST /api/v1/network-coverage
+```
+
+The flow is:
+
+```text
+frontend/src/App.jsx
+  -> buildNetworkCoveragePayload()
+  -> frontend/src/api.js runNetworkCoverage()
+  -> backend/api/sinr.py network_coverage()
+  -> backend/services/coverage_service.py calculate_network_coverage_service()
+  -> backend/simulations/sionna_engine.py shared scene
+  -> Sionna RadioMapSolver
+  -> grid JSON + PNG URL
+  -> frontend/src/utils/map.js drawHeatmap()
+```
+
+The backend returns:
+
+- `status`
+- `coverage_map_image_url`
+- `grid.rows`
+- `grid.cols`
+- `grid.cells`
+- `solver`
+- `transmitter_pattern`
+- `antennas`
+
+Each grid cell can include:
+
+- row/column
+- world `x` and `y`
+- serving antenna
+- SINR in dB
+- signal power in dBm
+- neighbor antennas
+- estimated throughput in Mbps
+
+## Scene Management
+
+The default scene is Munich.
+
+Imported scenes are stored under:
+
+```text
+static/scenes/
+```
+
+The scene registry is stored at runtime in:
+
+```text
+static/scenes/scenes.json
+```
+
+Current limitation: the map picker validates and stores the selected real-world bounds, then creates a runnable scene from Sionna's bundled `simple_street_canyon` demo scene. It does not yet convert OpenStreetMap building geometry into a true Sionna RT scene.
+
+## Run Tests
+
+Backend unit tests:
+
+```powershell
+cd D:\Workspace\Viettel\Miniproject\SionnaSimulation
+conda activate sionna-rt-py311
+python -m pytest test -q
+```
+
+Frontend production build:
+
+```powershell
+cd D:\Workspace\Viettel\Miniproject\SionnaSimulation\frontend
+npm run build
+```
+
+The tests focus on request validation, API error handling, logging behavior, history behavior, generated image cleanup, Sionna engine lifecycle, grid indexing, neighbor selection, dB/dBm conversion, and throughput math.
+
+The tests do not run full GPU Sionna simulations because those are slower and hardware-dependent.
 
 ## Troubleshooting
 
 ### Backend cannot import Sionna
 
-Make sure the correct conda environment is active:
+Activate the correct conda environment:
 
 ```powershell
 conda activate sionna-rt-py311
 ```
 
-### GPU/OptiX compile error
-
-Check the NVIDIA driver:
-
-```powershell
-nvidia-smi
-```
-
-This machine was verified with driver `596.49`. A newer driver previously caused an OptiX PTX compile error with Sionna RT.
-
-### Frontend shows simulation failure
+### Frontend cannot reach backend
 
 Check that the backend is running:
 
@@ -369,9 +420,29 @@ Check that the backend is running:
 http://127.0.0.1:8000/docs
 ```
 
-Then retry `Run simulation`.
+Then check the frontend API base URL in:
 
-### Port 8000 already in use
+```text
+frontend/src/constants.js
+```
+
+or override it with:
+
+```text
+frontend/.env
+```
+
+### Login or history does not work
+
+Check whether `DATABASE_URL` is set in the root `.env`.
+
+Without a database:
+
+- registration returns a database-not-configured error
+- login returns a database-not-configured error
+- history returns an empty/non-configured response
+
+### Port 8000 is already in use
 
 Find the process:
 
@@ -379,14 +450,27 @@ Find the process:
 Get-NetTCPConnection -LocalPort 8000
 ```
 
-Stop it if needed:
+Stop it:
 
 ```powershell
 Stop-Process -Id <PID>
 ```
 
-## Notes
+### Generated images are missing
 
-- Generated coverage images are written to `static/`.
-- `static/` is ignored by Git because these images are runtime artifacts.
-- The frontend is a React/Vite app. Use `npm run dev` for local development and `npm run build` before static deployment.
+Generated coverage images are written to:
+
+```text
+static/
+```
+
+That directory is runtime-only and ignored by Git. A fresh clone will not include previous generated images.
+
+## Development Notes
+
+- The backend intentionally serializes simulations with `engine.lock` because Sionna scenes are mutated during each request.
+- Temporary transmitters are removed in `finally` blocks after simulations.
+- Request bodies are validated by Pydantic before service code runs.
+- Frontend route changes use `window.history.pushState`; this is a small custom router, not React Router.
+- `static/` is runtime output, not source code.
+- `.env` is local configuration and should not be committed.
