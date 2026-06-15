@@ -2,28 +2,22 @@ import json
 import logging
 import math
 from datetime import datetime, timezone
-from pathlib import Path
 from urllib.parse import urlparse
 
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from backend.constants import (
+    DEFAULT_SCENE_BOUNDS,
+    DEFAULT_SCENE_ID,
+    DEFAULT_SCENE_NAME,
+    SCENE_REGISTRY_PATH,
+    STATIC_DIR,
+)
 from backend.database import db_session, is_database_configured
 
 
 logger = logging.getLogger(__name__)
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-STATIC_DIR = PROJECT_ROOT / "static"
-SCENE_REGISTRY_PATH = STATIC_DIR / "scenes" / "scenes.json"
-DEFAULT_SCENE_ID = "munich"
-DEFAULT_SCENE_NAME = "Munich"
-DEFAULT_SCENE_BOUNDS = {
-    "south": 48.1344,
-    "west": 11.5715,
-    "north": 48.1404,
-    "east": 11.5795,
-}
 
 
 def utc_now():

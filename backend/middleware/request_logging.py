@@ -3,15 +3,8 @@ import uuid
 
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from backend.constants import SKIPPED_REQUEST_LOG_PATH_PREFIXES
 from backend.services.event_logger import log_event
-
-
-SKIPPED_PATH_PREFIXES = (
-    "/static",
-    "/docs",
-    "/redoc",
-    "/openapi.json",
-)
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
@@ -50,7 +43,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
 
 def should_skip_path(path):
-    return path.startswith(SKIPPED_PATH_PREFIXES)
+    return path.startswith(SKIPPED_REQUEST_LOG_PATH_PREFIXES)
 
 
 def elapsed_ms(started_at):

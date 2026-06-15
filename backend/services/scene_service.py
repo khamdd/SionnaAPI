@@ -6,20 +6,18 @@ import uuid
 from datetime import timezone
 from pathlib import Path
 
+from backend.constants import (
+    DEFAULT_SCENE_ID,
+    DEFAULT_SCENE_NAME,
+    MAX_IMPORTED_SCENES,
+    MAX_SCENE_AREA_KM2,
+    MAX_SCENE_SIDE_M,
+    SCENE_REGISTRY_PATH,
+    SCENE_ROOT,
+)
 from backend.schemas.requests import SceneBoundsRequest
 from backend.services.simulation_store import utc_now
 
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-STATIC_DIR = PROJECT_ROOT / "static"
-SCENE_ROOT = STATIC_DIR / "scenes"
-REGISTRY_PATH = SCENE_ROOT / "scenes.json"
-
-DEFAULT_SCENE_ID = "munich"
-DEFAULT_SCENE_NAME = "Munich"
-MAX_IMPORTED_SCENES = 3
-MAX_SCENE_AREA_KM2 = 1.0
-MAX_SCENE_SIDE_M = 1500.0
 
 _lock = threading.RLock()
 
@@ -200,8 +198,8 @@ def validate_scene_metrics(metrics):
 def load_registry():
     SCENE_ROOT.mkdir(parents=True, exist_ok=True)
 
-    if REGISTRY_PATH.exists():
-        registry = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
+    if SCENE_REGISTRY_PATH.exists():
+        registry = json.loads(SCENE_REGISTRY_PATH.read_text(encoding="utf-8"))
     else:
         registry = {
             "active_scene_id": DEFAULT_SCENE_ID,
@@ -214,7 +212,7 @@ def load_registry():
 
 def save_registry(registry):
     SCENE_ROOT.mkdir(parents=True, exist_ok=True)
-    REGISTRY_PATH.write_text(
+    SCENE_REGISTRY_PATH.write_text(
         json.dumps(registry, indent=2),
         encoding="utf-8",
     )

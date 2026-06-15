@@ -1,8 +1,7 @@
 import threading
 
+from backend.constants import DEFAULT_SCENE_ID, DEFAULT_SCENE_NAME
 from backend.services.scene_service import (
-    DEFAULT_SCENE_ID,
-    DEFAULT_SCENE_NAME,
     get_active_scene,
 )
 

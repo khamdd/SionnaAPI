@@ -1,6 +1,10 @@
-from pathlib import Path
 from uuid import uuid4
-from backend.constants import GENERATED_IMAGE_QUOTA_BYTES
+from backend.constants import (
+    GENERATED_IMAGE_QUOTA_BYTES,
+    MIN_NEIGHBOR_SIGNAL_DBM,
+    NEIGHBOR_SIGNAL_WINDOW_DB,
+    STATIC_DIR,
+)
 
 import numpy as np
 from sionna.rt import Camera, PlanarArray, RadioMapSolver, Transmitter
@@ -12,12 +16,6 @@ from backend.simulations.radio_calculator import (
     linear_to_db,
     watts_to_dbm,
 )
-
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-STATIC_DIR = PROJECT_ROOT / "static"
-NEIGHBOR_SIGNAL_WINDOW_DB = 10.0
-MIN_NEIGHBOR_SIGNAL_DBM = -120.0
 
 
 def calculate_coverage_map_service(req: CoverageRequest, base_url, scene):

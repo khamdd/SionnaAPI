@@ -5,19 +5,11 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
+from backend.constants import SENSITIVE_KEYS
 from backend.core.config import get_elasticsearch_settings
 
 
 logger = logging.getLogger(__name__)
-SENSITIVE_KEYS = {
-    "password",
-    "password_hash",
-    "token",
-    "access_token",
-    "refresh_token",
-    "authorization",
-    "database_url",
-}
 
 
 def log_event(

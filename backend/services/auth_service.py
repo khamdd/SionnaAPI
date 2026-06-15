@@ -6,13 +6,9 @@ import secrets
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
+from backend.constants import HASH_ALGORITHM, HASH_ITERATIONS, SALT_BYTES
 from backend.database import db_session, is_database_configured
 from backend.services.event_logger import log_event
-
-
-HASH_ALGORITHM = "pbkdf2_sha256"
-HASH_ITERATIONS = 390000
-SALT_BYTES = 16
 
 
 def create_user(username, password):
