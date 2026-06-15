@@ -11,6 +11,7 @@ from sionna.rt import Camera, PlanarArray, RadioMapSolver, Transmitter
 
 from backend.schemas.requests import CoverageRequest, NetworkCoverageRequest
 from backend.simulations.antenna_factory import remove_entity, sync_transmitter
+from backend.simulations.overlap import build_overlap_info, summarize_overlap
 from backend.simulations.radio_calculator import (
     calculate_5g_throughput,
     linear_to_db,
@@ -323,6 +324,20 @@ def build_network_grid(
             linear_sinr = float(sinr[tx_idx, row, col])
             signal_watts = float(rss[tx_idx, row, col])
             serving_signal_dbm = watts_to_dbm(signal_watts)
+            neighbors = build_cell_neighbors(
+                sinr,
+                rss,
+                req,
+                tx_idx,
+                row,
+                col,
+                serving_signal_dbm,
+            )
+            overlap = build_overlap_info(
+                req.antennas[tx_idx].id,
+                serving_signal_dbm,
+                neighbors,
+            )
 
             cells.append(
                 {
@@ -345,15 +360,10 @@ def build_network_grid(
                         serving_signal_dbm,
                         2,
                     ),
-                    "neighbors": build_cell_neighbors(
-                        sinr,
-                        rss,
-                        req,
-                        tx_idx,
-                        row,
-                        col,
-                        serving_signal_dbm,
-                    ),
+                    "neighbors": neighbors,
+                    "overlap_antennas": overlap["antennas"],
+                    "overlap_count": overlap["count"],
+                    "overlap_level": overlap["level"],
                     "throughput_mbps": calculate_5g_throughput(
                         linear_sinr,
                         req.bandwidth_mhz,
@@ -365,7 +375,9 @@ def build_network_grid(
     return {
         "rows": rows,
         "cols": cols,
+        "cell_count": len(cells),
         "cells": cells,
+        "overlap_summary": summarize_overlap(cells),
     }
 
 
@@ -397,6 +409,12 @@ def build_single_transmitter_grid(
         for col in range(cols):
             linear_sinr = float(sinr[0, row, col])
             signal_watts = float(rss[0, row, col])
+            signal_dbm = watts_to_dbm(signal_watts)
+            overlap = build_overlap_info(
+                "TX",
+                signal_dbm,
+                [],
+            )
 
             cells.append(
                 {
@@ -416,10 +434,13 @@ def build_single_transmitter_grid(
                         2,
                     ),
                     "signal_dbm": round(
-                        watts_to_dbm(signal_watts),
+                        signal_dbm,
                         2,
                     ),
                     "neighbors": [],
+                    "overlap_antennas": overlap["antennas"],
+                    "overlap_count": overlap["count"],
+                    "overlap_level": overlap["level"],
                     "throughput_mbps": None,
                 }
             )
@@ -427,7 +448,9 @@ def build_single_transmitter_grid(
     return {
         "rows": rows,
         "cols": cols,
+        "cell_count": len(cells),
         "cells": cells,
+        "overlap_summary": summarize_overlap(cells),
     }
 
 

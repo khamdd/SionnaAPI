@@ -13,6 +13,7 @@ export default function Scene3DPreview({
   bounds,
   className = "",
   coverageGrid = null,
+  coverageDisplayMode = "quality",
   coverageImageUrl = "",
   onCoverageCellSelect = null,
   onLoadingChange = null,
@@ -31,6 +32,9 @@ export default function Scene3DPreview({
   const selectedRsrpUserRef = useRef(selectedRsrpUser);
   const [model, setModel] = useState(null);
   const [status, setStatus] = useState("Loading OSM buildings...");
+  const boundsKey = bounds
+    ? [bounds.south, bounds.west, bounds.north, bounds.east].join(":")
+    : "";
 
   useEffect(() => {
     selectedCoverageCellRef.current = selectedCoverageCell;
@@ -43,6 +47,7 @@ export default function Scene3DPreview({
   useEffect(() => {
     if (!bounds) {
       setModel(null);
+      setStatus("No scene bounds available.");
       onLoadingChange?.(false);
       return undefined;
     }
@@ -61,11 +66,12 @@ export default function Scene3DPreview({
     }
 
     async function loadBuildings() {
+      setModel(null);
       setStatus("Loading OSM buildings...");
       reportLoading(true);
 
       try {
-        const buildings = await fetchBuildings(bounds, controller.signal);
+        const buildings = await fetchBuildingsWithRetry(bounds, controller.signal);
 
         if (!isActive) {
           return;
@@ -78,9 +84,8 @@ export default function Scene3DPreview({
           return;
         }
 
-        const fallback = generateFallbackBuildings(bounds);
-        setModel(buildModel(bounds, fallback));
-        setStatus("No OSM building footprints found. Showing generated blocks for preview only.");
+        setModel(buildModel(bounds, []));
+        setStatus("No OSM building footprints found for this area.");
         reportLoading(false);
       } catch (error) {
         if (error.name === "AbortError") {
@@ -91,9 +96,8 @@ export default function Scene3DPreview({
           return;
         }
 
-        const fallback = generateFallbackBuildings(bounds);
-        setModel(buildModel(bounds, fallback));
-        setStatus("OSM building lookup failed. Showing generated blocks for preview only.");
+        setModel(buildModel(bounds, []));
+        setStatus("OSM building lookup failed. Try refreshing or selecting a smaller area.");
         reportLoading(false);
       }
     }
@@ -105,7 +109,7 @@ export default function Scene3DPreview({
       controller.abort();
       reportLoading(false);
     };
-  }, [bounds, onLoadingChange]);
+  }, [boundsKey, onLoadingChange]);
 
   useEffect(() => {
     const host = canvasHostRef.current;
@@ -121,6 +125,7 @@ export default function Scene3DPreview({
       antennas,
       solver,
       coverageGrid,
+      coverageDisplayMode,
       coverageImageUrl,
       signalLinks,
       rsrpUsers,
@@ -129,7 +134,7 @@ export default function Scene3DPreview({
       onCoverageCellSelect,
       onRsrpUserSelect,
     );
-  }, [antennas, coverageGrid, coverageImageUrl, model, onCoverageCellSelect, onRsrpUserSelect, rsrpUsers, signalLinks, solver, viewMode]);
+  }, [antennas, coverageDisplayMode, coverageGrid, coverageImageUrl, model, onCoverageCellSelect, onRsrpUserSelect, rsrpUsers, signalLinks, solver, viewMode]);
 
   return (
     <div className={["scene-3d-preview", className].filter(Boolean).join(" ")}>
@@ -170,6 +175,43 @@ async function fetchBuildings(bounds, signal) {
   return (data.elements || [])
     .flatMap((item, index) => parseOsmElement(item, index))
     .filter((building) => building.points.length >= 3);
+}
+
+async function fetchBuildingsWithRetry(bounds, signal, retries = 1) {
+  let lastError = null;
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      return await fetchBuildings(bounds, signal);
+    } catch (error) {
+      if (error.name === "AbortError") {
+        throw error;
+      }
+
+      lastError = error;
+
+      if (attempt < retries) {
+        await waitForRetry(700, signal);
+      }
+    }
+  }
+
+  throw lastError;
+}
+
+function waitForRetry(delayMs, signal) {
+  return new Promise((resolve, reject) => {
+    const timeoutId = window.setTimeout(resolve, delayMs);
+
+    signal.addEventListener(
+      "abort",
+      () => {
+        window.clearTimeout(timeoutId);
+        reject(new DOMException("Aborted", "AbortError"));
+      },
+      { once: true },
+    );
+  });
 }
 
 function parseOsmElement(item, index) {
@@ -313,6 +355,7 @@ function renderThreeScene(
   antennas,
   solver,
   coverageGrid,
+  coverageDisplayMode,
   coverageImageUrl,
   signalLinks,
   rsrpUsers,
@@ -381,7 +424,7 @@ function renderThreeScene(
 
   addRoadLines(scene, model);
   const coverageMesh = (
-    addCoverageGrid(scene, model, coverageGrid, solver)
+    addCoverageGrid(scene, model, coverageGrid, solver, coverageDisplayMode)
     || addCoverageImage(scene, model, coverageImageUrl)
   );
   const selectedCellGroup = new THREE.Group();
@@ -588,12 +631,12 @@ function updateCellOutlineGroup(group, model, cell, solver, style) {
   addCellOutline(group, model, cell, solver, style);
 }
 
-function addCoverageGrid(scene, model, grid, solver) {
+function addCoverageGrid(scene, model, grid, solver, coverageDisplayMode) {
   if (!grid || !Array.isArray(grid.cells) || !solver) {
     return;
   }
 
-  const texture = createCoverageTexture(grid);
+  const texture = createCoverageTexture(grid, coverageDisplayMode);
 
   if (!texture) {
     return;
@@ -730,7 +773,7 @@ function disposeMaterial(material) {
   material.dispose();
 }
 
-function createCoverageTexture(grid) {
+function createCoverageTexture(grid, coverageDisplayMode) {
   const rows = Number(grid.rows);
   const cols = Number(grid.cols);
 
@@ -752,7 +795,7 @@ function createCoverageTexture(grid) {
       return;
     }
 
-    context.fillStyle = colorForCoverageCell(cell);
+    context.fillStyle = colorForCoverageCell(cell, coverageDisplayMode);
     context.fillRect(col, rows - row - 1, 1, 1);
   });
 
@@ -1314,7 +1357,11 @@ function createBuildingMesh(building) {
   return mesh;
 }
 
-function colorForCoverageCell(cell) {
+function colorForCoverageCell(cell, coverageDisplayMode = "quality") {
+  if (coverageDisplayMode === "overlap") {
+    return colorForOverlapCell(cell);
+  }
+
   const sinrDb = numericValue(cell.sinr_db);
 
   if (Number.isFinite(sinrDb) && sinrDb > -80) {
@@ -1359,6 +1406,25 @@ function colorForCoverageCell(cell) {
   }
 
   return "rgba(107, 114, 128, 0.28)";
+}
+
+function colorForOverlapCell(cell) {
+  const level = String(cell.overlap_level || "no_coverage");
+
+  if (level === "single_coverage") {
+    return "rgba(37, 99, 235, 0.58)";
+  }
+  if (level === "normal_overlap") {
+    return "rgba(34, 197, 94, 0.64)";
+  }
+  if (level === "high_overlap") {
+    return "rgba(234, 179, 8, 0.72)";
+  }
+  if (level === "excessive_overlap") {
+    return "rgba(220, 38, 38, 0.76)";
+  }
+
+  return "rgba(107, 114, 128, 0.24)";
 }
 
 function numericValue(value) {

@@ -7,6 +7,7 @@ from backend.constants import (
 )
 from backend.schemas.requests import RSRPRequest
 from backend.simulations.antenna_factory import remove_entity, sync_transmitter
+from backend.simulations.overlap import build_overlap_info, summarize_overlap
 from backend.simulations.radio_calculator import watts_to_dbm
 
 
@@ -43,6 +44,7 @@ def calculate_rsrp_service(req: RSRPRequest, scene):
             "status": "success",
             "users": result["users"],
             "antenna_summary": result["antenna_summary"],
+            "overlap_summary": result["overlap_summary"],
             "summary": result["summary"],
             "solver": solver_metadata(req.solver),
             "user_count": req.user_count,
@@ -144,6 +146,7 @@ def build_rsrp_result(radio_map, req: RSRPRequest, users):
     return {
         "users": analyzed_users,
         "antenna_summary": summarize_antennas(req, antenna_stats),
+        "overlap_summary": summarize_overlap(analyzed_users),
         "summary": summarize_users(analyzed_users),
     }
 
@@ -177,6 +180,12 @@ def analyze_user_rsrp(rss, req: RSRPRequest, user, antenna_stats):
         rsrp_values,
         serving,
     )
+    overlap = build_overlap_info(
+        serving["antenna"],
+        serving["rsrp_dbm"],
+        neighbors,
+        value_field="rsrp_dbm",
+    )
 
     return {
         "id": user["id"],
@@ -189,6 +198,9 @@ def analyze_user_rsrp(rss, req: RSRPRequest, user, antenna_stats):
         "rsrp_dbm": serving["rsrp_dbm"],
         "quality": rsrp_quality(serving["rsrp_dbm"]),
         "neighbors": neighbors,
+        "overlap_antennas": overlap["antennas"],
+        "overlap_count": overlap["count"],
+        "overlap_level": overlap["level"],
         "measurements": sorted(
             rsrp_values,
             key=lambda item: item["rsrp_dbm"],
@@ -268,7 +280,7 @@ def summarize_users(users):
         if user["rsrp_dbm"] >= MIN_NEIGHBOR_SIGNAL_DBM
     ]
 
-    return {
+    summary = {
         "user_count": len(users),
         "covered_user_count": len(valid_values),
         "coverage_percent": round((len(valid_values) / len(users)) * 100, 2)
@@ -279,6 +291,8 @@ def summarize_users(users):
             for quality in ("excellent", "good", "fair", "poor", "no_coverage")
         },
     }
+    summary["overlap_summary"] = summarize_overlap(users)
+    return summary
 
 
 def average_dbm(values):

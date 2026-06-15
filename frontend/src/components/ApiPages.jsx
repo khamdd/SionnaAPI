@@ -386,6 +386,8 @@ function RsrpSummary({ result }) {
         <dt>Covered users</dt><dd>{summary.covered_user_count ?? "--"}</dd>
         <dt>Coverage</dt><dd>{formatMaybeNumber(summary.coverage_percent)}%</dd>
         <dt>Average best RSRP</dt><dd>{formatMaybeNumber(summary.average_best_rsrp_dbm)} dBm</dd>
+        <dt>Overlap users</dt><dd>{formatMaybeNumber(summary.overlap_summary?.overlap_percent)}%</dd>
+        <dt>Avg overlap</dt><dd>{formatMaybeNumber(summary.overlap_summary?.average_overlap_count)}</dd>
         <dt>Seed</dt><dd>{result.random_seed}</dd>
       </dl>
       <div className="rsrp-quality-strip">
@@ -439,8 +441,10 @@ function RsrpUserDialog({ onClose, user }) {
         <dt>Position</dt><dd>{formatPositionValue(user.position)}</dd>
         <dt>Serving antenna</dt><dd>{formatText(user.serving_antenna)}</dd>
         <dt>Best RSRP</dt><dd>{formatMaybeNumber(user.rsrp_dbm)} dBm</dd>
+        <dt>Overlap</dt><dd>{formatOverlap(user)}</dd>
         <dt>Grid cell</dt><dd>{user.grid ? `${user.grid.row}, ${user.grid.col}` : "--"}</dd>
       </dl>
+      <OverlapAntennaList antennas={user.overlap_antennas} valueField="rsrp_dbm" />
       <div className="neighbor-list">
         <span>Neighbors</span>
         {user.neighbors?.length ? user.neighbors.map((neighbor) => (
@@ -945,9 +949,38 @@ function ApiCoverageCellDialog({ cell, onClose }) {
         <dt>SINR</dt><dd>{formatMaybeNumber(cell.sinr_db)} dB</dd>
         <dt>Signal</dt><dd>{formatMaybeNumber(cell.signal_dbm)} dBm</dd>
         <dt>Throughput</dt><dd>{formatMaybeNumber(cell.throughput_mbps)} Mbps</dd>
+        <dt>Overlap</dt><dd>{formatOverlap(cell)}</dd>
       </dl>
+      <OverlapAntennaList antennas={cell.overlap_antennas} valueField="signal_dbm" />
     </div>
   );
+}
+
+function OverlapAntennaList({ antennas, valueField }) {
+  if (!Array.isArray(antennas) || antennas.length === 0) {
+    return <p className="neighbor-empty">No overlap antennas</p>;
+  }
+
+  return (
+    <div className="neighbor-list">
+      <span>Overlap antennas</span>
+      {antennas.map((antenna) => (
+        <div key={`${antenna.role}-${antenna.antenna}`}>
+          <strong>{formatText(antenna.antenna)} ({formatText(antenna.role)})</strong>
+          <span>{formatMaybeNumber(antenna[valueField])} dBm</span>
+          <small>{formatMaybeNumber(antenna.weaker_than_serving_db)} dB weaker</small>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function formatOverlap(item) {
+  if (!Number.isFinite(Number(item.overlap_count))) {
+    return "--";
+  }
+
+  return `${item.overlap_count} antenna(s), ${formatText(item.overlap_level)}`;
 }
 
 function useApiResult(onProgressChange, progressLabel) {

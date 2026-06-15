@@ -77,6 +77,7 @@ function NetworkCoverageComparison({ items, onPreviewLoadingChange }) {
       {items.map((item, index) => {
         const response = item.response_json || {};
         const grid = response.grid || {};
+        const overlapSummary = grid.overlap_summary || {};
         const imageUrl = item.coverage_map_image_url || firstArtifactUrl(item.artifacts);
         const antennaStats = summarizeAntennaSnapshot(item.antennas || []);
 
@@ -91,6 +92,8 @@ function NetworkCoverageComparison({ items, onPreviewLoadingChange }) {
               <dt>MIMO layers</dt><dd>{item.mimo_layers || "--"}</dd>
               <dt>Grid</dt><dd>{grid.rows || "--"} x {grid.cols || "--"}</dd>
               <dt>Cells</dt><dd>{grid.cell_count || "--"}</dd>
+              <dt>Overlap cells</dt><dd>{formatMaybeNumber(overlapSummary.overlap_percent)}%</dd>
+              <dt>Avg overlap</dt><dd>{formatMaybeNumber(overlapSummary.average_overlap_count)}</dd>
               <dt>Antennas</dt><dd>{antennaStats.count}</dd>
               <dt>Avg tilt</dt><dd>{formatMaybeNumber(antennaStats.averageTilt)} deg</dd>
               <dt>Avg power</dt><dd>{formatMaybeNumber(antennaStats.averagePower)} dBm</dd>
@@ -261,10 +264,39 @@ function ComparisonCoverageCellDialog({ cell, onClose }) {
         <dt>SINR</dt><dd>{formatMaybeNumber(cell.sinr_db)} dB</dd>
         <dt>Signal</dt><dd>{formatMaybeNumber(cell.signal_dbm)} dBm</dd>
         <dt>Throughput</dt><dd>{formatMaybeNumber(cell.throughput_mbps)} Mbps</dd>
+        <dt>Overlap</dt><dd>{formatOverlap(cell)}</dd>
       </dl>
+      <CellOverlapAntennas antennas={cell.overlap_antennas} />
       <CellNeighbors neighbors={cell.neighbors} />
     </div>
   );
+}
+
+function CellOverlapAntennas({ antennas }) {
+  if (!Array.isArray(antennas) || antennas.length === 0) {
+    return <p className="neighbor-empty">No overlap antennas</p>;
+  }
+
+  return (
+    <div className="neighbor-list">
+      <span>Overlap antennas</span>
+      {antennas.map((antenna) => (
+        <div key={`${antenna.role}-${antenna.antenna}`}>
+          <strong>{formatText(antenna.antenna)} ({formatText(antenna.role)})</strong>
+          <small>{formatMaybeNumber(antenna.signal_dbm)} dBm</small>
+          <small>{formatNeighborDelta(antenna.weaker_than_serving_db)}</small>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function formatOverlap(cell) {
+  if (!Number.isFinite(Number(cell.overlap_count))) {
+    return "--";
+  }
+
+  return `${cell.overlap_count} antenna(s), ${formatText(cell.overlap_level)}`;
 }
 
 function CellNeighbors({ neighbors }) {

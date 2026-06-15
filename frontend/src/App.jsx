@@ -69,8 +69,8 @@ export default function App() {
   const [modalContent, setModalContent] = useState(null);
   const [sceneChooserOpen, setSceneChooserOpen] = useState(false);
   const [scenes, setScenes] = useState([]);
-  const [activeScene, setActiveScene] = useState(() => clone(DEFAULT_ACTIVE_SCENE));
-  const [isSceneListLoading, setIsSceneListLoading] = useState(false);
+  const [activeScene, setActiveScene] = useState(null);
+  const [isSceneListLoading, setIsSceneListLoading] = useState(true);
   const [isSceneLoading, setIsSceneLoading] = useState(false);
   const [sceneNotice, setSceneNoticeState] = useState(null);
   const [hover, setHover] = useState(null);
@@ -176,6 +176,7 @@ export default function App() {
 
   useEffect(() => {
     loadScenes().catch((error) => {
+      setActiveScene(clone(DEFAULT_ACTIVE_SCENE));
       setSceneNotice(`Failed to load scenes: ${error.message}`, true);
     });
   }, [loadScenes]);
@@ -223,7 +224,7 @@ export default function App() {
   }
 
   async function runSimulation() {
-    if (isRunning || isSceneLoading) {
+    if (isRunning || isSceneLoading || isSceneListLoading || !activeScene) {
       return;
     }
 
@@ -525,7 +526,7 @@ export default function App() {
           canvasRef={canvasRef}
           coverageImageUrl={coverageImageUrl}
           hover={hover}
-          isSceneLoading={isSceneLoading}
+          isSceneLoading={isSceneLoading || isSceneListLoading || !activeScene}
           isRunning={isRunning}
           latestGrid={latestGrid}
           latestSolver={latestSolver}
@@ -639,7 +640,7 @@ function Navbar({
     <header className="app-navbar">
       <div>
         <strong>Sionna Planner</strong>
-        <span>Scene: {activeScene?.name || "Munich"}</span>
+        <span>Scene: {activeScene?.name || "Loading..."}</span>
       </div>
       <nav aria-label="Primary navigation">
         {ROUTES.map((item) => (

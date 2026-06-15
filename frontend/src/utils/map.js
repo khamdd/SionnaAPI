@@ -37,6 +37,8 @@ export function summarizeGrid(grid) {
       bestSinr: "--",
       medianThroughput: "--",
       cellCount: "--",
+      averageOverlap: "--",
+      overlapPercent: "--",
     };
   }
 
@@ -51,10 +53,18 @@ export function summarizeGrid(grid) {
     ? throughput[Math.floor(throughput.length / 2)]
     : null;
 
+  const overlapSummary = grid.overlap_summary || {};
+
   return {
     bestSinr: bestSinr === null ? "--" : `${bestSinr.toFixed(2)} dB`,
     medianThroughput: median === null ? "--" : `${median.toFixed(2)} Mbps`,
     cellCount: `${grid.cells.length}`,
+    averageOverlap: Number.isFinite(overlapSummary.average_overlap_count)
+      ? overlapSummary.average_overlap_count.toFixed(2)
+      : "--",
+    overlapPercent: Number.isFinite(overlapSummary.overlap_percent)
+      ? `${overlapSummary.overlap_percent.toFixed(2)}%`
+      : "--",
   };
 }
 
