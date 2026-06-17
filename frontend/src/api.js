@@ -155,6 +155,18 @@ export async function deleteSimulationRun(runId) {
   return response.json();
 }
 
+export async function fetchArtifactJson(url) {
+  const response = await fetch(toApiUrl(url), {
+    headers: authHeaders(),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response));
+  }
+
+  return response.json();
+}
+
 function withAuth(options = {}) {
   return {
     ...options,
@@ -175,6 +187,14 @@ function authHeaders() {
   return {
     Authorization: `Bearer ${token}`,
   };
+}
+
+function toApiUrl(url) {
+  if (/^https?:\/\//i.test(url)) {
+    return url;
+  }
+
+  return `${API_BASE_URL}${url.startsWith("/") ? url : `/${url}`}`;
 }
 
 async function readErrorMessage(response) {

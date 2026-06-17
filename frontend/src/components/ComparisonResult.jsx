@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { fetchArtifactJson } from "../api";
 import {
   firstArtifactUrl,
   formatDateTime,
@@ -210,7 +211,11 @@ function ComparisonCoveragePreview({
   mode,
   onPreviewLoadingChange,
 }) {
-  const grid = comparisonPreviewGrid(item);
+  const fullResult = useFullResultArtifact(item);
+  const grid = comparisonPreviewGrid(fullResult ? {
+    ...item,
+    response_json: fullResult,
+  } : item);
   const [selectedCell, setSelectedCell] = useState(null);
 
   if (item.scene_bounds) {
@@ -326,6 +331,41 @@ function comparisonPreviewGrid(item) {
   }
 
   return grid;
+}
+
+function useFullResultArtifact(item) {
+  const url = item.response_json?.full_result_url || "";
+  const [result, setResult] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+
+    setResult(null);
+
+    if (!url) {
+      return () => {
+        active = false;
+      };
+    }
+
+    fetchArtifactJson(url)
+      .then((value) => {
+        if (active) {
+          setResult(value);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setResult(null);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [item.id, url]);
+
+  return result;
 }
 
 function comparisonPreviewSolver(item) {

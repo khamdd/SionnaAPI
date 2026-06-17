@@ -69,6 +69,12 @@ export function formatText(value) {
 }
 
 export function firstArtifactUrl(artifacts) {
-  const artifact = (artifacts || []).find((item) => item.public_url);
+  const artifact = (artifacts || []).find((item) => (
+    item.public_url
+    && (
+      item.artifact_type === "coverage_png"
+      || /\.(png|jpe?g|webp|gif)$/i.test(item.public_url)
+    )
+  ));
   return artifact ? artifact.public_url : "";
 }

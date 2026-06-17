@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { fetchArtifactJson } from "../api";
 import {
   firstArtifactUrl,
   formatMaybeNumber,
@@ -135,7 +136,11 @@ function HistoryCoveragePreview({
   mode,
   onPreviewLoadingChange,
 }) {
-  const grid = historyPreviewGrid(item);
+  const fullResult = useFullResultArtifact(item);
+  const grid = historyPreviewGrid(fullResult ? {
+    ...item,
+    response_json: fullResult,
+  } : item);
   const [selectedCell, setSelectedCell] = useState(null);
 
   if (item.scene_bounds) {
@@ -180,6 +185,41 @@ function historyPreviewGrid(item) {
   }
 
   return grid;
+}
+
+function useFullResultArtifact(item) {
+  const url = item.response_json?.full_result_url || "";
+  const [result, setResult] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+
+    setResult(null);
+
+    if (!url) {
+      return () => {
+        active = false;
+      };
+    }
+
+    fetchArtifactJson(url)
+      .then((value) => {
+        if (active) {
+          setResult(value);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setResult(null);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [item.id, url]);
+
+  return result;
 }
 
 function HistoryCoverageCellDialog({ cell, onClose }) {

@@ -62,6 +62,11 @@ def store_simulation_result(
                 run_id,
                 result,
             )
+            attach_full_result_file_if_heavy(
+                session,
+                run_id,
+                result,
+            )
 
             return run_id
 
@@ -261,6 +266,28 @@ def delete_simulation_run(run_id):
                     "run_id": run_id,
                 },
             ).mappings().all()
+            full_result = session.execute(
+                text(
+                    """
+                    SELECT
+                        response_json->>'full_result_url' AS public_url
+                    FROM simulation_runs
+                    WHERE id = :run_id
+                    """
+                ),
+                {
+                    "run_id": run_id,
+                },
+            ).mappings().first()
+            files_to_delete = list(artifacts)
+
+            if full_result and full_result["public_url"]:
+                files_to_delete.append(
+                    {
+                        "file_path": "",
+                        "public_url": full_result["public_url"],
+                    }
+                )
 
             deleted = session.execute(
                 text(
@@ -281,7 +308,7 @@ def delete_simulation_run(run_id):
                 "deleted": False,
             }
 
-        deleted_files = delete_artifact_files(artifacts)
+        deleted_files = delete_artifact_files(files_to_delete)
 
         return {
             "database_configured": True,
@@ -424,7 +451,7 @@ def insert_simulation_run(
             "bandwidth_mhz": getattr(req, "bandwidth_mhz", None),
             "mimo_layers": getattr(req, "mimo_layers", None),
             "request_json": to_json_string(req),
-            "response_json": to_json_string(result),
+            "response_json": to_json_string(summarize_response(result)),
             "coverage_map_image_url": result.get("coverage_map_image_url"),
             "error_message": result.get("error"),
             "started_at": started_at,
@@ -530,6 +557,74 @@ def insert_artifact_if_present(
     )
 
 
+def attach_full_result_file_if_heavy(
+    session,
+    run_id,
+    result,
+):
+    if not should_store_full_result_artifact(result):
+        return None
+
+    artifact_dir = STATIC_DIR / "simulation-results"
+    artifact_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+    relative_path = Path("simulation-results") / f"{run_id}.json"
+    file_path = STATIC_DIR / relative_path
+
+    try:
+        file_path.write_text(
+            to_json_string(result),
+            encoding="utf-8",
+        )
+    except OSError:
+        logger.warning(
+            "Failed to write full simulation result artifact: %s",
+            file_path,
+            exc_info=True,
+        )
+        return None
+
+    public_url = f"/static/{relative_path.as_posix()}"
+    session.execute(
+        text(
+            """
+            UPDATE simulation_runs
+            SET response_json = jsonb_set(
+                jsonb_set(
+                    response_json,
+                    '{full_result_url}',
+                    to_jsonb(CAST(:public_url AS text)),
+                    true
+                ),
+                '{full_result_size_bytes}',
+                to_jsonb(CAST(:size_bytes AS bigint)),
+                true
+            )
+            WHERE id = :simulation_run_id
+            """
+        ),
+        {
+            "simulation_run_id": run_id,
+            "public_url": public_url,
+            "size_bytes": file_path.stat().st_size,
+        },
+    )
+    return public_url
+
+
+def should_store_full_result_artifact(result):
+    grid = result.get("grid")
+
+    if isinstance(grid, dict) and isinstance(grid.get("cells"), list):
+        return len(grid["cells"]) > 0
+
+    users = result.get("users")
+
+    return isinstance(users, list) and len(users) > 0
+
+
 def normalize_status(result):
     status = str(result.get("status", "failure")).lower()
     if status == "success":
@@ -545,9 +640,17 @@ def summarize_response(result):
     if isinstance(grid, dict):
         cells = grid.get("cells") or []
         summary["grid"] = {
-            "rows": grid.get("rows"),
-            "cols": grid.get("cols"),
-            "cell_count": len(cells),
+            key: value
+            for key, value in grid.items()
+            if key != "cells"
+        }
+        summary["grid"]["cell_count"] = grid.get("cell_count") or len(cells)
+
+    users = summary.get("users")
+
+    if isinstance(users, list):
+        summary["users"] = {
+            "count": len(users),
         }
 
     return summary
