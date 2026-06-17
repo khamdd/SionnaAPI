@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from backend.constants import MAX_GRID_CELLS
 from backend.api.dependencies import require_current_user
+from backend.database import is_database_configured
 from backend.schemas.requests import (
     CoverageRequest,
     NetworkCoverageRequest,
@@ -35,6 +36,10 @@ from backend.services.simulation_store import (
     list_simulation_runs,
     store_simulation_result,
     utc_now,
+)
+from backend.services.simulation_job_store import (
+    create_simulation_job,
+    get_simulation_job,
 )
 from backend.services.scene_service import (
     activate_scene,
@@ -133,6 +138,44 @@ def run_and_store(
         )
 
     return return_or_raise(result)
+
+
+def queue_or_run(
+    simulation_type,
+    req,
+    simulation_fn,
+    base_url=None,
+):
+    if is_database_configured():
+        scene_info = get_engine_scene_info()
+        align_request_solver_to_scene(req, scene_info)
+        validate_request_positions_inside_solver(req)
+        job_id = create_simulation_job(
+            simulation_type,
+            req,
+            scene_info,
+            base_url=base_url,
+        )
+        log_business_event(
+            "simulation_queued",
+            simulation_type=simulation_type,
+            scene_id=scene_info.get("id"),
+            scene_name=scene_info.get("name"),
+            job_id=job_id,
+        )
+        return {
+            "status": "queued",
+            "job_id": job_id,
+            "simulation_type": simulation_type,
+        }
+
+    with engine.lock:
+        scene = engine.get_scene()
+        return run_and_store(
+            simulation_type,
+            req,
+            lambda: simulation_fn(scene),
+        )
 
 
 def align_request_solver_to_scene(req, scene_info):
@@ -303,75 +346,74 @@ def get_engine_scene_info():
 
 @router.post("/coverage-map")
 def coverage_map(req: CoverageRequest, request: Request):
-
-    with engine.lock:
-        scene = engine.get_scene()
-
-        return run_and_store(
-            "coverage_map",
-            req,
-            lambda: calculate_coverage_map_service(
+    return queue_or_run(
+        "coverage_map",
+        req,
+        lambda scene: calculate_coverage_map_service(
                 req,
                 request.base_url,
                 scene,
-            ),
-        )
+        ),
+        base_url=str(request.base_url),
+    )
 
 
 @router.post("/network-coverage")
 def network_coverage(req: NetworkCoverageRequest, request: Request):
-
-    with engine.lock:
-        scene = engine.get_scene()
-
-        return run_and_store(
-            "network_coverage",
-            req,
-            lambda: calculate_network_coverage_service(
+    return queue_or_run(
+        "network_coverage",
+        req,
+        lambda scene: calculate_network_coverage_service(
                 req,
                 request.base_url,
                 scene,
-            ),
-        )
+        ),
+        base_url=str(request.base_url),
+    )
 
 
 @router.post("/rsrp-simulation")
 def rsrp_simulation(req: RSRPRequest):
-
-    with engine.lock:
-        scene = engine.get_scene()
-
-        return run_and_store(
-            "rsrp_simulation",
-            req,
-            lambda: calculate_rsrp_service(req, scene),
-        )
+    return queue_or_run(
+        "rsrp_simulation",
+        req,
+        lambda scene: calculate_rsrp_service(req, scene),
+    )
 
 
 @router.post("/sinr")
 def calculate_sinr(req: SINRRequest):
-
-    with engine.lock:
-        scene = engine.get_scene()
-
-        return run_and_store(
-            "sinr",
-            req,
-            lambda: calculate_sinr_service(req, scene),
-        )
+    return queue_or_run(
+        "sinr",
+        req,
+        lambda scene: calculate_sinr_service(req, scene),
+    )
 
 
 @router.post("/throughput-comparison")
 def compare_throughput(req: ThroughputRequest):
+    return queue_or_run(
+        "throughput_comparison",
+        req,
+        lambda scene: compare_throughput_service(req, scene),
+    )
 
-    with engine.lock:
-        scene = engine.get_scene()
 
-        return run_and_store(
-            "throughput_comparison",
-            req,
-            lambda: compare_throughput_service(req, scene),
+@router.get("/simulation-jobs/{job_id}")
+def simulation_job_detail(job_id: str):
+    result = get_simulation_job(job_id)
+
+    if (
+        result.get("database_configured")
+        and result.get("item") is None
+        and not result.get("error")
+    ):
+        raise HTTPException(
+            status_code=404,
+            detail="Simulation job not found.",
         )
+
+    return result
 
 
 @router.get("/simulation-runs")

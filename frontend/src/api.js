@@ -14,52 +14,70 @@ async function requestJson(path, options = {}) {
 }
 
 export function runNetworkCoverage(payload) {
-  return requestJson("/api/v1/network-coverage", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
+  return runSimulationRequest("/api/v1/network-coverage", payload);
 }
 
 export function runCoverageMap(payload) {
-  return requestJson("/api/v1/coverage-map", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
+  return runSimulationRequest("/api/v1/coverage-map", payload);
 }
 
 export function runRsrpSimulation(payload) {
-  return requestJson("/api/v1/rsrp-simulation", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
+  return runSimulationRequest("/api/v1/rsrp-simulation", payload);
 }
 
 export function runSinr(payload) {
-  return requestJson("/api/v1/sinr", {
+  return runSimulationRequest("/api/v1/sinr", payload);
+}
+
+export function runThroughputComparison(payload) {
+  return runSimulationRequest("/api/v1/throughput-comparison", payload);
+}
+
+async function runSimulationRequest(path, payload) {
+  const response = await requestJson(path, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),
   });
+
+  if (!response?.job_id) {
+    return response;
+  }
+
+  return pollSimulationJob(response.job_id);
 }
 
-export function runThroughputComparison(payload) {
-  return requestJson("/api/v1/throughput-comparison", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
+async function pollSimulationJob(jobId) {
+  const timeoutAt = Date.now() + 30 * 60 * 1000;
+
+  while (Date.now() < timeoutAt) {
+    await delay(1500);
+
+    const jobResponse = await requestJson(`/api/v1/simulation-jobs/${jobId}`);
+    const job = jobResponse.item || jobResponse;
+
+    if (job.status === "succeeded") {
+      return {
+        ...(job.result || {}),
+        job_id: job.id,
+        result_run_id: job.result_run_id,
+      };
+    }
+
+    if (job.status === "failed") {
+      const result = job.result || {};
+      throw new Error(job.error_message || result.error || "Simulation job failed.");
+    }
+  }
+
+  throw new Error("Simulation job timed out while waiting for the worker.");
+}
+
+function delay(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
   });
 }
 

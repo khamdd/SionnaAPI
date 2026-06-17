@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -7,8 +8,25 @@ from fastapi.staticfiles import StaticFiles
 from backend.api.auth import router as auth_router
 from backend.api.sinr import router as sinr_router
 from backend.middleware.request_logging import RequestLoggingMiddleware
+from backend.services.simulation_worker import (
+    start_simulation_worker,
+    stop_simulation_worker,
+)
 
-app = FastAPI(title="SionnaAPI")
+
+@asynccontextmanager
+async def lifespan(app):
+    start_simulation_worker()
+    try:
+        yield
+    finally:
+        stop_simulation_worker()
+
+
+app = FastAPI(
+    title="SionnaAPI",
+    lifespan=lifespan,
+)
 
 app.add_middleware(RequestLoggingMiddleware)
 

@@ -35,6 +35,7 @@ class FakeMetricEngine(FakeEngine):
 @pytest.fixture(autouse=True)
 def fake_sionna_engine(monkeypatch):
     monkeypatch.setattr(api_module, "engine", FakeEngine())
+    monkeypatch.setattr(api_module, "is_database_configured", lambda: False)
 
 
 @pytest.fixture(autouse=True)
@@ -348,3 +349,63 @@ def test_simulation_failure_logs_failed(monkeypatch):
     assert events[1][2]["simulation_type"] == "sinr"
     assert events[1][2]["status"] == "failure"
     assert events[1][2]["error"] == "forced failure"
+
+
+def test_simulation_request_queues_job_when_database_is_configured(monkeypatch):
+    created_jobs = []
+    monkeypatch.setattr(api_module, "is_database_configured", lambda: True)
+    monkeypatch.setattr(
+        api_module,
+        "create_simulation_job",
+        lambda simulation_type, req, scene_info, base_url=None: (
+            created_jobs.append(
+                {
+                    "simulation_type": simulation_type,
+                    "scene_info": scene_info,
+                    "request": req,
+                    "base_url": base_url,
+                }
+            )
+            or "11111111-1111-1111-1111-111111111111"
+        ),
+    )
+    monkeypatch.setattr(
+        api_module,
+        "calculate_sinr_service",
+        lambda req, scene: pytest.fail("Sionna service should not run in request"),
+    )
+
+    response = client.post(
+        "/api/v1/sinr",
+        json={
+            "tilt": 8.0,
+            "transmitter_position": [0.0, 0.0, 25.0],
+            "receiver_position": [10.0, 10.0, 1.5],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "queued",
+        "job_id": "11111111-1111-1111-1111-111111111111",
+        "simulation_type": "sinr",
+    }
+    assert created_jobs[0]["simulation_type"] == "sinr"
+    assert created_jobs[0]["scene_info"]["id"] == "munich"
+
+
+def test_simulation_job_detail_returns_404_for_missing_job(monkeypatch):
+    monkeypatch.setattr(
+        api_module,
+        "get_simulation_job",
+        lambda job_id: {
+            "database_configured": True,
+            "item": None,
+        },
+    )
+
+    response = client.get(
+        "/api/v1/simulation-jobs/11111111-1111-1111-1111-111111111111",
+    )
+
+    assert response.status_code == 404
