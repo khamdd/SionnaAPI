@@ -61,11 +61,6 @@ def test_network_coverage_uses_one_global_transmitter_pattern(monkeypatch):
     )
     monkeypatch.setattr(
         coverage_service,
-        "render_network_coverage_image",
-        lambda scene, radio_map, camera, base_url: "http://test/static/map.png",
-    )
-    monkeypatch.setattr(
-        coverage_service,
         "build_network_grid",
         lambda radio_map, req: {
             "rows": 0,
@@ -86,6 +81,7 @@ def test_network_coverage_uses_one_global_transmitter_pattern(monkeypatch):
     )
 
     assert result["status"] == "success"
+    assert result["coverage_map_image_url"] == ""
     assert result["transmitter_pattern"] == "iso"
     assert fake_scene.tx_array.kwargs["pattern"] == "iso"
     assert len(sync_calls) == 2

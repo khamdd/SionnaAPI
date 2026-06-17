@@ -265,7 +265,7 @@ export default function App() {
 
       setLatestGrid(result.grid);
       setLatestSolver(result.solver);
-      setCoverageImageUrl(`${result.coverage_map_image_url}?t=${Date.now()}`);
+      setCoverageImageUrl(result.coverage_map_image_url ? `${result.coverage_map_image_url}?t=${Date.now()}` : "");
       setRunStatus("Simulation complete");
     } catch (error) {
       setRunStatus(`Simulation failed: ${error.message}`);

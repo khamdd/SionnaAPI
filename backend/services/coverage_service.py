@@ -1,4 +1,3 @@
-from uuid import uuid4
 from backend.constants import (
     GENERATED_IMAGE_QUOTA_BYTES,
     MIN_NEIGHBOR_SIGNAL_DBM,
@@ -7,7 +6,7 @@ from backend.constants import (
 )
 
 import numpy as np
-from sionna.rt import Camera, PlanarArray, RadioMapSolver, Transmitter
+from sionna.rt import PlanarArray, RadioMapSolver, Transmitter
 
 from backend.schemas.requests import CoverageRequest, NetworkCoverageRequest
 from backend.simulations.antenna_factory import remove_entity, sync_transmitter
@@ -22,7 +21,6 @@ from backend.simulations.radio_calculator import (
 def calculate_coverage_map_service(req: CoverageRequest, base_url, scene):
     try:
         solver = req.solver
-        camera_cfg = req.camera
         tilt_rad = req.tilt * np.pi / 180
 
         remove_entity(scene, "tx0")
@@ -60,23 +58,6 @@ def calculate_coverage_map_service(req: CoverageRequest, base_url, scene):
             orientation=[0, 0, 0],
         )
 
-        filename, filepath = prepare_generated_image_path()
-
-        camera = Camera(
-            position=list(camera_cfg.position),
-            look_at=list(camera_cfg.look_at),
-        )
-
-        scene.render_to_file(
-            camera=camera,
-            filename=str(filepath),
-            resolution=[
-                1024,
-                768,
-            ],
-            radio_map=radio_map,
-        )
-
         grid = build_single_transmitter_grid(
             radio_map,
             req,
@@ -84,9 +65,7 @@ def calculate_coverage_map_service(req: CoverageRequest, base_url, scene):
 
         return {
             "status": "success",
-            "coverage_map_image_url": (
-                f"{str(base_url).rstrip('/')}/static/{filename}"
-            ),
+            "coverage_map_image_url": "",
             "grid": grid,
             "solver": {
                 "cell_size": req.solver.cell_size,
@@ -147,13 +126,6 @@ def calculate_network_coverage_service(
             scene,
         )
 
-        image_url = render_network_coverage_image(
-            scene,
-            radio_map,
-            req.camera,
-            base_url,
-        )
-
         grid = build_network_grid(
             radio_map,
             req,
@@ -161,7 +133,7 @@ def calculate_network_coverage_service(
 
         return {
             "status": "success",
-            "coverage_map_image_url": image_url,
+            "coverage_map_image_url": "",
             "grid": grid,
             "solver": {
                 "cell_size": req.solver.cell_size,
@@ -201,44 +173,6 @@ def execute_network_radio_map(solver, scene):
         size=list(solver.size),
         orientation=[0, 0, 0],
     )
-
-
-def render_network_coverage_image(
-    scene,
-    radio_map,
-    camera_cfg,
-    base_url,
-):
-    filename, filepath = prepare_generated_image_path()
-    camera = Camera(
-        position=list(camera_cfg.position),
-        look_at=list(camera_cfg.look_at),
-    )
-
-    scene.render_to_file(
-        camera=camera,
-        filename=str(filepath),
-        resolution=[
-            1200,
-            900,
-        ],
-        radio_map=radio_map,
-        show_devices=False,
-        show_orientations=False,
-    )
-
-    return f"{str(base_url).rstrip('/')}/static/{filename}"
-
-
-def prepare_generated_image_path():
-    STATIC_DIR.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-    cleanup_generated_images()
-
-    filename = f"{uuid4()}.png"
-    return filename, STATIC_DIR / filename
 
 
 def cleanup_generated_images(
