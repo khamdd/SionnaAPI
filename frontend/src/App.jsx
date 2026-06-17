@@ -188,6 +188,20 @@ export default function App() {
   }, [loadScenes]);
 
   useEffect(() => {
+    if (!activeScene) {
+      return;
+    }
+
+    setAntennas(antennasForScene(activeScene));
+    setLatestSolver(solverForScene(activeScene));
+    setLatestGrid(null);
+    setCoverageImageUrl("");
+    setHover(null);
+    setRunStatus("Ready");
+    setRunError(false);
+  }, [activeScene?.id]);
+
+  useEffect(() => {
     if (comparisonType && selectedComparisonIds.size === 0) {
       setComparisonType(null);
       setComparisonSceneId(null);
@@ -274,9 +288,9 @@ export default function App() {
   }
 
   function resetAntennas() {
-    setAntennas(clone(DEFAULT_ANTENNAS));
+    setAntennas(antennasForScene(activeScene));
     setLatestGrid(null);
-    setLatestSolver(clone(DEFAULT_SOLVER));
+    setLatestSolver(solverForScene(activeScene));
     setCoverageImageUrl("");
     setHover(null);
     setRunStatus("Ready");
@@ -341,10 +355,6 @@ export default function App() {
     setSceneChooserOpen(false);
     setSceneNotice(`${scene.name} is now active.`);
     loadScenes().catch(() => {});
-    setLatestGrid(null);
-    setLatestSolver(solverForScene(scene));
-    setCoverageImageUrl("");
-    setHover(null);
   }
 
   function setSceneNotice(message, error = false) {
@@ -824,6 +834,33 @@ function buildNetworkCoveragePayload(antennas, activeScene) {
   };
 }
 
+function antennasForScene(scene) {
+  const width = Number(scene?.metrics?.width_m);
+  const height = Number(scene?.metrics?.height_m);
+
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return clone(DEFAULT_ANTENNAS);
+  }
+
+  const scaleX = width / DEFAULT_SOLVER.size[0];
+  const scaleY = height / DEFAULT_SOLVER.size[1];
+  const xLimit = width / 2;
+  const yLimit = height / 2;
+
+  return DEFAULT_ANTENNAS.map((antenna) => {
+    const [x, y, z] = antenna.position;
+
+    return {
+      ...clone(antenna),
+      position: [
+        roundPosition(clamp(x * scaleX, -xLimit, xLimit)),
+        roundPosition(clamp(y * scaleY, -yLimit, yLimit)),
+        z,
+      ],
+    };
+  });
+}
+
 function solverForScene(scene) {
   const width = Number(scene?.metrics?.width_m);
   const height = Number(scene?.metrics?.height_m);
@@ -848,6 +885,14 @@ function solverForScene(scene) {
     ],
     cell_size: cellSize,
   };
+}
+
+function roundPosition(value) {
+  return Number(value.toFixed(2));
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
 }
 
 async function loadComparisonDetails(selectedIds, cachedDetails) {
