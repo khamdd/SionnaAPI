@@ -75,6 +75,68 @@ export function solverForScene(scene, baseSolver = DEFAULT_SOLVER) {
   };
 }
 
+export function solverBounds(solver) {
+  const center = Array.isArray(solver?.center) ? solver.center : DEFAULT_SOLVER.center;
+  const size = Array.isArray(solver?.size) ? solver.size : DEFAULT_SOLVER.size;
+  const width = Number(size[0]);
+  const height = Number(size[1]);
+  const centerX = Number(center[0]);
+  const centerY = Number(center[1]);
+
+  if (
+    !isPositiveFinite(width)
+    || !isPositiveFinite(height)
+    || !Number.isFinite(centerX)
+    || !Number.isFinite(centerY)
+  ) {
+    return null;
+  }
+
+  return {
+    xMax: centerX + width / 2,
+    xMin: centerX - width / 2,
+    yMax: centerY + height / 2,
+    yMin: centerY - height / 2,
+  };
+}
+
+export function validatePositionInsideSolver(position, solver) {
+  const bounds = solverBounds(solver);
+
+  if (!bounds) {
+    return "";
+  }
+
+  if (
+    position?.[0] === ""
+    || position?.[1] === ""
+    || position?.[2] === ""
+    || position?.[0] == null
+    || position?.[1] == null
+    || position?.[2] == null
+  ) {
+    return "Enter numeric x, y, and z coordinates.";
+  }
+
+  const x = Number(position?.[0]);
+  const y = Number(position?.[1]);
+  const z = Number(position?.[2]);
+
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+    return "Enter numeric x, y, and z coordinates.";
+  }
+
+  if (x < bounds.xMin || x > bounds.xMax || y < bounds.yMin || y > bounds.yMax) {
+    return `Must stay inside x ${formatLimit(bounds.xMin)} to ${formatLimit(bounds.xMax)} m and y ${formatLimit(bounds.yMin)} to ${formatLimit(bounds.yMax)} m.`;
+  }
+
+  return "";
+}
+
+function formatLimit(value) {
+  return Number(value.toFixed(2));
+}
+
 function isPositiveFinite(value) {
   return Number.isFinite(value) && value > 0;
 }

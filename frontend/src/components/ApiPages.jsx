@@ -20,7 +20,11 @@ import {
   formatPositionValue,
   formatText,
 } from "../utils/format";
-import { solverForScene } from "../utils/scene";
+import {
+  solverBounds,
+  solverForScene,
+  validatePositionInsideSolver,
+} from "../utils/scene";
 import Scene3DPreview, { hasCachedSceneModel } from "./Scene3DPreview";
 
 export function CoverageApiPage({ activeScene, onProgressChange, onSceneLoadingChange }) {
@@ -37,10 +41,17 @@ export function CoverageApiPage({ activeScene, onProgressChange, onSceneLoadingC
   );
   const sceneStatus = useScenePreviewStatus(activeScene, onSceneLoadingChange);
   const sceneSolver = solverForScene(activeScene, form.solver);
+  const positionValidation = validateScenePositions(sceneSolver, [
+    {
+      key: "transmitter_position",
+      label: "Transmitter position",
+      value: form.transmitter_position,
+    },
+  ]);
 
   async function submit(event) {
     event.preventDefault();
-    if (resultState.loading || !sceneStatus.isSceneReady) {
+    if (resultState.loading || !sceneStatus.isSceneReady || !positionValidation.isValid) {
       return;
     }
 
@@ -80,11 +91,17 @@ export function CoverageApiPage({ activeScene, onProgressChange, onSceneLoadingC
           <FormSection title="Transmitter">
             <NumberField label="Tilt" unit="deg" value={form.tilt} onChange={(value) => updateForm(setForm, "tilt", value)} />
             <NumberField label="Power" unit="dBm" value={form.tx_power} onChange={(value) => updateForm(setForm, "tx_power", value)} />
-            <PositionField label="Position" value={form.transmitter_position} onChange={(value) => updateForm(setForm, "transmitter_position", value)} />
+            <PositionField
+              error={positionValidation.errors.transmitter_position}
+              label="Position"
+              solver={sceneSolver}
+              value={form.transmitter_position}
+              onChange={(value) => updateForm(setForm, "transmitter_position", value)}
+            />
           </FormSection>
           <SolverFields solver={sceneSolver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
-          <button className="primary-button" type="submit" disabled={resultState.loading || !sceneStatus.isSceneReady}>
-            {resultState.loading ? "Running..." : sceneStatus.isSceneReady ? "Run coverage" : "Loading scene..."}
+          <button className="primary-button" type="submit" disabled={resultState.loading || !sceneStatus.isSceneReady || !positionValidation.isValid}>
+            {runButtonLabel(resultState.loading, sceneStatus.isSceneReady, positionValidation.isValid, "Run coverage")}
           </button>
         </fieldset>
       </form>
@@ -108,10 +125,27 @@ export function SinrApiPage({ activeScene, onProgressChange, onSceneLoadingChang
   );
   const sceneStatus = useScenePreviewStatus(activeScene, onSceneLoadingChange);
   const sceneSolver = solverForScene(activeScene, form.solver);
+  const positionValidation = validateScenePositions(sceneSolver, [
+    {
+      key: "transmitter_position",
+      label: "Transmitter position",
+      value: form.transmitter_position,
+    },
+    {
+      key: "receiver_position",
+      label: "Receiver position",
+      value: form.receiver_position,
+    },
+    {
+      key: "interferer_position",
+      label: "Interferer position",
+      value: form.interferer_position,
+    },
+  ]);
 
   async function submit(event) {
     event.preventDefault();
-    if (resultState.loading || !sceneStatus.isSceneReady) {
+    if (resultState.loading || !sceneStatus.isSceneReady || !positionValidation.isValid) {
       return;
     }
 
@@ -151,16 +185,34 @@ export function SinrApiPage({ activeScene, onProgressChange, onSceneLoadingChang
           <FormSection title="Serving transmitter">
             <NumberField label="Tilt" unit="deg" value={form.tilt} onChange={(value) => updateForm(setForm, "tilt", value)} />
             <NumberField label="Power" unit="dBm" value={form.tx_power} onChange={(value) => updateForm(setForm, "tx_power", value)} />
-            <PositionField label="Position" value={form.transmitter_position} onChange={(value) => updateForm(setForm, "transmitter_position", value)} />
+            <PositionField
+              error={positionValidation.errors.transmitter_position}
+              label="Position"
+              solver={sceneSolver}
+              value={form.transmitter_position}
+              onChange={(value) => updateForm(setForm, "transmitter_position", value)}
+            />
           </FormSection>
           <FormSection title="Receiver and interferer">
-            <PositionField label="Receiver" value={form.receiver_position} onChange={(value) => updateForm(setForm, "receiver_position", value)} />
-            <PositionField label="Interferer" value={form.interferer_position} onChange={(value) => updateForm(setForm, "interferer_position", value)} />
+            <PositionField
+              error={positionValidation.errors.receiver_position}
+              label="Receiver"
+              solver={sceneSolver}
+              value={form.receiver_position}
+              onChange={(value) => updateForm(setForm, "receiver_position", value)}
+            />
+            <PositionField
+              error={positionValidation.errors.interferer_position}
+              label="Interferer"
+              solver={sceneSolver}
+              value={form.interferer_position}
+              onChange={(value) => updateForm(setForm, "interferer_position", value)}
+            />
             <NumberField label="Interferer tilt" unit="deg" value={form.interferer_tilt} onChange={(value) => updateForm(setForm, "interferer_tilt", value)} />
           </FormSection>
           <SolverFields solver={sceneSolver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
-          <button className="primary-button" type="submit" disabled={resultState.loading || !sceneStatus.isSceneReady}>
-            {resultState.loading ? "Running..." : sceneStatus.isSceneReady ? "Calculate SINR" : "Loading scene..."}
+          <button className="primary-button" type="submit" disabled={resultState.loading || !sceneStatus.isSceneReady || !positionValidation.isValid}>
+            {runButtonLabel(resultState.loading, sceneStatus.isSceneReady, positionValidation.isValid, "Calculate SINR")}
           </button>
         </fieldset>
       </form>
@@ -182,10 +234,27 @@ export function RsrpSimulationPage({ activeScene, antennas, onProgressChange, on
   );
   const sceneStatus = useScenePreviewStatus(activeScene, onSceneLoadingChange);
   const sceneSolver = solverForScene(activeScene, form.solver);
+  const positionValidation = validateScenePositions(sceneSolver, [
+    {
+      key: "transmitter_position",
+      label: "Transmitter position",
+      value: form.transmitter_position,
+    },
+    {
+      key: "receiver_position",
+      label: "Receiver position",
+      value: form.receiver_position,
+    },
+    {
+      key: "interferer_position",
+      label: "Interferer position",
+      value: form.interferer_position,
+    },
+  ]);
 
   async function submit(event) {
     event.preventDefault();
-    if (resultState.loading || !sceneStatus.isSceneReady) {
+    if (resultState.loading || !sceneStatus.isSceneReady || !positionValidation.isValid) {
       return;
     }
 
@@ -363,9 +432,27 @@ export function ThroughputApiPage({ activeScene, onProgressChange, onSceneLoadin
             <NumberField label="Power" unit="dBm" value={form.tx_power} onChange={(value) => updateForm(setForm, "tx_power", value)} />
           </FormSection>
           <FormSection title="Radio link">
-            <PositionField label="Transmitter" value={form.transmitter_position} onChange={(value) => updateForm(setForm, "transmitter_position", value)} />
-            <PositionField label="Receiver" value={form.receiver_position} onChange={(value) => updateForm(setForm, "receiver_position", value)} />
-            <PositionField label="Interferer" value={form.interferer_position} onChange={(value) => updateForm(setForm, "interferer_position", value)} />
+            <PositionField
+              error={positionValidation.errors.transmitter_position}
+              label="Transmitter"
+              solver={sceneSolver}
+              value={form.transmitter_position}
+              onChange={(value) => updateForm(setForm, "transmitter_position", value)}
+            />
+            <PositionField
+              error={positionValidation.errors.receiver_position}
+              label="Receiver"
+              solver={sceneSolver}
+              value={form.receiver_position}
+              onChange={(value) => updateForm(setForm, "receiver_position", value)}
+            />
+            <PositionField
+              error={positionValidation.errors.interferer_position}
+              label="Interferer"
+              solver={sceneSolver}
+              value={form.interferer_position}
+              onChange={(value) => updateForm(setForm, "interferer_position", value)}
+            />
             <NumberField label="Interferer tilt" unit="deg" value={form.interferer_tilt} onChange={(value) => updateForm(setForm, "interferer_tilt", value)} />
           </FormSection>
           <FormSection title="Throughput assumptions">
@@ -373,8 +460,8 @@ export function ThroughputApiPage({ activeScene, onProgressChange, onSceneLoadin
             <NumberField label="MIMO layers" value={form.mimo_layers} min={1} step={1} onChange={(value) => updateForm(setForm, "mimo_layers", value)} />
           </FormSection>
           <SolverFields solver={sceneSolver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
-          <button className="primary-button" type="submit" disabled={resultState.loading || !sceneStatus.isSceneReady}>
-            {resultState.loading ? "Running..." : sceneStatus.isSceneReady ? "Compare throughput" : "Loading scene..."}
+          <button className="primary-button" type="submit" disabled={resultState.loading || !sceneStatus.isSceneReady || !positionValidation.isValid}>
+            {runButtonLabel(resultState.loading, sceneStatus.isSceneReady, positionValidation.isValid, "Compare throughput")}
           </button>
         </fieldset>
       </form>
@@ -612,22 +699,30 @@ function NumberField({ label, max, min, onChange, step = "any", unit = "", value
   );
 }
 
-function PositionField({ label, onChange, value }) {
+function PositionField({ error = "", label, onChange, solver = null, value }) {
+  const bounds = solverBounds(solver);
+
   return (
     <label className="form-field">
       <span>{label}</span>
-      <div className="vector-inputs">
-        {["x", "y", "z"].map((axis, index) => (
-          <input
-            key={axis}
-            type="number"
-            aria-label={`${label} ${axis}`}
-            value={value[index]}
-            step="any"
-            required
-            onChange={(event) => onChange(replaceArrayValue(value, index, parseNumericInput(event.target.value)))}
-          />
-        ))}
+      <div>
+        <div className="vector-inputs">
+          {["x", "y", "z"].map((axis, index) => (
+            <input
+              key={axis}
+              type="number"
+              aria-invalid={Boolean(error) && index < 2}
+              aria-label={`${label} ${axis}`}
+              value={value[index]}
+              min={axis === "x" ? bounds?.xMin : axis === "y" ? bounds?.yMin : undefined}
+              max={axis === "x" ? bounds?.xMax : axis === "y" ? bounds?.yMax : undefined}
+              step="any"
+              required
+              onChange={(event) => onChange(replaceArrayValue(value, index, parseNumericInput(event.target.value)))}
+            />
+          ))}
+        </div>
+        {error && <small className="field-error">{error}</small>}
       </div>
     </label>
   );
@@ -969,6 +1064,39 @@ function formatOverlap(item) {
   }
 
   return `${item.overlap_count} antenna(s), ${formatText(item.overlap_level)}`;
+}
+
+function validateScenePositions(solver, fields) {
+  const errors = {};
+
+  fields.forEach((field) => {
+    const error = validatePositionInsideSolver(field.value, solver);
+
+    if (error) {
+      errors[field.key] = `${field.label}: ${error}`;
+    }
+  });
+
+  return {
+    errors,
+    isValid: Object.keys(errors).length === 0,
+  };
+}
+
+function runButtonLabel(isLoading, isSceneReady, isFormValid, readyLabel) {
+  if (isLoading) {
+    return "Running...";
+  }
+
+  if (!isSceneReady) {
+    return "Loading scene...";
+  }
+
+  if (!isFormValid) {
+    return "Fix positions";
+  }
+
+  return readyLabel;
 }
 
 function useApiResult(onProgressChange, progressLabel) {

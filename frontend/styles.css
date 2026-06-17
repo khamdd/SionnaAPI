@@ -476,6 +476,11 @@ button.hidden,
   padding: 0 9px;
 }
 
+.form-field input[aria-invalid="true"] {
+  border-color: var(--danger);
+  background: #fff5f5;
+}
+
 .form-help {
   color: var(--muted);
   font-size: 12px;

@@ -20,6 +20,18 @@ class FakeEngine:
         return self.scene
 
 
+class FakeMetricEngine(FakeEngine):
+    def get_active_scene_info(self):
+        return {
+            "id": "hcm",
+            "name": "Ho Chi Minh",
+            "metrics": {
+                "width_m": 814.2,
+                "height_m": 626.5,
+            },
+        }
+
+
 @pytest.fixture(autouse=True)
 def fake_sionna_engine(monkeypatch):
     monkeypatch.setattr(api_module, "engine", FakeEngine())
@@ -141,6 +153,78 @@ def test_sinr_client_input_failure_returns_http_400(monkeypatch):
 
     assert response.status_code == 400
     assert response.json()["detail"]["status"] == "failure"
+
+
+def test_scene_position_validation_uses_active_scene_size(monkeypatch):
+    service_called = False
+    monkeypatch.setattr(api_module, "engine", FakeMetricEngine())
+    monkeypatch.setattr(
+        api_module,
+        "store_simulation_result",
+        lambda *args, **kwargs: None,
+    )
+
+    def fake_coverage_service(req, base_url, scene):
+        nonlocal service_called
+        service_called = True
+        return {"status": "success"}
+
+    monkeypatch.setattr(
+        api_module,
+        "calculate_coverage_map_service",
+        fake_coverage_service,
+    )
+
+    response = client.post(
+        "/api/v1/coverage-map",
+        json={
+            "tilt": 8.0,
+            "transmitter_position": [500.0, 0.0, 25.0],
+            "solver": {
+                "center": [0.0, 0.0, 0.0],
+                "size": [5000.0, 5000.0],
+                "cell_size": 50.0,
+                "max_depth": 5,
+                "samples_per_tx": 1000000,
+            },
+        },
+    )
+
+    assert response.status_code == 400
+    assert service_called is False
+    detail = response.json()["detail"]
+    assert detail["status"] == "failure"
+    assert "x -407.1 to 407.1 m" in detail["error"]
+
+
+def test_scene_position_validation_allows_scene_edge(monkeypatch):
+    monkeypatch.setattr(api_module, "engine", FakeMetricEngine())
+    monkeypatch.setattr(
+        api_module,
+        "store_simulation_result",
+        lambda *args, **kwargs: None,
+    )
+
+    def fake_coverage_service(req, base_url, scene):
+        assert req.solver.size == (814.2, 626.5)
+        return {"status": "success"}
+
+    monkeypatch.setattr(
+        api_module,
+        "calculate_coverage_map_service",
+        fake_coverage_service,
+    )
+
+    response = client.post(
+        "/api/v1/coverage-map",
+        json={
+            "tilt": 8.0,
+            "transmitter_position": [407.1, 313.25, 25.0],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
 
 
 def test_throughput_comparison_failure_returns_http_500(monkeypatch):

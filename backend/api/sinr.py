@@ -75,6 +75,7 @@ def run_and_store(
     started_at = utc_now()
     scene_info = get_engine_scene_info()
     align_request_solver_to_scene(req, scene_info)
+    validate_request_positions_inside_solver(req)
     log_simulation_event(
         "simulation_started",
         simulation_type,
@@ -167,6 +168,79 @@ def is_positive_number(value):
         return math.isfinite(float(value)) and float(value) > 0
     except (TypeError, ValueError):
         return False
+
+
+def validate_request_positions_inside_solver(req):
+    solver = getattr(req, "solver", None)
+
+    if solver is None:
+        return
+
+    x_min = float(solver.center[0]) - float(solver.size[0]) / 2.0
+    x_max = float(solver.center[0]) + float(solver.size[0]) / 2.0
+    y_min = float(solver.center[1]) - float(solver.size[1]) / 2.0
+    y_max = float(solver.center[1]) + float(solver.size[1]) / 2.0
+
+    for label, position in iter_position_fields(req):
+        error = position_bounds_error(
+            label,
+            position,
+            x_min,
+            x_max,
+            y_min,
+            y_max,
+        )
+
+        if error:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "status": "failure",
+                    "status_code": 400,
+                    "error": error,
+                },
+            )
+
+
+def iter_position_fields(req):
+    direct_fields = (
+        ("Transmitter position", "transmitter_position"),
+        ("Receiver position", "receiver_position"),
+        ("Interferer position", "interferer_position"),
+    )
+
+    for label, field in direct_fields:
+        if hasattr(req, field):
+            yield label, getattr(req, field)
+
+    for antenna in getattr(req, "antennas", []) or []:
+        antenna_id = getattr(antenna, "id", "unknown")
+        yield f"Antenna {antenna_id} position", antenna.position
+
+
+def position_bounds_error(label, position, x_min, x_max, y_min, y_max):
+    try:
+        x = float(position[0])
+        y = float(position[1])
+        z = float(position[2])
+    except (TypeError, ValueError, IndexError):
+        return f"{label} must include numeric x, y, and z coordinates."
+
+    if not math.isfinite(x) or not math.isfinite(y) or not math.isfinite(z):
+        return f"{label} must include numeric x, y, and z coordinates."
+
+    if x_min <= x <= x_max and y_min <= y <= y_max:
+        return None
+
+    return (
+        f"{label} must stay inside the selected scene "
+        f"(x {format_bound(x_min)} to {format_bound(x_max)} m, "
+        f"y {format_bound(y_min)} to {format_bound(y_max)} m)."
+    )
+
+
+def format_bound(value):
+    return round(float(value), 2)
 
 
 def log_simulation_event(
