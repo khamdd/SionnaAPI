@@ -16,6 +16,10 @@ from backend.constants import (
     SCENE_ROOT,
 )
 from backend.schemas.requests import SceneBoundsRequest
+from backend.services.osm_scene_builder import (
+    build_osm_sionna_scene,
+    validate_sionna_scene,
+)
 from backend.services.simulation_store import utc_now
 
 
@@ -78,10 +82,25 @@ def create_scene_preview(req: SceneBoundsRequest, base_url):
         scene_name = (req.name or f"Imported scene {scene_id[:8]}").strip()
         scene_dir = SCENE_ROOT / scene_id
         runtime_dir = scene_dir / "runtime_scene"
-        scene_xml = runtime_dir / "simple_street_canyon.xml"
 
-        scene_dir.mkdir(parents=True, exist_ok=True)
-        copy_demo_scene(runtime_dir)
+        try:
+            build_result = build_osm_sionna_scene(req, runtime_dir)
+            validate_sionna_scene(build_result.scene_path)
+        except ValueError as exc:
+            shutil.rmtree(scene_dir, ignore_errors=True)
+            return {
+                "status": "failure",
+                "status_code": 400,
+                "error": str(exc),
+            }
+        except Exception as exc:
+            shutil.rmtree(scene_dir, ignore_errors=True)
+            return {
+                "status": "failure",
+                "status_code": 502,
+                "error": f"Failed to build Sionna scene from OpenStreetMap data: {exc}",
+            }
+
         write_preview_svg(scene_dir / "preview.svg", scene_name, req, metrics)
 
         scene = {
@@ -91,7 +110,9 @@ def create_scene_preview(req: SceneBoundsRequest, base_url):
             "is_default": False,
             "bounds": req.model_dump(mode="json"),
             "metrics": metrics,
-            "scene_path": str(scene_xml),
+            "scene_path": str(build_result.scene_path),
+            "building_count": build_result.building_count,
+            "mesh_count": build_result.mesh_count,
             "preview_url": public_static_url(base_url, f"scenes/{scene_id}/preview.svg"),
             "created_at": utc_now().isoformat(),
         }

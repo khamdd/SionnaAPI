@@ -154,6 +154,7 @@ export default function App() {
 
       setScenes(nextScenes);
       setActiveScene(nextActiveScene);
+      setLatestSolver(solverForScene(nextActiveScene));
       return {
         ...result,
         active_scene: nextActiveScene,
@@ -238,7 +239,7 @@ export default function App() {
     setRunStatus("Running GPU simulation...");
 
     try {
-      const result = await runNetworkCoverage(buildNetworkCoveragePayload(antennas));
+      const result = await runNetworkCoverage(buildNetworkCoveragePayload(antennas, activeScene));
 
       if (result.status !== "success") {
         throw new Error(result.error || "Simulation failed");
@@ -341,6 +342,7 @@ export default function App() {
     setSceneNotice(`${scene.name} is now active.`);
     loadScenes().catch(() => {});
     setLatestGrid(null);
+    setLatestSolver(solverForScene(scene));
     setCoverageImageUrl("");
     setHover(null);
   }
@@ -808,17 +810,43 @@ function HistoryRoutePage({
   );
 }
 
-function buildNetworkCoveragePayload(antennas) {
+function buildNetworkCoveragePayload(antennas, activeScene) {
   return {
     antennas,
     transmitter_pattern: TRANSMITTER_PATTERN,
-    solver: DEFAULT_SOLVER,
+    solver: solverForScene(activeScene),
     camera: {
       position: [0, 0, 650],
       look_at: [0, 0, 0],
     },
     bandwidth_mhz: 100,
     mimo_layers: 4,
+  };
+}
+
+function solverForScene(scene) {
+  const width = Number(scene?.metrics?.width_m);
+  const height = Number(scene?.metrics?.height_m);
+
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return DEFAULT_SOLVER;
+  }
+
+  const maxGridCells = 50000;
+  const area = width * height;
+  const cellSize = Math.max(
+    DEFAULT_SOLVER.cell_size,
+    Math.ceil(Math.sqrt(area / maxGridCells)),
+  );
+
+  return {
+    ...DEFAULT_SOLVER,
+    center: [0, 0, 0],
+    size: [
+      Number(width.toFixed(2)),
+      Number(height.toFixed(2)),
+    ],
+    cell_size: cellSize,
   };
 }
 
