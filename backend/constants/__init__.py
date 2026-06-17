@@ -28,6 +28,10 @@ from backend.constants.scenes import (
     MAX_IMPORTED_SCENES,
     MAX_SCENE_AREA_KM2,
     MAX_SCENE_SIDE_M,
+    OVERPASS_URL,
+    OVERPASS_FALLBACK_URL,
+    DEFAULT_BUILDING_HEIGHT_M,
+    MIN_POLYGON_AREA_M2
 )
 from backend.constants.security import (
     ACCESS_TOKEN_EXPIRE_HOURS,

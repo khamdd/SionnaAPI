@@ -56,10 +56,10 @@ def test_build_osm_sionna_scene_writes_xml_and_ply_meshes(tmp_path):
     assert building_mesh.exists()
     assert ground_mesh.exists()
 
-    mesh_text = building_mesh.read_text(encoding="ascii")
-    assert "format ascii 1.0" in mesh_text
-    assert "element vertex 8" in mesh_text
-    assert "element face 12" in mesh_text
+    header = building_mesh.read_bytes().split(b"end_header\n", 1)[0].decode("ascii")
+    assert "format binary_little_endian 1.0" in header
+    assert "element vertex 8" in header
+    assert "element face 12" in header
 
     root = ET.parse(result.scene_path).getroot()
     assert root.tag == "scene"

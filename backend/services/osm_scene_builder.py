@@ -2,16 +2,14 @@ import json
 import math
 import re
 import shutil
+import struct
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
-
-
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
-DEFAULT_BUILDING_HEIGHT_M = 9.0
-MIN_POLYGON_AREA_M2 = 4.0
+from urllib.error import HTTPError, URLError
+from backend.constants.scenes import OVERPASS_URL, OVERPASS_FALLBACK_URL, DEFAULT_BUILDING_HEIGHT_M, MIN_POLYGON_AREA_M2
 
 
 @dataclass(frozen=True)
@@ -55,10 +53,10 @@ def build_osm_sionna_scene(bounds, output_dir, elements=None):
             if building.material == material
         ]
         mesh_path = mesh_dir / f"buildings_{material}.ply"
-        write_ascii_ply(mesh_path, build_building_mesh(material_buildings))
+        write_binary_ply(mesh_path, build_building_mesh(material_buildings))
         material_meshes.append((material, f"meshes/{mesh_path.name}"))
 
-    write_ascii_ply(ground_mesh, build_ground_mesh(bounds))
+    write_binary_ply(ground_mesh, build_ground_mesh(bounds))
 
     scene_path = output_dir / "osm_scene.xml"
     write_scene_xml(scene_path, material_meshes)
@@ -78,25 +76,37 @@ def validate_sionna_scene(scene_path):
 
 def fetch_osm_building_elements(bounds):
     query = f"""
-    [out:json][timeout:25];
-    (
-      way["building"]({bounds.south},{bounds.west},{bounds.north},{bounds.east});
-      relation["building"]({bounds.south},{bounds.west},{bounds.north},{bounds.east});
-    );
+    [out:json][timeout:25][bbox:{bounds.south},{bounds.west},{bounds.north},{bounds.east}];
+    way["building"];
     out tags geom;
     """
     body = urllib.parse.urlencode({"data": query}).encode("utf-8")
-    request = urllib.request.Request(
-        OVERPASS_URL,
-        data=body,
-        headers={"Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"},
-        method="POST",
-    )
 
-    with urllib.request.urlopen(request, timeout=30) as response:
-        payload = json.loads(response.read().decode("utf-8"))
+    last_error = None
+    for url in (OVERPASS_URL, OVERPASS_FALLBACK_URL):
+        request = urllib.request.Request(
+            url,
+            data=body,
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+                "User-Agent": "SionnaSimulation/1.0 (local radio planning tool)",
+            },
+            method="POST",
+        )
 
-    return payload.get("elements", [])
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+                return payload.get("elements", [])
+        except HTTPError as exc:
+            last_error = exc
+            if exc.code not in {406, 429, 502, 503, 504}:
+                break
+        except (TimeoutError, URLError, OSError) as exc:
+            last_error = exc
+
+    raise RuntimeError(f"OpenStreetMap building lookup failed: {last_error}")
 
 
 def parse_osm_buildings(elements):
@@ -389,22 +399,29 @@ def build_ground_mesh(bounds):
     return vertices, faces
 
 
-def write_ascii_ply(path, mesh):
+def write_binary_ply(path, mesh):
     vertices, faces = mesh
-    with Path(path).open("w", encoding="ascii", newline="\n") as file:
-        file.write("ply\n")
-        file.write("format ascii 1.0\n")
-        file.write(f"element vertex {len(vertices)}\n")
-        file.write("property float x\n")
-        file.write("property float y\n")
-        file.write("property float z\n")
-        file.write(f"element face {len(faces)}\n")
-        file.write("property list uchar int vertex_indices\n")
-        file.write("end_header\n")
+    header = "\n".join(
+        [
+            "ply",
+            "format binary_little_endian 1.0",
+            f"element vertex {len(vertices)}",
+            "property float x",
+            "property float y",
+            "property float z",
+            f"element face {len(faces)}",
+            "property list uchar int vertex_indices",
+            "end_header",
+            "",
+        ]
+    ).encode("ascii")
+
+    with Path(path).open("wb") as file:
+        file.write(header)
         for x, y, z in vertices:
-            file.write(f"{x:.6f} {y:.6f} {z:.6f}\n")
+            file.write(struct.pack("<fff", float(x), float(y), float(z)))
         for a, b, c in faces:
-            file.write(f"3 {a} {b} {c}\n")
+            file.write(struct.pack("<Biii", 3, int(a), int(b), int(c)))
 
 
 def write_scene_xml(path, material_meshes):
