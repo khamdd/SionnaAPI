@@ -1,5 +1,8 @@
+import math
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from backend.constants import MAX_GRID_CELLS
 from backend.api.dependencies import require_current_user
 from backend.schemas.requests import (
     CoverageRequest,
@@ -71,6 +74,7 @@ def run_and_store(
 ):
     started_at = utc_now()
     scene_info = get_engine_scene_info()
+    align_request_solver_to_scene(req, scene_info)
     log_simulation_event(
         "simulation_started",
         simulation_type,
@@ -128,6 +132,41 @@ def run_and_store(
         )
 
     return return_or_raise(result)
+
+
+def align_request_solver_to_scene(req, scene_info):
+    solver = getattr(req, "solver", None)
+    metrics = scene_info.get("metrics") or {}
+    width = metrics.get("width_m")
+    height = metrics.get("height_m")
+
+    if solver is None or not is_positive_number(width) or not is_positive_number(height):
+        return
+
+    width = float(width)
+    height = float(height)
+    minimum_cell_size = math.ceil(
+        math.sqrt((width * height) / MAX_GRID_CELLS)
+    )
+    cell_size = max(
+        float(solver.cell_size),
+        float(minimum_cell_size),
+    )
+
+    req.solver = solver.model_copy(
+        update={
+            "center": (0.0, 0.0, 0.0),
+            "size": (width, height),
+            "cell_size": cell_size,
+        }
+    )
+
+
+def is_positive_number(value):
+    try:
+        return math.isfinite(float(value)) and float(value) > 0
+    except (TypeError, ValueError):
+        return False
 
 
 def log_simulation_event(

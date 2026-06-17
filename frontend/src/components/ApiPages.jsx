@@ -20,6 +20,7 @@ import {
   formatPositionValue,
   formatText,
 } from "../utils/format";
+import { solverForScene } from "../utils/scene";
 import Scene3DPreview, { hasCachedSceneModel } from "./Scene3DPreview";
 
 export function CoverageApiPage({ activeScene, onProgressChange, onSceneLoadingChange }) {
@@ -35,6 +36,7 @@ export function CoverageApiPage({ activeScene, onProgressChange, onSceneLoadingC
     "Running Coverage API...",
   );
   const sceneStatus = useScenePreviewStatus(activeScene, onSceneLoadingChange);
+  const sceneSolver = solverForScene(activeScene, form.solver);
 
   async function submit(event) {
     event.preventDefault();
@@ -44,6 +46,7 @@ export function CoverageApiPage({ activeScene, onProgressChange, onSceneLoadingC
 
     const payload = {
       ...form,
+      solver: sceneSolver,
       transmitter_pattern: TRANSMITTER_PATTERN,
     };
     await setResultState(async () => ({
@@ -79,7 +82,7 @@ export function CoverageApiPage({ activeScene, onProgressChange, onSceneLoadingC
             <NumberField label="Power" unit="dBm" value={form.tx_power} onChange={(value) => updateForm(setForm, "tx_power", value)} />
             <PositionField label="Position" value={form.transmitter_position} onChange={(value) => updateForm(setForm, "transmitter_position", value)} />
           </FormSection>
-          <SolverFields solver={form.solver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
+          <SolverFields solver={sceneSolver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
           <button className="primary-button" type="submit" disabled={resultState.loading || !sceneStatus.isSceneReady}>
             {resultState.loading ? "Running..." : sceneStatus.isSceneReady ? "Run coverage" : "Loading scene..."}
           </button>
@@ -104,6 +107,7 @@ export function SinrApiPage({ activeScene, onProgressChange, onSceneLoadingChang
     "Running SINR API...",
   );
   const sceneStatus = useScenePreviewStatus(activeScene, onSceneLoadingChange);
+  const sceneSolver = solverForScene(activeScene, form.solver);
 
   async function submit(event) {
     event.preventDefault();
@@ -113,6 +117,7 @@ export function SinrApiPage({ activeScene, onProgressChange, onSceneLoadingChang
 
     const payload = {
       ...form,
+      solver: sceneSolver,
       transmitter_pattern: TRANSMITTER_PATTERN,
     };
     await setResultState(async () => ({
@@ -153,7 +158,7 @@ export function SinrApiPage({ activeScene, onProgressChange, onSceneLoadingChang
             <PositionField label="Interferer" value={form.interferer_position} onChange={(value) => updateForm(setForm, "interferer_position", value)} />
             <NumberField label="Interferer tilt" unit="deg" value={form.interferer_tilt} onChange={(value) => updateForm(setForm, "interferer_tilt", value)} />
           </FormSection>
-          <SolverFields solver={form.solver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
+          <SolverFields solver={sceneSolver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
           <button className="primary-button" type="submit" disabled={resultState.loading || !sceneStatus.isSceneReady}>
             {resultState.loading ? "Running..." : sceneStatus.isSceneReady ? "Calculate SINR" : "Loading scene..."}
           </button>
@@ -176,6 +181,7 @@ export function RsrpSimulationPage({ activeScene, antennas, onProgressChange, on
     "Running RSRP simulation...",
   );
   const sceneStatus = useScenePreviewStatus(activeScene, onSceneLoadingChange);
+  const sceneSolver = solverForScene(activeScene, form.solver);
 
   async function submit(event) {
     event.preventDefault();
@@ -188,6 +194,7 @@ export function RsrpSimulationPage({ activeScene, antennas, onProgressChange, on
       antennas,
       transmitter_pattern: TRANSMITTER_PATTERN,
       ...form,
+      solver: sceneSolver,
     };
     await setResultState(async () => ({
       ...(await runRsrpSimulation(payload)),
@@ -196,7 +203,7 @@ export function RsrpSimulationPage({ activeScene, antennas, onProgressChange, on
   }
 
   const result = resultState.result;
-  const solver = result?.solver || form.solver;
+  const solver = result?.solver || sceneSolver;
   const rsrpUsers = result?.users || EMPTY_ARRAY;
 
   return (
@@ -234,10 +241,10 @@ export function RsrpSimulationPage({ activeScene, antennas, onProgressChange, on
                   onChange={(value) => updateForm(setForm, "random_seed", value)}
                 />
                 <p className="form-help">
-                  Suggested count for this area: {suggestUserCount(form.solver)} users. 1000 is a good demo default for the current 300 m x 300 m planner area.
+                  Suggested count for this area: {suggestUserCount(sceneSolver)} users.
                 </p>
               </FormSection>
-              <SolverFields solver={form.solver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
+              <SolverFields solver={sceneSolver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
               <button className="primary-button" type="submit" disabled={resultState.loading || !sceneStatus.isSceneReady}>
                 {resultState.loading ? "Running..." : sceneStatus.isSceneReady ? "Run RSRP simulation" : "Loading scene..."}
               </button>
@@ -309,6 +316,7 @@ export function ThroughputApiPage({ activeScene, onProgressChange, onSceneLoadin
     "Running Throughput API...",
   );
   const sceneStatus = useScenePreviewStatus(activeScene, onSceneLoadingChange);
+  const sceneSolver = solverForScene(activeScene, form.solver);
 
   async function submit(event) {
     event.preventDefault();
@@ -318,6 +326,7 @@ export function ThroughputApiPage({ activeScene, onProgressChange, onSceneLoadin
 
     const payload = {
       ...form,
+      solver: sceneSolver,
       transmitter_pattern: TRANSMITTER_PATTERN,
     };
     await setResultState(async () => ({
@@ -363,7 +372,7 @@ export function ThroughputApiPage({ activeScene, onProgressChange, onSceneLoadin
             <NumberField label="Bandwidth" unit="MHz" value={form.bandwidth_mhz} min={1} onChange={(value) => updateForm(setForm, "bandwidth_mhz", value)} />
             <NumberField label="MIMO layers" value={form.mimo_layers} min={1} step={1} onChange={(value) => updateForm(setForm, "mimo_layers", value)} />
           </FormSection>
-          <SolverFields solver={form.solver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
+          <SolverFields solver={sceneSolver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
           <button className="primary-button" type="submit" disabled={resultState.loading || !sceneStatus.isSceneReady}>
             {resultState.loading ? "Running..." : sceneStatus.isSceneReady ? "Compare throughput" : "Loading scene..."}
           </button>
@@ -519,7 +528,7 @@ function ApiScenePreview({ activeScene, isSceneReady, onSceneLoadingChange }) {
             onLoadingChange={onSceneLoadingChange}
             sceneName={activeScene.name}
             showOverlay={false}
-            solver={DEFAULT_SOLVER}
+            solver={solverForScene(activeScene)}
             viewMode="top"
           />
         ) : (
@@ -579,8 +588,6 @@ function SolverFields({ solver, onChange }) {
       <NumberField label="Max depth" value={solver.max_depth} min={0} max={10} step={1} onChange={(value) => updateObject(onChange, solver, "max_depth", value)} />
       <NumberField label="Samples per TX" value={solver.samples_per_tx} min={1} max={10000000} step={1} onChange={(value) => updateObject(onChange, solver, "samples_per_tx", value)} />
       <NumberField label="Cell size" unit="m" value={solver.cell_size} min={0.1} max={50} step="any" onChange={(value) => updateObject(onChange, solver, "cell_size", value)} />
-      <PositionField label="Center" value={solver.center} onChange={(value) => updateObject(onChange, solver, "center", value)} />
-      <SizeField label="Size" value={solver.size} onChange={(value) => updateObject(onChange, solver, "size", value)} />
     </FormSection>
   );
 }
@@ -616,28 +623,6 @@ function PositionField({ label, onChange, value }) {
             type="number"
             aria-label={`${label} ${axis}`}
             value={value[index]}
-            step="any"
-            required
-            onChange={(event) => onChange(replaceArrayValue(value, index, parseNumericInput(event.target.value)))}
-          />
-        ))}
-      </div>
-    </label>
-  );
-}
-
-function SizeField({ label, onChange, value }) {
-  return (
-    <label className="form-field">
-      <span>{label}</span>
-      <div className="vector-inputs two">
-        {["x", "y"].map((axis, index) => (
-          <input
-            key={axis}
-            type="number"
-            aria-label={`${label} ${axis}`}
-            value={value[index]}
-            min="1"
             step="any"
             required
             onChange={(event) => onChange(replaceArrayValue(value, index, parseNumericInput(event.target.value)))}

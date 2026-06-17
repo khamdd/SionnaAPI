@@ -12,6 +12,8 @@ class SionnaEngine:
         self._scene_id = DEFAULT_SCENE_ID
         self._scene_name = DEFAULT_SCENE_NAME
         self._scene_path = None
+        self._scene_bounds = None
+        self._scene_metrics = None
         self.lock = threading.RLock()
 
     def get_scene(self):
@@ -28,6 +30,8 @@ class SionnaEngine:
                 "id": self._scene_id,
                 "name": self._scene_name,
                 "scene_path": self._scene_path,
+                "bounds": self._scene_bounds,
+                "metrics": self._scene_metrics,
             }
 
     def set_active_scene(self, scene):
@@ -35,6 +39,8 @@ class SionnaEngine:
             next_scene_id = scene["id"]
             next_scene_name = scene["name"]
             next_scene_path = scene.get("scene_path")
+            next_scene_bounds = scene.get("bounds")
+            next_scene_metrics = scene.get("metrics")
 
             if (
                 next_scene_id == self._scene_id
@@ -46,12 +52,16 @@ class SionnaEngine:
             self._scene_id = next_scene_id
             self._scene_name = next_scene_name
             self._scene_path = next_scene_path
+            self._scene_bounds = next_scene_bounds
+            self._scene_metrics = next_scene_metrics
 
     def _sync_active_scene(self):
         active_scene = get_active_scene()
         self._scene_id = active_scene["id"]
         self._scene_name = active_scene["name"]
         self._scene_path = active_scene.get("scene_path")
+        self._scene_bounds = active_scene.get("bounds")
+        self._scene_metrics = active_scene.get("metrics")
 
     def _load_scene(self):
         import sionna

@@ -40,6 +40,10 @@ import {
   drawHeatmap,
   summarizeGrid,
 } from "./utils/map";
+import {
+  sceneSizeMeters,
+  solverForScene,
+} from "./utils/scene";
 
 function clone(value) {
   return structuredClone(value);
@@ -835,13 +839,13 @@ function buildNetworkCoveragePayload(antennas, activeScene) {
 }
 
 function antennasForScene(scene) {
-  const width = Number(scene?.metrics?.width_m);
-  const height = Number(scene?.metrics?.height_m);
+  const size = sceneSizeMeters(scene);
 
-  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+  if (!size) {
     return clone(DEFAULT_ANTENNAS);
   }
 
+  const { width, height } = size;
   const scaleX = width / DEFAULT_SOLVER.size[0];
   const scaleY = height / DEFAULT_SOLVER.size[1];
   const xLimit = width / 2;
@@ -859,32 +863,6 @@ function antennasForScene(scene) {
       ],
     };
   });
-}
-
-function solverForScene(scene) {
-  const width = Number(scene?.metrics?.width_m);
-  const height = Number(scene?.metrics?.height_m);
-
-  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-    return DEFAULT_SOLVER;
-  }
-
-  const maxGridCells = 50000;
-  const area = width * height;
-  const cellSize = Math.max(
-    DEFAULT_SOLVER.cell_size,
-    Math.ceil(Math.sqrt(area / maxGridCells)),
-  );
-
-  return {
-    ...DEFAULT_SOLVER,
-    center: [0, 0, 0],
-    size: [
-      Number(width.toFixed(2)),
-      Number(height.toFixed(2)),
-    ],
-    cell_size: cellSize,
-  };
 }
 
 function roundPosition(value) {
