@@ -8,6 +8,17 @@ import {
   SELECTED_CELL_OUTLINE,
 } from "../constants";
 
+const SCENE_MODEL_CACHE_LIMIT = 3;
+const sceneModelCache = new Map();
+
+export function hasCachedSceneModel(bounds) {
+  if (!bounds) {
+    return false;
+  }
+
+  return sceneModelCache.get(sceneBoundsKey(bounds))?.status === "ready";
+}
+
 export default function Scene3DPreview({
   antennas = EMPTY_ARRAY,
   bounds,
@@ -32,9 +43,7 @@ export default function Scene3DPreview({
   const selectedRsrpUserRef = useRef(selectedRsrpUser);
   const [model, setModel] = useState(null);
   const [status, setStatus] = useState("Loading OSM buildings...");
-  const boundsKey = bounds
-    ? [bounds.south, bounds.west, bounds.north, bounds.east].join(":")
-    : "";
+  const boundsKey = sceneBoundsKey(bounds);
 
   useEffect(() => {
     selectedCoverageCellRef.current = selectedCoverageCell;
@@ -48,6 +57,14 @@ export default function Scene3DPreview({
     if (!bounds) {
       setModel(null);
       setStatus("No scene bounds available.");
+      onLoadingChange?.(false);
+      return undefined;
+    }
+
+    const cachedModel = sceneModelCache.get(boundsKey);
+    if (cachedModel?.status === "ready") {
+      setModel(cachedModel.model);
+      setStatus(cachedModel.message);
       onLoadingChange?.(false);
       return undefined;
     }
@@ -71,21 +88,18 @@ export default function Scene3DPreview({
       reportLoading(true);
 
       try {
-        const buildings = await fetchBuildingsWithRetry(bounds, controller.signal);
+        const cachedOrLoadedModel = await loadSceneModel(
+          boundsKey,
+          bounds,
+          controller.signal,
+        );
 
         if (!isActive) {
           return;
         }
 
-        if (buildings.length) {
-          setModel(buildModel(bounds, buildings));
-          setStatus(buildHeightStatus(buildings));
-          reportLoading(false);
-          return;
-        }
-
-        setModel(buildModel(bounds, []));
-        setStatus("No OSM building footprints found for this area.");
+        setModel(cachedOrLoadedModel.model);
+        setStatus(cachedOrLoadedModel.message);
         reportLoading(false);
       } catch (error) {
         if (error.name === "AbortError") {
@@ -149,6 +163,50 @@ export default function Scene3DPreview({
   );
 }
 
+function sceneBoundsKey(bounds) {
+  return bounds
+    ? [bounds.south, bounds.west, bounds.north, bounds.east].join(":")
+    : "";
+}
+
+async function loadSceneModel(boundsKey, bounds, signal) {
+  const cachedModel = sceneModelCache.get(boundsKey);
+
+  if (cachedModel?.status === "ready") {
+    return cachedModel;
+  }
+
+  const buildings = await fetchBuildingsWithRetry(bounds, signal);
+  const nextModel = {
+    message: buildings.length
+      ? buildHeightStatus(buildings)
+      : "No OSM building footprints found for this area.",
+    model: buildModel(bounds, buildings),
+    status: "ready",
+  };
+
+  setSceneModelCache(boundsKey, nextModel);
+  return nextModel;
+}
+
+function setSceneModelCache(boundsKey, value) {
+  if (!boundsKey || value?.status !== "ready") {
+    return;
+  }
+
+  sceneModelCache.delete(boundsKey);
+  sceneModelCache.set(boundsKey, {
+    message: value.message,
+    model: value.model,
+    status: "ready",
+  });
+
+  while (sceneModelCache.size > SCENE_MODEL_CACHE_LIMIT) {
+    const oldestKey = sceneModelCache.keys().next().value;
+    sceneModelCache.delete(oldestKey);
+  }
+}
+
 async function fetchBuildings(bounds, signal) {
   const query = `
     [out:json][timeout:25];
@@ -202,6 +260,10 @@ async function fetchBuildingsWithRetry(bounds, signal, retries = 1) {
 function waitForRetry(delayMs, signal) {
   return new Promise((resolve, reject) => {
     const timeoutId = window.setTimeout(resolve, delayMs);
+
+    if (!signal) {
+      return;
+    }
 
     signal.addEventListener(
       "abort",
@@ -333,7 +395,9 @@ function buildModel(bounds, buildings) {
       }));
 
       return {
-        ...building,
+        height: building.height,
+        heightSource: building.heightSource,
+        id: building.id,
         points: removeDuplicateClosingPoint(points),
         heightScaled: building.height * scale,
       };

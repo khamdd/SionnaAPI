@@ -20,7 +20,7 @@ import {
   formatPositionValue,
   formatText,
 } from "../utils/format";
-import Scene3DPreview from "./Scene3DPreview";
+import Scene3DPreview, { hasCachedSceneModel } from "./Scene3DPreview";
 
 export function CoverageApiPage({ activeScene, onProgressChange, onSceneLoadingChange }) {
   const [form, setForm] = useState(() => ({
@@ -537,16 +537,19 @@ function ApiScenePreview({ activeScene, isSceneReady, onSceneLoadingChange }) {
 
 function useScenePreviewStatus(activeScene, onSceneLoadingChange) {
   const hasSceneBounds = Boolean(activeScene?.bounds);
-  const [isScenePreviewLoading, setIsScenePreviewLoading] = useState(hasSceneBounds);
+  const [isScenePreviewLoading, setIsScenePreviewLoading] = useState(
+    hasSceneBounds && !hasCachedSceneModel(activeScene?.bounds),
+  );
 
   useEffect(() => {
-    setIsScenePreviewLoading(hasSceneBounds);
-    onSceneLoadingChange?.(hasSceneBounds);
+    const shouldLoadScene = hasSceneBounds && !hasCachedSceneModel(activeScene?.bounds);
+    setIsScenePreviewLoading(shouldLoadScene);
+    onSceneLoadingChange?.(shouldLoadScene);
 
     return () => {
       onSceneLoadingChange?.(false);
     };
-  }, [activeScene?.id, hasSceneBounds, onSceneLoadingChange]);
+  }, [activeScene?.bounds, activeScene?.id, hasSceneBounds, onSceneLoadingChange]);
 
   const handleSceneLoadingChange = useCallback((active) => {
     const nextValue = Boolean(active);
