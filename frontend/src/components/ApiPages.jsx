@@ -234,27 +234,10 @@ export function RsrpSimulationPage({ activeScene, antennas, onProgressChange, on
   );
   const sceneStatus = useScenePreviewStatus(activeScene, onSceneLoadingChange);
   const sceneSolver = solverForScene(activeScene, form.solver);
-  const positionValidation = validateScenePositions(sceneSolver, [
-    {
-      key: "transmitter_position",
-      label: "Transmitter position",
-      value: form.transmitter_position,
-    },
-    {
-      key: "receiver_position",
-      label: "Receiver position",
-      value: form.receiver_position,
-    },
-    {
-      key: "interferer_position",
-      label: "Interferer position",
-      value: form.interferer_position,
-    },
-  ]);
 
   async function submit(event) {
     event.preventDefault();
-    if (resultState.loading || !sceneStatus.isSceneReady || !positionValidation.isValid) {
+    if (resultState.loading || !sceneStatus.isSceneReady) {
       return;
     }
 
@@ -386,10 +369,27 @@ export function ThroughputApiPage({ activeScene, onProgressChange, onSceneLoadin
   );
   const sceneStatus = useScenePreviewStatus(activeScene, onSceneLoadingChange);
   const sceneSolver = solverForScene(activeScene, form.solver);
+  const positionValidation = validateScenePositions(sceneSolver, [
+    {
+      key: "transmitter_position",
+      label: "Transmitter position",
+      value: form.transmitter_position,
+    },
+    {
+      key: "receiver_position",
+      label: "Receiver position",
+      value: form.receiver_position,
+    },
+    {
+      key: "interferer_position",
+      label: "Interferer position",
+      value: form.interferer_position,
+    },
+  ]);
 
   async function submit(event) {
     event.preventDefault();
-    if (resultState.loading || !sceneStatus.isSceneReady) {
+    if (resultState.loading || !sceneStatus.isSceneReady || !positionValidation.isValid) {
       return;
     }
 
