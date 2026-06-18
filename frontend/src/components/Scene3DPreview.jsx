@@ -152,7 +152,14 @@ export default function Scene3DPreview({
 
   return (
     <div className={["scene-3d-preview", className].filter(Boolean).join(" ")}>
-      <div ref={canvasHostRef} className="scene-3d-canvas" />
+      <div
+        ref={canvasHostRef}
+        className="scene-3d-canvas"
+        aria-label="Interactive 3D scene. Drag to move, right-drag to rotate, and scroll or pinch to zoom."
+      />
+      <div className="scene-3d-navigation-hint" aria-hidden="true">
+        Drag to move · Right-drag to rotate · Scroll/pinch to zoom
+      </div>
       {showOverlay && (
         <div className="scene-3d-overlay">
           <strong>{sceneName || "Selected scene"}</strong>
@@ -460,6 +467,13 @@ function renderThreeScene(
   controls.enablePan = true;
   controls.enableZoom = true;
   controls.enableRotate = true;
+  controls.screenSpacePanning = false;
+  controls.panSpeed = 1.1;
+  controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
+  controls.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY;
+  controls.mouseButtons.RIGHT = THREE.MOUSE.ROTATE;
+  controls.touches.ONE = THREE.TOUCH.PAN;
+  controls.touches.TWO = THREE.TOUCH.DOLLY_PAN;
   controls.minDistance = 80;
   controls.maxDistance = 1600;
   controls.minPolarAngle = 0.05;
