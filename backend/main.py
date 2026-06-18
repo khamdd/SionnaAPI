@@ -8,6 +8,10 @@ from fastapi.staticfiles import StaticFiles
 from backend.api.auth import router as auth_router
 from backend.api.sinr import router as sinr_router
 from backend.middleware.request_logging import RequestLoggingMiddleware
+from backend.services.event_logger import (
+    start_event_logger,
+    stop_event_logger,
+)
 from backend.services.simulation_worker import (
     start_simulation_worker,
     stop_simulation_worker,
@@ -16,11 +20,13 @@ from backend.services.simulation_worker import (
 
 @asynccontextmanager
 async def lifespan(app):
+    start_event_logger()
     start_simulation_worker()
     try:
         yield
     finally:
         stop_simulation_worker()
+        stop_event_logger()
 
 
 app = FastAPI(
