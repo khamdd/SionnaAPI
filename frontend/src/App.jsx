@@ -5,6 +5,7 @@ import {
   getSimulationRun,
   listSimulationRuns,
   runNetworkCoverage,
+  getCurrentUser,
 } from "./api";
 import {
   DEFAULT_ANTENNAS,
@@ -208,7 +209,7 @@ export default function App() {
     if (route === "/history") {
       loadHistory();
     }
-  }, [route, loadHistory]);
+  }, [authStatus, route, loadHistory]);
 
   useEffect(() => {
     if(authStatus !== "authenticated") {
