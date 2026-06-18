@@ -50,7 +50,7 @@ function clone(value) {
 }
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState(() => readStoredUser());
+  const [currentUser, setCurrentUser] = useState(null);
   const [route, setRoute] = useState(() => normalizeRoute(window.location.pathname));
   const [antennas, setAntennas] = useState(() => clone(DEFAULT_ANTENNAS));
   const [latestGrid, setLatestGrid] = useState(null);
@@ -79,23 +79,45 @@ export default function App() {
   const [isSceneLoading, setIsSceneLoading] = useState(false);
   const [sceneNotice, setSceneNoticeState] = useState(null);
   const [hover, setHover] = useState(null);
+  const [authStatus, setAuthStatus] = useState("checking");
 
   const canvasRef = useRef(null);
   const mapStageRef = useRef(null);
   const summary = useMemo(() => summarizeGrid(latestGrid), [latestGrid]);
 
   function authenticate(authResult) {
-    const user = authResult.user;
-
-    setCurrentUser(user);
-    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
     localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authResult.access_token);
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(authResult.user));
+    setCurrentUser(authResult.user);
+    setAuthStatus("authenticated");
   }
+
+  useEffect(() => {
+    const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+
+    if(!token) {
+      setAuthStatus("unauthenticated");
+      return;
+    }
+
+    getCurrentUser()
+    .then((result) => {
+      setCurrentUser(result.user);
+      setAuthStatus("authenticated");
+    })
+    .catch(() => {
+      localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+      localStorage.removeItem(USER_STORAGE_KEY);
+      setCurrentUser(null);
+      setAuthStatus("unauthenticated");
+    });
+  }, []);
 
   function logout() {
     localStorage.removeItem(USER_STORAGE_KEY);
     localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
     setCurrentUser(null);
+    setAuthStatus("unauthenticated");
   }
 
   const handleApiProgressChange = useCallback((active, label) => {
@@ -179,17 +201,25 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if(authStatus !== "authenticated"){
+      return;
+    }
+
     if (route === "/history") {
       loadHistory();
     }
   }, [route, loadHistory]);
 
   useEffect(() => {
+    if(authStatus !== "authenticated") {
+      return;
+    }
+
     loadScenes().catch((error) => {
       setActiveScene(clone(DEFAULT_ACTIVE_SCENE));
       setSceneNotice(`Failed to load scenes: ${error.message}`, true);
     });
-  }, [loadScenes]);
+  }, [authStatus, loadScenes]);
 
   useEffect(() => {
     if (!activeScene) {
@@ -524,7 +554,11 @@ export default function App() {
       || (isSceneLoading ? "Loading scene..." : "")
       || (isSceneListLoading ? "Loading scenes..." : "");
 
-  if (!currentUser) {
+  if (authStatus === "checking") {
+    return <p>Checking session...</p>
+  }
+
+  if (!currentUser || authStatus === "unauthenticated") {
     return <LoginPage onAuthenticated={authenticate} />;
   }
 

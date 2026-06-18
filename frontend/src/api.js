@@ -33,6 +33,10 @@ export function runThroughputComparison(payload) {
   return runSimulationRequest("/api/v1/throughput-comparison", payload);
 }
 
+export function getCurrentUser() {
+  return requestJson("/api/v1/auth/verify");
+}
+
 async function runSimulationRequest(path, payload) {
   const response = await requestJson(path, {
     method: "POST",

@@ -1,8 +1,8 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 
 from backend.schemas.auth import AuthRequest
 from backend.services.auth_service import create_user, login_user
-
+from backend.api.dependencies import require_current_user
 
 router = APIRouter(
     tags=["Auth"]
@@ -37,3 +37,10 @@ def login(req: AuthRequest):
             req.password,
         )
     )
+
+@router.get("/auth/verify")
+def current_user(user=Depends(require_current_user)):
+    return {
+        "status": "success",
+        "user": user,
+    }
