@@ -26,8 +26,24 @@ export default function HistoryDetail({ item, onPreviewLoadingChange }) {
         onPreviewLoadingChange={onPreviewLoadingChange}
       />
     ),
-    sinr: <SinrHistory item={item} />,
-    throughput_comparison: <ThroughputHistory item={item} />,
+    sinr: (
+      <SinrHistory 
+        item={item} 
+        onPreviewLoadingChange={onPreviewLoadingChange}
+      />
+    ),
+    throughput_comparison: (
+      <ThroughputHistory 
+        item={item} 
+        onPreviewLoadingChange={onPreviewLoadingChange}
+      />
+    ),
+    rsrp_simulation: (
+      <RsrpHistory
+        item={item}
+        onPreviewLoadingChange={onPreviewLoadingChange}
+      />
+    ),
   }[item.simulation_type];
 
   if (renderer) {
@@ -323,13 +339,190 @@ function historyPreviewAntennas(item, mode) {
   }));
 }
 
-function SinrHistory({ item }) {
+function historyLinkAntennas(response, request) {
+  if (Array.isArray(response.antennas) && response.antennas.length > 0) {
+    return response.antennas;
+  }
+
+  const antennas = [];
+
+  if (Array.isArray(request.transmitter_position)) {
+    antennas.push({
+      id: "TX",
+      position: request.transmitter_position,
+      azimuth: 0,
+    });
+  }
+
+  if (Array.isArray(request.interferer_position)) {
+    antennas.push({
+      id: "INT",
+      position: request.interferer_position,
+      azimuth: 0,
+    });
+  }
+
+  if (Array.isArray(request.receiver_position)) {
+    antennas.push({
+      id: "RX",
+      position: request.receiver_position,
+      azimuth: 0,
+    });
+  }
+
+  return antennas;
+}
+
+function historySignalLinks(request) {
+  const links = [];
+
+  if (
+    Array.isArray(request.transmitter_position)
+    && Array.isArray(request.receiver_position)
+  ) {
+    links.push({
+      from: request.transmitter_position,
+      to: request.receiver_position,
+      label: "Serving",
+      type: "serving",
+    });
+  }
+
+  if (
+    Array.isArray(request.interferer_position)
+    && Array.isArray(request.receiver_position)
+  ) {
+    links.push({
+      from: request.interferer_position,
+      to: request.receiver_position,
+      label: "Interference",
+      type: "interference",
+    });
+  }
+
+  return links;
+}
+
+function HistoryLinkPreview({ item, onPreviewLoadingChange }) {
+  const request = item.request_json || {};
+  const response = item.response_json || {};
+  const solver = (
+    response.solver
+    || request.solver
+    || item.solver
+  );
+
+  if (!item.scene_bounds) {
+    return (
+      <p className="history-status">
+        No saved scene bounds are available for this run.
+      </p>
+    );
+  }
+
+  return (
+    <div className="history-coverage-preview">
+      <Scene3DPreview
+        antennas={historyLinkAntennas(response, request)}
+        bounds={item.scene_bounds}
+        className="history-scene-3d"
+        onLoadingChange={onPreviewLoadingChange}
+        sceneName={item.scene_name}
+        showOverlay={false}
+        signalLinks={historySignalLinks(request)}
+        solver={solver}
+        viewMode="top"
+      />
+    </div>
+  );
+}
+
+function RsrpHistory({ item, onPreviewLoadingChange }) {
+  const fullResult = useFullResultArtifact(item);
+  const savedResponse = item.response_json || {};
+  const response = fullResult || savedResponse;
+  const request = item.request_json || {};
+
+  const antennas = (
+    Array.isArray(response.antennas)
+      ? response.antennas
+      : request.antennas || []
+  );
+
+  const users = Array.isArray(fullResult?.users)
+    ? fullResult.users
+    : [];
+
+  const solver = (
+    response.solver
+    || savedResponse.solver
+    || request.solver
+    || item.solver
+  );
+
+  return (
+    <>
+      <HistoryHeader item={item} />
+
+      {item.scene_bounds ? (
+        <div className="history-coverage-preview">
+          <Scene3DPreview
+            antennas={antennas}
+            bounds={item.scene_bounds}
+            className="history-scene-3d"
+            onLoadingChange={onPreviewLoadingChange}
+            rsrpUsers={users}
+            sceneName={item.scene_name}
+            showOverlay={false}
+            solver={solver}
+            viewMode="top"
+          />
+        </div>
+      ) : (
+        <p className="history-status">
+          No saved scene bounds are available for this run.
+        </p>
+      )}
+
+      {!fullResult && savedResponse.full_result_url && (
+        <p className="history-status">
+          Loading saved RSRP users...
+        </p>
+      )}
+
+      <h3>RSRP summary</h3>
+      <dl className="detail-grid">
+        <dt>Users</dt>
+        <dd>{response.summary?.user_count || response.user_count || "--"}</dd>
+
+        <dt>Covered users</dt>
+        <dd>{response.summary?.covered_user_count ?? "--"}</dd>
+
+        <dt>Coverage</dt>
+        <dd>
+          {formatMaybeNumber(response.summary?.coverage_percent)}%
+        </dd>
+
+        <dt>Average best RSRP</dt>
+        <dd>
+          {formatMaybeNumber(response.summary?.average_best_rsrp_dbm)} dBm
+        </dd>
+      </dl>
+    </>
+  );
+}
+
+function SinrHistory({ item, onPreviewLoadingChange }) {
   const request = item.request_json || {};
   const response = item.response_json || {};
 
   return (
     <>
       <HistoryHeader item={item} />
+      <HistoryLinkPreview
+        item={item}
+        onPreviewLoadingChange={onPreviewLoadingChange}
+      />
       <h3>Transmitter antenna</h3>
       <dl className="detail-grid">
         <dt>Position</dt><dd>{formatPositionValue(request.transmitter_position)}</dd>
@@ -352,7 +545,7 @@ function SinrHistory({ item }) {
   );
 }
 
-function ThroughputHistory({ item }) {
+function ThroughputHistory({ item, onPreviewLoadingChange }) {
   const request = item.request_json || {};
   const response = item.response_json || {};
   const comparison = response.comparison || {};
@@ -360,6 +553,10 @@ function ThroughputHistory({ item }) {
   return (
     <>
       <HistoryHeader item={item} />
+      <HistoryLinkPreview
+        item={item}
+        onPreviewLoadingChange={onPreviewLoadingChange}
+      />
       <h3>Transmitter and receiver</h3>
       <dl className="detail-grid">
         <dt>Transmitter</dt><dd>{formatPositionValue(request.transmitter_position)}</dd>
