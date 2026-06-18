@@ -67,6 +67,7 @@ export default function App() {
   const [historyPreviewLoadCount, setHistoryPreviewLoadCount] = useState(0);
   const [latestHistory, setLatestHistory] = useState([]);
   const [selectedHistoryId, setSelectedHistoryId] = useState(null);
+  const [selectedHistoryDeleteIds, setSelectedHistoryDeleteIds] = useState(() => new Set());
   const [comparisonType, setComparisonType] = useState(null);
   const [comparisonSceneId, setComparisonSceneId] = useState(null);
   const [comparisonSceneName, setComparisonSceneName] = useState(null);
@@ -139,6 +140,7 @@ export default function App() {
 
       if (!result.database_configured) {
         setLatestHistory([]);
+        setSelectedHistoryDeleteIds(new Set());
         setSelectedComparisonIds(new Set());
         setComparisonDetails(new Map());
         setComparisonType(null);
@@ -153,6 +155,9 @@ export default function App() {
 
       const items = result.items || [];
       setLatestHistory(items);
+      setSelectedHistoryDeleteIds((current) => new Set(
+        [...current].filter((id) => items.some((item) => item.id === id)),
+      ));
       setHistoryStatus(items.length ? `${items.length} saved simulations` : "No saved simulations yet.");
       setSelectedComparisonIds((current) => (
         pruneComparisonSelection(current, items, comparisonType, comparisonSceneId)
@@ -501,11 +506,80 @@ export default function App() {
 
       setSelectedComparisonIds((current) => removeSetValue(current, item.id));
       setComparisonDetails((current) => removeMapValue(current, item.id));
+      setSelectedHistoryDeleteIds((current) => removeSetValue(current, item.id));
 
       await loadHistory();
     } catch (error) {
       setHistoryStatus(`Delete failed: ${error.message}`);
       setHistoryError(true);
+    } finally {
+      setHistoryProgressLabel("");
+    }
+  }
+
+  function toggleHistoryDeleteSelection(runId) {
+    setSelectedHistoryDeleteIds((current) => toggleSetValue(current, runId));
+  }
+
+  function toggleAllHistoryDeleteSelection() {
+    setSelectedHistoryDeleteIds((current) => (
+      current.size === latestHistory.length
+        ? new Set()
+        : new Set(latestHistory.map((item) => item.id))
+    ));
+  }
+
+  async function deleteSelectedHistory() {
+    if (
+      historyProgressLabel
+      || historyPreviewLoadCount > 0
+      || selectedHistoryDeleteIds.size === 0
+    ) {
+      return;
+    }
+
+    const selectedIds = [...selectedHistoryDeleteIds];
+    const confirmed = window.confirm(
+      `Delete ${selectedIds.length} selected simulation histories?`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setHistoryProgressLabel("Deleting selected history...");
+    setHistoryStatus(`Deleting ${selectedIds.length} selected histories...`);
+    setHistoryError(false);
+
+    try {
+      const results = await Promise.allSettled(
+        selectedIds.map((runId) => deleteSimulationRun(runId)),
+      );
+      const deletedIds = new Set(
+        selectedIds.filter((id, index) => results[index].status === "fulfilled"),
+      );
+      const failedIds = selectedIds.filter((id) => !deletedIds.has(id));
+
+      if (selectedHistoryId && deletedIds.has(selectedHistoryId)) {
+        closeModal();
+      }
+
+      setSelectedComparisonIds((current) => new Set(
+        [...current].filter((id) => !deletedIds.has(id)),
+      ));
+      setComparisonDetails((current) => new Map(
+        [...current].filter(([id]) => !deletedIds.has(id)),
+      ));
+      setSelectedHistoryDeleteIds(new Set(failedIds));
+
+      await loadHistory();
+
+      if (failedIds.length > 0) {
+        setHistoryStatus(`Deleted ${deletedIds.size}; ${failedIds.length} failed.`);
+        setHistoryError(true);
+      } else {
+        setHistoryStatus(`Deleted ${deletedIds.size} selected histories.`);
+      }
     } finally {
       setHistoryProgressLabel("");
     }
@@ -636,11 +710,15 @@ export default function App() {
           items={latestHistory}
           onCancelComparison={cancelComparison}
           onDelete={deleteHistoryItem}
+          onDeleteSelected={deleteSelectedHistory}
           onOpen={openHistoryDetail}
           onRefresh={loadHistory}
           onShowComparison={showComparisonResult}
           onToggleCompare={toggleComparisonSelection}
+          onToggleDeleteSelection={toggleHistoryDeleteSelection}
+          onToggleSelectAll={toggleAllHistoryDeleteSelection}
           selectedComparisonIds={selectedComparisonIds}
+          selectedDeleteIds={selectedHistoryDeleteIds}
           selectedHistoryId={selectedHistoryId}
           comparisonSceneId={comparisonSceneId}
           comparisonSceneName={comparisonSceneName}
@@ -819,11 +897,15 @@ function HistoryRoutePage({
   items,
   onCancelComparison,
   onDelete,
+  onDeleteSelected,
   onOpen,
   onRefresh,
   onShowComparison,
   onToggleCompare,
+  onToggleDeleteSelection,
+  onToggleSelectAll,
   selectedComparisonIds,
+  selectedDeleteIds,
   selectedHistoryId,
 }) {
   return (
@@ -848,10 +930,14 @@ function HistoryRoutePage({
           items={items}
           onCancelComparison={onCancelComparison}
           onDelete={onDelete}
+          onDeleteSelected={onDeleteSelected}
           onOpen={onOpen}
           onShowComparison={onShowComparison}
           onToggleCompare={onToggleCompare}
+          onToggleDeleteSelection={onToggleDeleteSelection}
+          onToggleSelectAll={onToggleSelectAll}
           selectedComparisonIds={selectedComparisonIds}
+          selectedDeleteIds={selectedDeleteIds}
           selectedHistoryId={selectedHistoryId}
         />
       </section>

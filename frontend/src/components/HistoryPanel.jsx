@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import {
   formatDateTime,
   formatSimulationType,
@@ -19,15 +20,31 @@ export default function HistoryPanel({
   items,
   onCancelComparison,
   onDelete,
+  onDeleteSelected,
   onOpen,
   onShowComparison,
   onToggleCompare,
+  onToggleDeleteSelection,
+  onToggleSelectAll,
   selectedComparisonIds,
+  selectedDeleteIds,
   selectedHistoryId,
 }) {
+  const allSelected = items.length > 0 && selectedDeleteIds.size === items.length;
+  const someSelected = selectedDeleteIds.size > 0 && !allSelected;
+
   return (
     <div className="history-view">
       <p className={`history-status ${historyError ? "error-text" : ""}`}>{historyStatus}</p>
+      <BulkDeletePanel
+        allSelected={allSelected}
+        isLoading={isLoading}
+        itemCount={items.length}
+        onDeleteSelected={onDeleteSelected}
+        onToggleSelectAll={onToggleSelectAll}
+        selectedCount={selectedDeleteIds.size}
+        someSelected={someSelected}
+      />
       <ComparisonPanel
         comparisonType={comparisonType}
         isLoading={isLoading}
@@ -44,11 +61,13 @@ export default function HistoryPanel({
             item={item}
             comparisonType={comparisonType}
             isSelectedForComparison={selectedComparisonIds.has(item.id)}
+            isSelectedForDelete={selectedDeleteIds.has(item.id)}
             isSelectedHistory={item.id === selectedHistoryId}
             isLoading={isLoading}
             onDelete={onDelete}
             onOpen={onOpen}
             onToggleCompare={onToggleCompare}
+            onToggleDeleteSelection={onToggleDeleteSelection}
           />
         ))}
       </div>
@@ -61,12 +80,14 @@ function HistoryRow({
   comparisonSceneName,
   comparisonType,
   isSelectedForComparison,
+  isSelectedForDelete,
   isSelectedHistory,
   isLoading,
   item,
   onDelete,
   onOpen,
   onToggleCompare,
+  onToggleDeleteSelection,
 }) {
   const isComparing = Boolean(comparisonType);
   const canCompareItem = isSuccessfulHistoryItem(item);
@@ -83,6 +104,15 @@ function HistoryRow({
         isSelectedForComparison ? "comparison-selected" : "",
       ].filter(Boolean).join(" ")}
     >
+      <label className="history-select" title="Select history for bulk deletion">
+        <input
+          type="checkbox"
+          checked={isSelectedForDelete}
+          disabled={isLoading}
+          aria-label={`Select ${formatSimulationType(item.simulation_type)} history`}
+          onChange={() => onToggleDeleteSelection(item.id)}
+        />
+      </label>
       <button
         className={`history-item ${isSelectedHistory ? "active" : ""}`}
         type="button"
@@ -117,6 +147,49 @@ function HistoryRow({
         onClick={() => onDelete(item)}
       >
         <TrashIcon />
+      </button>
+    </div>
+  );
+}
+
+function BulkDeletePanel({
+  allSelected,
+  isLoading,
+  itemCount,
+  onDeleteSelected,
+  onToggleSelectAll,
+  selectedCount,
+  someSelected,
+}) {
+  const checkboxRef = useRef(null);
+
+  useEffect(() => {
+    if (checkboxRef.current) {
+      checkboxRef.current.indeterminate = someSelected;
+    }
+  }, [someSelected]);
+
+  return (
+    <div className="history-bulk-panel">
+      <label>
+        <input
+          ref={checkboxRef}
+          type="checkbox"
+          checked={allSelected}
+          disabled={isLoading || itemCount === 0}
+          onChange={onToggleSelectAll}
+        />
+        <span>{allSelected ? "Clear all" : "Select all"}</span>
+      </label>
+      <span>{selectedCount} selected</span>
+      <button
+        className="history-bulk-delete"
+        type="button"
+        disabled={isLoading || selectedCount === 0}
+        onClick={onDeleteSelected}
+      >
+        <TrashIcon />
+        Delete selected
       </button>
     </div>
   );
