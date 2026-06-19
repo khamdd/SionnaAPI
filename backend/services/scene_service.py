@@ -20,7 +20,7 @@ from backend.services.osm_scene_builder import (
     build_osm_sionna_scene,
     validate_sionna_scene,
 )
-from backend.services.simulation_store import utc_now
+from backend.services.simulation_store import mark_scene_reference_deleted, utc_now
 
 
 _lock = threading.RLock()
@@ -177,6 +177,14 @@ def delete_scene(scene_id):
                 "error": "The active scene cannot be deleted.",
             }
 
+        database_result = mark_scene_reference_deleted(scene_id)
+        if database_result.get("error"):
+            return {
+                "status": "failure",
+                "status_code": 503,
+                "error": database_result["error"],
+            }
+
         registry["scenes"] = [
             item
             for item in registry["scenes"]
@@ -188,6 +196,7 @@ def delete_scene(scene_id):
         return {
             "status": "success",
             "deleted": True,
+            "database_status_updated": database_result["updated"],
         }
 
 

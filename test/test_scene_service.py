@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from backend.schemas.requests import SceneBoundsRequest
@@ -55,3 +56,93 @@ def test_create_scene_preview_registers_generated_osm_scene(tmp_path, monkeypatc
     list_result = scene_service.list_scenes()
     assert list_result["active_scene_id"] == scene["id"]
     assert list_result["imported_scene_count"] == 1
+
+
+def test_delete_scene_marks_database_reference_deleted(tmp_path, monkeypatch):
+    scene_root = tmp_path / "scenes"
+    scene_path = scene_root / "scene-to-delete"
+    scene_path.mkdir(parents=True)
+    registry_path = scene_root / "scenes.json"
+    registry_path.write_text(
+        json.dumps(
+            {
+                "active_scene_id": "munich",
+                "scenes": [
+                    {
+                        "id": "scene-to-delete",
+                        "name": "Old scene",
+                        "status": "ready",
+                        "is_default": False,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    marked_scene_ids = []
+
+    monkeypatch.setattr(scene_service, "SCENE_ROOT", scene_root)
+    monkeypatch.setattr(scene_service, "SCENE_REGISTRY_PATH", registry_path)
+    monkeypatch.setattr(
+        scene_service,
+        "mark_scene_reference_deleted",
+        lambda scene_id: marked_scene_ids.append(scene_id) or {
+            "database_configured": True,
+            "updated": True,
+        },
+    )
+
+    result = scene_service.delete_scene("scene-to-delete")
+
+    assert result == {
+        "status": "success",
+        "deleted": True,
+        "database_status_updated": True,
+    }
+    assert marked_scene_ids == ["scene-to-delete"]
+    assert not scene_path.exists()
+    saved_registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    assert all(scene["id"] != "scene-to-delete" for scene in saved_registry["scenes"])
+
+
+def test_delete_scene_stops_when_database_status_update_fails(tmp_path, monkeypatch):
+    scene_root = tmp_path / "scenes"
+    scene_path = scene_root / "scene-to-delete"
+    scene_path.mkdir(parents=True)
+    registry_path = scene_root / "scenes.json"
+    registry_path.write_text(
+        json.dumps(
+            {
+                "active_scene_id": "munich",
+                "scenes": [
+                    {
+                        "id": "scene-to-delete",
+                        "name": "Old scene",
+                        "status": "ready",
+                        "is_default": False,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(scene_service, "SCENE_ROOT", scene_root)
+    monkeypatch.setattr(scene_service, "SCENE_REGISTRY_PATH", registry_path)
+    monkeypatch.setattr(
+        scene_service,
+        "mark_scene_reference_deleted",
+        lambda scene_id: {
+            "database_configured": True,
+            "updated": False,
+            "error": "Failed to update the scene status in the database.",
+        },
+    )
+
+    result = scene_service.delete_scene("scene-to-delete")
+
+    assert result["status"] == "failure"
+    assert result["status_code"] == 503
+    assert scene_path.exists()
+    saved_registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    assert any(scene["id"] == "scene-to-delete" for scene in saved_registry["scenes"])

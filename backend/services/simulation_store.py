@@ -470,6 +470,52 @@ def ensure_scene_reference(session, scene_info=None):
     )
 
 
+def mark_scene_reference_deleted(scene_id):
+    """Keep historical scene references, but mark removed scenes as deleted."""
+    if not is_database_configured():
+        return {
+            "database_configured": False,
+            "updated": False,
+        }
+
+    try:
+        with db_session() as session:
+            table_name = session.execute(
+                text("SELECT to_regclass('public.scenes')")
+            ).scalar()
+
+            if table_name is None:
+                return {
+                    "database_configured": True,
+                    "updated": False,
+                }
+
+            updated = session.execute(
+                text(
+                    """
+                    UPDATE scenes
+                    SET
+                        status = 'deleted',
+                        updated_at = NOW()
+                    WHERE id = :scene_id
+                    """
+                ),
+                {"scene_id": scene_id},
+            ).rowcount
+
+        return {
+            "database_configured": True,
+            "updated": updated > 0,
+        }
+    except SQLAlchemyError:
+        logger.exception("Failed to mark scene reference as deleted.")
+        return {
+            "database_configured": True,
+            "updated": False,
+            "error": "Failed to update the scene status in the database.",
+        }
+
+
 def insert_simulation_run(
     session,
     simulation_type,

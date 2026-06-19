@@ -183,7 +183,7 @@ Scene XML, PLY meshes, and preview SVG files are stored under:
 static/scenes/{scene_id}/
 ```
 
-PostgreSQL `scenes` rows are intentionally minimal. The application writes only `id` and `name` so `simulation_runs.scene_id` can keep a stable foreign-key reference. Columns such as `bounds_geom`, `bounds_json`, `metrics_json`, `scene_path`, and `preview_url` are not used by the current local-registry design and remain `NULL`.
+PostgreSQL `scenes` rows are intentionally minimal. The application writes `id` and `name` so `simulation_runs.scene_id` can keep a stable foreign-key reference. When a local scene is removed, its PostgreSQL row is retained for old simulation history and its `status` changes from `ready` to `deleted`. Columns such as `bounds_geom`, `bounds_json`, `metrics_json`, `scene_path`, and `preview_url` are not used by the current local-registry design and remain `NULL`.
 
 The code does not contain a migration tool. The storage layer assumes these tables already exist and adds `simulation_runs.scene_id` automatically if missing.
 
