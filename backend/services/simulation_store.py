@@ -5,7 +5,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
-from sqlalchemy import text
+from sqlalchemy import delete, func, inspect, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
 
 from backend.constants import (
@@ -16,6 +17,13 @@ from backend.constants import (
     STATIC_DIR,
 )
 from backend.database import db_session, is_database_configured
+from backend.models import (
+    Scene,
+    SimulationArtifact,
+    SimulationJob,
+    SimulationRun,
+    SimulationRunAntenna,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -38,7 +46,6 @@ def store_simulation_result(
 
     try:
         with db_session() as session:
-            ensure_scene_columns(session)
             ensure_scene_reference(session, scene_info)
             run_id = insert_simulation_run(
                 session,
@@ -84,33 +91,11 @@ def list_simulation_runs(limit=25):
 
     try:
         with db_session() as session:
-            ensure_scene_columns(session)
-            rows = session.execute(
-                text(
-                    """
-                    SELECT
-                        id,
-                        simulation_type,
-                        status,
-                        transmitter_pattern,
-                        scene_id,
-                        cell_size_m,
-                        bandwidth_mhz,
-                        mimo_layers,
-                        coverage_map_image_url,
-                        error_message,
-                        started_at,
-                        finished_at,
-                        created_at
-                    FROM simulation_runs
-                    ORDER BY created_at DESC
-                    LIMIT :limit
-                    """
-                ),
-                {
-                    "limit": limit,
-                },
-            ).mappings()
+            rows = session.scalars(
+                select(SimulationRun)
+                .order_by(SimulationRun.created_at.desc())
+                .limit(limit)
+            )
 
             return {
                 "database_configured": True,
@@ -138,40 +123,36 @@ def get_simulation_run(run_id):
 
     try:
         with db_session() as session:
-            ensure_scene_columns(session)
+            area_box = func.box3d(SimulationRun.area_geom)
             run = session.execute(
-                text(
-                    """
-                    SELECT
-                        id,
-                        simulation_type,
-                        status,
-                        transmitter_pattern,
-                        scene_id,
-                        max_depth,
-                        samples_per_tx,
-                        cell_size_m,
-                        ST_X(center_position) AS center_x_m,
-                        ST_Y(center_position) AS center_y_m,
-                        ST_Z(center_position) AS center_z_m,
-                        ST_XMax(area_geom::box3d) - ST_XMin(area_geom::box3d) AS size_x_m,
-                        ST_YMax(area_geom::box3d) - ST_YMin(area_geom::box3d) AS size_y_m,
-                        bandwidth_mhz,
-                        mimo_layers,
-                        request_json,
-                        response_json,
-                        coverage_map_image_url,
-                        error_message,
-                        started_at,
-                        finished_at,
-                        created_at
-                    FROM simulation_runs
-                    WHERE id = :run_id
-                    """
-                ),
-                {
-                    "run_id": run_id,
-                },
+                select(
+                    SimulationRun.id,
+                    SimulationRun.simulation_type,
+                    SimulationRun.status,
+                    SimulationRun.transmitter_pattern,
+                    SimulationRun.scene_id,
+                    SimulationRun.max_depth,
+                    SimulationRun.samples_per_tx,
+                    SimulationRun.cell_size_m,
+                    func.ST_X(SimulationRun.center_position).label("center_x_m"),
+                    func.ST_Y(SimulationRun.center_position).label("center_y_m"),
+                    func.ST_Z(SimulationRun.center_position).label("center_z_m"),
+                    (
+                        func.ST_XMax(area_box) - func.ST_XMin(area_box)
+                    ).label("size_x_m"),
+                    (
+                        func.ST_YMax(area_box) - func.ST_YMin(area_box)
+                    ).label("size_y_m"),
+                    SimulationRun.bandwidth_mhz,
+                    SimulationRun.mimo_layers,
+                    SimulationRun.request_json,
+                    SimulationRun.response_json,
+                    SimulationRun.coverage_map_image_url,
+                    SimulationRun.error_message,
+                    SimulationRun.started_at,
+                    SimulationRun.finished_at,
+                    SimulationRun.created_at,
+                ).where(SimulationRun.id == run_id)
             ).mappings().first()
 
             if run is None:
@@ -181,49 +162,28 @@ def get_simulation_run(run_id):
                 }
 
             antennas = session.execute(
-                text(
-                    """
-                    SELECT
-                        antenna_code,
-                        ST_X(scene_position) AS x_m,
-                        ST_Y(scene_position) AS y_m,
-                        ST_Z(scene_position) AS z_m,
-                        azimuth_deg,
-                        tilt_min_deg,
-                        tilt_current_deg,
-                        tilt_max_deg,
-                        tx_power_min_dbm,
-                        tx_power_current_dbm,
-                        tx_power_max_dbm
-                    FROM simulation_run_antennas
-                    WHERE simulation_run_id = :run_id
-                    ORDER BY antenna_code
-                    """
-                ),
-                {
-                    "run_id": run_id,
-                },
+                select(
+                    SimulationRunAntenna.antenna_code,
+                    func.ST_X(SimulationRunAntenna.scene_position).label("x_m"),
+                    func.ST_Y(SimulationRunAntenna.scene_position).label("y_m"),
+                    func.ST_Z(SimulationRunAntenna.scene_position).label("z_m"),
+                    SimulationRunAntenna.azimuth_deg,
+                    SimulationRunAntenna.tilt_min_deg,
+                    SimulationRunAntenna.tilt_current_deg,
+                    SimulationRunAntenna.tilt_max_deg,
+                    SimulationRunAntenna.tx_power_min_dbm,
+                    SimulationRunAntenna.tx_power_current_dbm,
+                    SimulationRunAntenna.tx_power_max_dbm,
+                )
+                .where(SimulationRunAntenna.simulation_run_id == run_id)
+                .order_by(SimulationRunAntenna.antenna_code)
             ).mappings()
 
-            artifacts = session.execute(
-                text(
-                    """
-                    SELECT
-                        artifact_type,
-                        file_path,
-                        public_url,
-                        size_bytes,
-                        created_at,
-                        expires_at
-                    FROM simulation_artifacts
-                    WHERE simulation_run_id = :run_id
-                    ORDER BY created_at DESC
-                    """
-                ),
-                {
-                    "run_id": run_id,
-                },
-            ).mappings()
+            artifacts = session.scalars(
+                select(SimulationArtifact)
+                .where(SimulationArtifact.simulation_run_id == run_id)
+                .order_by(SimulationArtifact.created_at.desc())
+            )
 
             return {
                 "database_configured": True,
@@ -252,26 +212,15 @@ def get_simulation_run_result(run_id):
 
     try:
         with db_session() as session:
-            row = session.execute(
-                text(
-                    """
-                    SELECT response_json
-                    FROM simulation_runs
-                    WHERE id = :run_id
-                    """
-                ),
-                {
-                    "run_id": run_id,
-                },
-            ).mappings().first()
+            run = session.get(SimulationRun, run_id)
+            if run is None:
+                return {
+                    "database_configured": True,
+                    "result": None,
+                }
+            response_json = run.response_json
 
-        if row is None:
-            return {
-                "database_configured": True,
-                "result": None,
-            }
-
-        result = normalize_json_value(row["response_json"]) or {}
+        result = normalize_json_value(response_json) or {}
         full_result_url = result.get("full_result_url")
 
         if not full_result_url:
@@ -324,80 +273,41 @@ def delete_simulation_run(run_id):
 
     try:
         with db_session() as session:
-            artifacts = session.execute(
-                text(
-                    """
-                    SELECT
-                        file_path,
-                        public_url
-                    FROM simulation_artifacts
-                    WHERE simulation_run_id = :run_id
-                    """
-                ),
-                {
-                    "run_id": run_id,
-                },
-            ).mappings().all()
-            full_result = session.execute(
-                text(
-                    """
-                    SELECT
-                        response_json->>'full_result_url' AS public_url
-                    FROM simulation_runs
-                    WHERE id = :run_id
-                    """
-                ),
-                {
-                    "run_id": run_id,
-                },
-            ).mappings().first()
+            run = session.get(SimulationRun, run_id)
 
-            if full_result is None:
+            if run is None:
                 return {
                     "database_configured": True,
                     "deleted": False,
                 }
 
-            files_to_delete = list(artifacts)
+            artifacts = session.scalars(
+                select(SimulationArtifact).where(
+                    SimulationArtifact.simulation_run_id == run_id
+                )
+            ).all()
+            files_to_delete = [
+                {
+                    "file_path": artifact.file_path,
+                    "public_url": artifact.public_url,
+                }
+                for artifact in artifacts
+            ]
+            response_json = normalize_json_value(run.response_json) or {}
+            full_result_url = response_json.get("full_result_url")
 
-            if full_result["public_url"]:
+            if full_result_url:
                 files_to_delete.append(
                     {
                         "file_path": "",
-                        "public_url": full_result["public_url"],
+                        "public_url": full_result_url,
                     }
                 )
 
             deleted_jobs = session.execute(
-                text(
-                    """
-                    DELETE FROM simulation_jobs
-                    WHERE result_run_id = :run_id
-                    """
-                ),
-                {
-                    "run_id": run_id,
-                },
+                delete(SimulationJob).where(SimulationJob.result_run_id == run_id)
             ).rowcount
-
-            deleted = session.execute(
-                text(
-                    """
-                    DELETE FROM simulation_runs
-                    WHERE id = :run_id
-                    RETURNING id
-                    """
-                ),
-                {
-                    "run_id": run_id,
-                },
-            ).first()
-
-        if deleted is None:
-            return {
-                "database_configured": True,
-                "deleted": False,
-            }
+            session.delete(run)
 
         deleted_files = delete_artifact_files(files_to_delete)
 
@@ -417,17 +327,6 @@ def delete_simulation_run(run_id):
         }
 
 
-def ensure_scene_columns(session):
-    session.execute(
-        text(
-            """
-            ALTER TABLE simulation_runs
-            ADD COLUMN IF NOT EXISTS scene_id TEXT NOT NULL DEFAULT 'munich'
-            """
-        )
-    )
-
-
 def ensure_scene_reference(session, scene_info=None):
     """Keep only the minimal scene reference required by simulation history.
 
@@ -436,11 +335,7 @@ def ensure_scene_reference(session, scene_info=None):
     catalog entry used by the simulation_runs.scene_id foreign key.
     """
     scene_info = scene_info or {}
-    table_name = session.execute(
-        text("SELECT to_regclass('public.scenes')")
-    ).scalar()
-
-    if table_name is None:
+    if not inspect(session.bind).has_table(Scene.__tablename__):
         return
 
     scene_id = scene_info.get("id", DEFAULT_SCENE_ID)
@@ -448,25 +343,12 @@ def ensure_scene_reference(session, scene_info=None):
         DEFAULT_SCENE_NAME if scene_id == DEFAULT_SCENE_ID else scene_id
     )
 
+    statement = insert(Scene).values(id=scene_id, name=scene_name)
     session.execute(
-        text(
-            """
-            INSERT INTO scenes (
-                id,
-                name
-            )
-            VALUES (
-                :scene_id,
-                :scene_name
-            )
-            ON CONFLICT (id) DO UPDATE
-            SET name = EXCLUDED.name
-            """
-        ),
-        {
-            "scene_id": scene_id,
-            "scene_name": scene_name,
-        },
+        statement.on_conflict_do_update(
+            index_elements=[Scene.id],
+            set_={"name": statement.excluded.name},
+        )
     )
 
 
@@ -480,32 +362,20 @@ def mark_scene_reference_deleted(scene_id):
 
     try:
         with db_session() as session:
-            table_name = session.execute(
-                text("SELECT to_regclass('public.scenes')")
-            ).scalar()
-
-            if table_name is None:
+            if not inspect(session.bind).has_table(Scene.__tablename__):
                 return {
                     "database_configured": True,
                     "updated": False,
                 }
 
-            updated = session.execute(
-                text(
-                    """
-                    UPDATE scenes
-                    SET
-                        status = 'deleted',
-                        updated_at = NOW()
-                    WHERE id = :scene_id
-                    """
-                ),
-                {"scene_id": scene_id},
-            ).rowcount
+            scene = session.get(Scene, scene_id)
+            if scene is not None:
+                scene.status = "deleted"
+                scene.updated_at = func.now()
 
         return {
             "database_configured": True,
-            "updated": updated > 0,
+            "updated": scene is not None,
         }
     except SQLAlchemyError:
         logger.exception("Failed to mark scene reference as deleted.")
@@ -529,81 +399,35 @@ def insert_simulation_run(
     status = normalize_status(result)
     scene_info = scene_info or {}
 
-    row = session.execute(
-        text(
-            """
-            INSERT INTO simulation_runs (
-                simulation_type,
-                status,
-                transmitter_pattern,
-                scene_id,
-                max_depth,
-                samples_per_tx,
-                cell_size_m,
-                center_position,
-                area_geom,
-                bandwidth_mhz,
-                mimo_layers,
-                request_json,
-                response_json,
-                coverage_map_image_url,
-                error_message,
-                started_at,
-                finished_at
-            )
-            VALUES (
-                :simulation_type,
-                :status,
-                :transmitter_pattern,
-                :scene_id,
-                :max_depth,
-                :samples_per_tx,
-                :cell_size_m,
-                ST_SetSRID(ST_MakePoint(:center_x_m, :center_y_m, :center_z_m), 0),
-                ST_MakeEnvelope(
-                    :center_x_m - (:size_x_m / 2.0),
-                    :center_y_m - (:size_y_m / 2.0),
-                    :center_x_m + (:size_x_m / 2.0),
-                    :center_y_m + (:size_y_m / 2.0),
-                    0
-                ),
-                :bandwidth_mhz,
-                :mimo_layers,
-                CAST(:request_json AS JSONB),
-                CAST(:response_json AS JSONB),
-                :coverage_map_image_url,
-                :error_message,
-                :started_at,
-                :finished_at
-            )
-            RETURNING id
-            """
+    run = SimulationRun(
+        simulation_type=simulation_type,
+        status=status,
+        transmitter_pattern=req.transmitter_pattern,
+        scene_id=scene_info.get("id", DEFAULT_SCENE_ID),
+        max_depth=solver.max_depth,
+        samples_per_tx=solver.samples_per_tx,
+        cell_size_m=solver.cell_size,
+        center_position=func.ST_SetSRID(func.ST_MakePoint(*solver.center), 0),
+        area_geom=func.ST_MakeEnvelope(
+            solver.center[0] - solver.size[0] / 2.0,
+            solver.center[1] - solver.size[1] / 2.0,
+            solver.center[0] + solver.size[0] / 2.0,
+            solver.center[1] + solver.size[1] / 2.0,
+            0,
         ),
-        {
-            "simulation_type": simulation_type,
-            "status": status,
-            "transmitter_pattern": req.transmitter_pattern,
-            "scene_id": scene_info.get("id", DEFAULT_SCENE_ID),
-            "max_depth": solver.max_depth,
-            "samples_per_tx": solver.samples_per_tx,
-            "cell_size_m": solver.cell_size,
-            "center_x_m": solver.center[0],
-            "center_y_m": solver.center[1],
-            "center_z_m": solver.center[2],
-            "size_x_m": solver.size[0],
-            "size_y_m": solver.size[1],
-            "bandwidth_mhz": getattr(req, "bandwidth_mhz", None),
-            "mimo_layers": getattr(req, "mimo_layers", None),
-            "request_json": to_json_string(req),
-            "response_json": to_json_string(summarize_response(result)),
-            "coverage_map_image_url": result.get("coverage_map_image_url"),
-            "error_message": result.get("error"),
-            "started_at": started_at,
-            "finished_at": finished_at,
-        },
-    ).first()
+        bandwidth_mhz=getattr(req, "bandwidth_mhz", None),
+        mimo_layers=getattr(req, "mimo_layers", None),
+        request_json=normalize_json_value(to_json_string(req)),
+        response_json=summarize_response(sanitize_json_value(result)),
+        coverage_map_image_url=result.get("coverage_map_image_url"),
+        error_message=result.get("error"),
+        started_at=started_at,
+        finished_at=finished_at,
+    )
+    session.add(run)
+    session.flush()
 
-    return row.id
+    return run.id
 
 
 def insert_network_antenna_snapshots(
@@ -612,51 +436,23 @@ def insert_network_antenna_snapshots(
     req,
 ):
     for antenna in req.antennas:
-        session.execute(
-            text(
-                """
-                INSERT INTO simulation_run_antennas (
-                    simulation_run_id,
-                    antenna_id,
-                    antenna_code,
-                    scene_position,
-                    azimuth_deg,
-                    tilt_min_deg,
-                    tilt_current_deg,
-                    tilt_max_deg,
-                    tx_power_min_dbm,
-                    tx_power_current_dbm,
-                    tx_power_max_dbm
-                )
-                VALUES (
-                    :simulation_run_id,
-                    NULL,
-                    :antenna_code,
-                    ST_SetSRID(ST_MakePoint(:x_m, :y_m, :z_m), 0),
-                    :azimuth_deg,
-                    :tilt_min_deg,
-                    :tilt_current_deg,
-                    :tilt_max_deg,
-                    :tx_power_min_dbm,
-                    :tx_power_current_dbm,
-                    :tx_power_max_dbm
-                )
-                """
-            ),
-            {
-                "simulation_run_id": run_id,
-                "antenna_code": antenna.id,
-                "x_m": antenna.position[0],
-                "y_m": antenna.position[1],
-                "z_m": antenna.position[2],
-                "azimuth_deg": antenna.azimuth,
-                "tilt_min_deg": antenna.tilt.min,
-                "tilt_current_deg": antenna.tilt.current,
-                "tilt_max_deg": antenna.tilt.max,
-                "tx_power_min_dbm": antenna.tx_power.min,
-                "tx_power_current_dbm": antenna.tx_power.current,
-                "tx_power_max_dbm": antenna.tx_power.max,
-            },
+        session.add(
+            SimulationRunAntenna(
+                simulation_run_id=run_id,
+                antenna_id=None,
+                antenna_code=antenna.id,
+                scene_position=func.ST_SetSRID(
+                    func.ST_MakePoint(*antenna.position),
+                    0,
+                ),
+                azimuth_deg=antenna.azimuth,
+                tilt_min_deg=antenna.tilt.min,
+                tilt_current_deg=antenna.tilt.current,
+                tilt_max_deg=antenna.tilt.max,
+                tx_power_min_dbm=antenna.tx_power.min,
+                tx_power_current_dbm=antenna.tx_power.current,
+                tx_power_max_dbm=antenna.tx_power.max,
+            )
         )
 
 
@@ -671,33 +467,16 @@ def insert_artifact_if_present(
 
     file_path = static_file_path_from_url(url)
 
-    session.execute(
-        text(
-            """
-            INSERT INTO simulation_artifacts (
-                simulation_run_id,
-                artifact_type,
-                file_path,
-                public_url,
-                size_bytes
-            )
-            VALUES (
-                :simulation_run_id,
-                'coverage_png',
-                :file_path,
-                :public_url,
-                :size_bytes
-            )
-            """
-        ),
-        {
-            "simulation_run_id": run_id,
-            "file_path": str(file_path) if file_path else "",
-            "public_url": url,
-            "size_bytes": file_path.stat().st_size
+    session.add(
+        SimulationArtifact(
+            simulation_run_id=run_id,
+            artifact_type="coverage_png",
+            file_path=str(file_path) if file_path else "",
+            public_url=url,
+            size_bytes=file_path.stat().st_size
             if file_path and file_path.exists()
             else None,
-        },
+        )
     )
 
 
@@ -731,30 +510,15 @@ def attach_full_result_file_if_heavy(
         return None
 
     public_url = f"/static/{relative_path.as_posix()}"
-    session.execute(
-        text(
-            """
-            UPDATE simulation_runs
-            SET response_json = jsonb_set(
-                jsonb_set(
-                    response_json,
-                    '{full_result_url}',
-                    to_jsonb(CAST(:public_url AS text)),
-                    true
-                ),
-                '{full_result_size_bytes}',
-                to_jsonb(CAST(:size_bytes AS bigint)),
-                true
-            )
-            WHERE id = :simulation_run_id
-            """
-        ),
-        {
-            "simulation_run_id": run_id,
-            "public_url": public_url,
-            "size_bytes": file_path.stat().st_size,
-        },
-    )
+    run = session.get(SimulationRun, run_id)
+    if run is None:
+        file_path.unlink(missing_ok=True)
+        return None
+
+    response_json = dict(run.response_json or {})
+    response_json["full_result_url"] = public_url
+    response_json["full_result_size_bytes"] = file_path.stat().st_size
+    run.response_json = response_json
     return public_url
 
 
@@ -872,24 +636,25 @@ def delete_artifact_files(artifacts):
 
 
 def serialize_run_summary(row):
-    scene_info = resolve_scene_info(row["scene_id"])
+    scene_id = row_value(row, "scene_id")
+    scene_info = resolve_scene_info(scene_id)
 
     return {
-        "id": str(row["id"]),
-        "simulation_type": row["simulation_type"],
-        "status": row["status"],
-        "transmitter_pattern": row["transmitter_pattern"],
-        "scene_id": row["scene_id"],
+        "id": str(row_value(row, "id")),
+        "simulation_type": row_value(row, "simulation_type"),
+        "status": row_value(row, "status"),
+        "transmitter_pattern": row_value(row, "transmitter_pattern"),
+        "scene_id": scene_id,
         "scene_name": scene_info["name"],
         "scene_bounds": scene_info["bounds"],
-        "cell_size_m": row["cell_size_m"],
-        "bandwidth_mhz": row["bandwidth_mhz"],
-        "mimo_layers": row["mimo_layers"],
-        "coverage_map_image_url": row["coverage_map_image_url"],
-        "error_message": row["error_message"],
-        "started_at": serialize_datetime(row["started_at"]),
-        "finished_at": serialize_datetime(row["finished_at"]),
-        "created_at": serialize_datetime(row["created_at"]),
+        "cell_size_m": row_value(row, "cell_size_m"),
+        "bandwidth_mhz": row_value(row, "bandwidth_mhz"),
+        "mimo_layers": row_value(row, "mimo_layers"),
+        "coverage_map_image_url": row_value(row, "coverage_map_image_url"),
+        "error_message": row_value(row, "error_message"),
+        "started_at": serialize_datetime(row_value(row, "started_at")),
+        "finished_at": serialize_datetime(row_value(row, "finished_at")),
+        "created_at": serialize_datetime(row_value(row, "created_at")),
     }
 
 
@@ -901,21 +666,21 @@ def serialize_run_detail(
     return {
         **serialize_run_summary(run),
         "solver": {
-            "max_depth": run["max_depth"],
-            "samples_per_tx": run["samples_per_tx"],
-            "cell_size_m": run["cell_size_m"],
+            "max_depth": row_value(run, "max_depth"),
+            "samples_per_tx": row_value(run, "samples_per_tx"),
+            "cell_size_m": row_value(run, "cell_size_m"),
             "center": [
-                run["center_x_m"],
-                run["center_y_m"],
-                run["center_z_m"],
+                row_value(run, "center_x_m"),
+                row_value(run, "center_y_m"),
+                row_value(run, "center_z_m"),
             ],
             "size": [
-                run["size_x_m"],
-                run["size_y_m"],
+                row_value(run, "size_x_m"),
+                row_value(run, "size_y_m"),
             ],
         },
-        "request_json": normalize_json_value(run["request_json"]),
-        "response_json": normalize_json_value(run["response_json"]),
+        "request_json": normalize_json_value(row_value(run, "request_json")),
+        "response_json": normalize_json_value(row_value(run, "response_json")),
         "antennas": [
             serialize_antenna_snapshot(row)
             for row in antennas
@@ -951,13 +716,22 @@ def serialize_antenna_snapshot(row):
 
 def serialize_artifact(row):
     return {
-        "artifact_type": row["artifact_type"],
-        "file_path": row["file_path"],
-        "public_url": row["public_url"],
-        "size_bytes": row["size_bytes"],
-        "created_at": serialize_datetime(row["created_at"]),
-        "expires_at": serialize_datetime(row["expires_at"]),
+        "artifact_type": row_value(row, "artifact_type"),
+        "file_path": row_value(row, "file_path"),
+        "public_url": row_value(row, "public_url"),
+        "size_bytes": row_value(row, "size_bytes"),
+        "created_at": serialize_datetime(row_value(row, "created_at")),
+        "expires_at": serialize_datetime(row_value(row, "expires_at")),
     }
+
+
+def row_value(row, name):
+    if isinstance(row, dict):
+        return row[name]
+    try:
+        return row[name]
+    except (KeyError, TypeError):
+        return getattr(row, name)
 
 
 def serialize_datetime(value):

@@ -7,6 +7,7 @@ from backend.api import auth as auth_module
 from backend.main import app
 from backend.services import auth_service
 from backend.services.auth_service import hash_password, verify_password
+from backend.models import AppUser
 
 
 client = TestClient(app)
@@ -29,6 +30,32 @@ class FakeSession:
 
     def execute(self, *args, **kwargs):
         return FakeResult(self.row)
+
+    def add(self, user):
+        user.id = self.row["id"]
+        user.username = self.row["username"]
+        user.created_at = self.row["created_at"]
+        user.is_active = self.row.get("is_active", True)
+
+    def flush(self):
+        return None
+
+    def scalar(self, query):
+        return self._user()
+
+    def get(self, model, item_id):
+        return self._user()
+
+    def _user(self):
+        if self.row is None:
+            return None
+        return AppUser(
+            id=self.row["id"],
+            username=self.row["username"],
+            password_hash=self.row.get("password_hash", "hashed"),
+            is_active=self.row.get("is_active", True),
+            created_at=self.row["created_at"],
+        )
 
 
 @contextlib.contextmanager

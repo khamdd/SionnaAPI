@@ -45,7 +45,7 @@ def test_insert_simulation_run_stores_summarized_response_json():
         scene_info={"id": "hcm"},
     )
 
-    stored_response = json.loads(session.last_params["response_json"])
+    stored_response = session.last_added.response_json
 
     assert "cells" not in stored_response["grid"]
     assert stored_response["grid"] == {
@@ -59,7 +59,7 @@ def test_insert_simulation_run_stores_summarized_response_json():
 
 
 def test_full_result_file_url_is_attached_for_heavy_result(tmp_path, monkeypatch):
-    session = CapturingSession()
+    session = CapturingSession(SimpleNamespace(response_json={}))
     monkeypatch.setattr(simulation_store, "STATIC_DIR", tmp_path)
     result = {
         "status": "success",
@@ -86,12 +86,8 @@ def test_full_result_file_url_is_attached_for_heavy_result(tmp_path, monkeypatch
     assert artifact_path.exists()
     assert json.loads(artifact_path.read_text(encoding="utf-8")) == result
     assert public_url == "/static/simulation-results/00000000-0000-0000-0000-000000000001.json"
-    assert session.last_params["public_url"] == "/static/simulation-results/00000000-0000-0000-0000-000000000001.json"
-    assert session.last_bind_names >= {
-        "simulation_run_id",
-        "public_url",
-        "size_bytes",
-    }
+    assert session.row.response_json["full_result_url"] == public_url
+    assert session.row.response_json["full_result_size_bytes"] == artifact_path.stat().st_size
 
 
 def test_full_result_file_is_skipped_for_small_result(tmp_path, monkeypatch):
@@ -108,7 +104,7 @@ def test_full_result_file_is_skipped_for_small_result(tmp_path, monkeypatch):
     )
 
     assert public_url is None
-    assert session.last_params is None
+    assert session.last_added is None
     assert not (tmp_path / "simulation-results").exists()
 
 
@@ -188,6 +184,9 @@ class ResultSession:
     def execute(self, query, params=None):
         return ResultRows(self.row)
 
+    def get(self, model, item_id):
+        return SimpleNamespace(**self.row) if self.row else None
+
 
 class ResultRows:
     def __init__(self, row):
@@ -201,14 +200,19 @@ class ResultRows:
 
 
 class CapturingSession:
-    def __init__(self):
-        self.last_params = None
-        self.last_bind_names = set()
+    def __init__(self, row=None):
+        self.row = row
+        self.last_added = None
 
-    def execute(self, query, params=None):
-        self.last_params = params
-        self.last_bind_names = set(query.compile().params)
-        return CapturingResult()
+    def add(self, value):
+        self.last_added = value
+
+    def flush(self):
+        if self.last_added is not None and self.last_added.id is None:
+            self.last_added.id = "00000000-0000-0000-0000-000000000001"
+
+    def get(self, model, item_id):
+        return self.row
 
 
 class CapturingResult:

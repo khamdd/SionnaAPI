@@ -161,6 +161,8 @@ http://127.0.0.1:5173
 
 The backend uses PostgreSQL/PostGIS through SQLAlchemy when `DATABASE_URL` is configured.
 
+Database access is implemented with the SQLAlchemy ORM models in `backend/models.py`. Service code builds model queries and does not contain handwritten SQL strings.
+
 Database-backed features:
 
 - Login/register through `app_users`

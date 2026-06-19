@@ -5,7 +5,7 @@ import json
 import secrets
 import time
 
-from sqlalchemy import text
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from backend.constants import (
@@ -17,6 +17,7 @@ from backend.constants import (
 )
 from backend.core.config import get_auth_settings
 from backend.database import db_session, is_database_configured
+from backend.models import AppUser
 from backend.services.event_logger import log_event
 
 
@@ -38,28 +39,13 @@ def create_user(username, password):
 
     try:
         with db_session() as session:
-            row = session.execute(
-                text(
-                    """
-                    INSERT INTO app_users (
-                        username,
-                        password_hash
-                    )
-                    VALUES (
-                        :username,
-                        :password_hash
-                    )
-                    RETURNING
-                        id,
-                        username,
-                        created_at
-                    """
-                ),
-                {
-                    "username": clean_username,
-                    "password_hash": hash_password(password),
-                },
-            ).mappings().first()
+            user = AppUser(
+                username=clean_username,
+                password_hash=hash_password(password),
+            )
+            session.add(user)
+            session.flush()
+            row = user_record(user)
 
         log_auth_event(
             "user_registered",
@@ -118,28 +104,16 @@ def login_user(username, password):
 
     try:
         with db_session() as session:
-            row = session.execute(
-                text(
-                    """
-                    SELECT
-                        id,
-                        username,
-                        password_hash,
-                        is_active,
-                        created_at
-                    FROM app_users
-                    WHERE lower(username) = lower(:username)
-                    """
-                ),
-                {
-                    "username": clean_username,
-                },
-            ).mappings().first()
+            user = session.scalar(
+                select(AppUser).where(
+                    func.lower(AppUser.username) == clean_username.lower()
+                )
+            )
 
             if (
-                row is None
-                or not row["is_active"]
-                or not verify_password(password, row["password_hash"])
+                user is None
+                or not user.is_active
+                or not verify_password(password, user.password_hash)
             ):
                 log_auth_event(
                     "login_failed",
@@ -149,18 +123,8 @@ def login_user(username, password):
                 )
                 return invalid_login()
 
-            session.execute(
-                text(
-                    """
-                    UPDATE app_users
-                    SET last_login_at = now()
-                    WHERE id = :user_id
-                    """
-                ),
-                {
-                    "user_id": row["id"],
-                },
-            )
+            row = user_record(user)
+            user.last_login_at = func.now()
 
         log_auth_event(
             "login_success",
@@ -280,22 +244,8 @@ def authenticate_access_token(token):
 
     try:
         with db_session() as session:
-            row = session.execute(
-                text(
-                    """
-                    SELECT
-                        id,
-                        username,
-                        is_active,
-                        created_at
-                    FROM app_users
-                    WHERE id = :user_id
-                    """
-                ),
-                {
-                    "user_id": payload["sub"],
-                },
-            ).mappings().first()
+            user = session.get(AppUser, payload["sub"])
+            row = user_record(user) if user else None
 
         if row is None or not row["is_active"]:
             return invalid_token()
@@ -387,4 +337,14 @@ def serialize_user(row):
         "created_at": row["created_at"].isoformat()
         if row["created_at"]
         else None,
+    }
+
+
+def user_record(user):
+    return {
+        "id": user.id,
+        "username": user.username,
+        "password_hash": user.password_hash,
+        "is_active": user.is_active,
+        "created_at": user.created_at,
     }

@@ -1,13 +1,15 @@
-import json
 import logging
+from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import text
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from backend.database import db_session, is_database_configured
+from backend.models import SimulationJob
 from backend.services.simulation_store import (
     normalize_json_value,
+    sanitize_json_value,
     serialize_datetime,
     to_json_string,
 )
@@ -29,37 +31,16 @@ def create_simulation_job(
     job_id = str(uuid4())
 
     with db_session() as session:
-        session.execute(
-            text(
-                """
-                INSERT INTO simulation_jobs (
-                    id,
-                    simulation_type,
-                    status,
-                    scene_json,
-                    request_json,
-                    base_url,
-                    created_by
-                )
-                VALUES (
-                    :id,
-                    :simulation_type,
-                    'queued',
-                    CAST(:scene_json AS JSONB),
-                    CAST(:request_json AS JSONB),
-                    :base_url,
-                    :created_by
-                )
-                """
-            ),
-            {
-                "id": job_id,
-                "simulation_type": simulation_type,
-                "scene_json": json.dumps(scene_info or {}, default=str),
-                "request_json": to_json_string(req),
-                "base_url": base_url,
-                "created_by": created_by,
-            },
+        session.add(
+            SimulationJob(
+                id=job_id,
+                simulation_type=simulation_type,
+                status="queued",
+                scene_json=sanitize_json_value(scene_info or {}),
+                request_json=normalize_json_value(to_json_string(req)),
+                base_url=base_url,
+                created_by=created_by,
+            )
         )
 
     return job_id
@@ -74,31 +55,7 @@ def get_simulation_job(job_id):
 
     try:
         with db_session() as session:
-            row = session.execute(
-                text(
-                    """
-                    SELECT
-                        id,
-                        simulation_type,
-                        status,
-                        scene_json,
-                        request_json,
-                        result_json,
-                        result_run_id,
-                        error_message,
-                        attempts,
-                        queued_at,
-                        started_at,
-                        finished_at,
-                        updated_at
-                    FROM simulation_jobs
-                    WHERE id = :job_id
-                    """
-                ),
-                {
-                    "job_id": job_id,
-                },
-            ).mappings().first()
+            row = session.get(SimulationJob, job_id)
 
             return {
                 "database_configured": True,
@@ -119,39 +76,31 @@ def claim_next_simulation_job():
         return None
 
     with db_session() as session:
-        row = session.execute(
-            text(
-                """
-                WITH next_job AS (
-                    SELECT id
-                    FROM simulation_jobs
-                    WHERE status = 'queued'
-                    ORDER BY queued_at
-                    FOR UPDATE SKIP LOCKED
-                    LIMIT 1
-                )
-                UPDATE simulation_jobs
-                SET
-                    status = 'running',
-                    started_at = now(),
-                    updated_at = now(),
-                    attempts = attempts + 1
-                WHERE id = (
-                    SELECT id
-                    FROM next_job
-                )
-                RETURNING
-                    id,
-                    simulation_type,
-                    scene_json,
-                    request_json,
-                    base_url,
-                    started_at
-                """
-            )
-        ).mappings().first()
+        job = session.scalar(
+            select(SimulationJob)
+            .where(SimulationJob.status == "queued")
+            .order_by(SimulationJob.queued_at)
+            .with_for_update(skip_locked=True)
+            .limit(1)
+        )
+        if job is None:
+            return None
 
-        return dict(row) if row else None
+        now = datetime.now(timezone.utc)
+        job.status = "running"
+        job.started_at = now
+        job.updated_at = now
+        job.attempts += 1
+        session.flush()
+
+        return {
+            "id": job.id,
+            "simulation_type": job.simulation_type,
+            "scene_json": job.scene_json,
+            "request_json": job.request_json,
+            "base_url": job.base_url,
+            "started_at": job.started_at,
+        }
 
 
 def mark_simulation_job_succeeded(job_id, result_run_id):
@@ -179,46 +128,43 @@ def update_simulation_job_finished(
     error_message=None,
 ):
     with db_session() as session:
-        session.execute(
-            text(
-                """
-                UPDATE simulation_jobs
-                SET
-                    status = :status,
-                    result_json = CAST(:result_json AS JSONB),
-                    result_run_id = :result_run_id,
-                    error_message = :error_message,
-                    finished_at = now(),
-                    updated_at = now()
-                WHERE id = :job_id
-                """
-            ),
-            {
-                "job_id": job_id,
-                "status": status,
-                "result_json": json.dumps(result, allow_nan=False, default=str)
-                if result is not None
-                else None,
-                "result_run_id": result_run_id,
-                "error_message": error_message,
-            },
-        )
+        job = session.get(SimulationJob, job_id)
+        if job is None:
+            return
+
+        now = datetime.now(timezone.utc)
+        job.status = status
+        job.result_json = sanitize_json_value(result) if result is not None else None
+        job.result_run_id = result_run_id
+        job.error_message = error_message
+        job.finished_at = now
+        job.updated_at = now
+
+
+def row_value(row, name):
+    if isinstance(row, dict):
+        return row[name]
+    return getattr(row, name)
+
+
 def serialize_job(row):
     if row is None:
         return None
 
     return {
-        "id": str(row["id"]),
-        "simulation_type": row["simulation_type"],
-        "status": row["status"],
-        "scene": normalize_json_value(row["scene_json"]),
-        "request": normalize_json_value(row["request_json"]),
-        "result": normalize_json_value(row["result_json"]),
-        "result_run_id": str(row["result_run_id"]) if row["result_run_id"] else None,
-        "error_message": row["error_message"],
-        "attempts": row["attempts"],
-        "queued_at": serialize_datetime(row["queued_at"]),
-        "started_at": serialize_datetime(row["started_at"]),
-        "finished_at": serialize_datetime(row["finished_at"]),
-        "updated_at": serialize_datetime(row["updated_at"]),
+        "id": str(row_value(row, "id")),
+        "simulation_type": row_value(row, "simulation_type"),
+        "status": row_value(row, "status"),
+        "scene": normalize_json_value(row_value(row, "scene_json")),
+        "request": normalize_json_value(row_value(row, "request_json")),
+        "result": normalize_json_value(row_value(row, "result_json")),
+        "result_run_id": str(row_value(row, "result_run_id"))
+        if row_value(row, "result_run_id")
+        else None,
+        "error_message": row_value(row, "error_message"),
+        "attempts": row_value(row, "attempts"),
+        "queued_at": serialize_datetime(row_value(row, "queued_at")),
+        "started_at": serialize_datetime(row_value(row, "started_at")),
+        "finished_at": serialize_datetime(row_value(row, "finished_at")),
+        "updated_at": serialize_datetime(row_value(row, "updated_at")),
     }
