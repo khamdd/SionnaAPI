@@ -243,6 +243,78 @@ def get_simulation_run(run_id):
         }
 
 
+def get_simulation_run_result(run_id):
+    if not is_database_configured():
+        return {
+            "database_configured": False,
+            "result": None,
+        }
+
+    try:
+        with db_session() as session:
+            row = session.execute(
+                text(
+                    """
+                    SELECT response_json
+                    FROM simulation_runs
+                    WHERE id = :run_id
+                    """
+                ),
+                {
+                    "run_id": run_id,
+                },
+            ).mappings().first()
+
+        if row is None:
+            return {
+                "database_configured": True,
+                "result": None,
+            }
+
+        result = normalize_json_value(row["response_json"]) or {}
+        full_result_url = result.get("full_result_url")
+
+        if not full_result_url:
+            return {
+                "database_configured": True,
+                "result": result,
+            }
+
+        file_path = static_file_path_from_url(full_result_url)
+        if file_path is None or not file_path.is_file():
+            return {
+                "database_configured": True,
+                "result": None,
+                "error": "Saved simulation result file is unavailable.",
+            }
+
+        try:
+            full_result = json.loads(file_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            logger.exception(
+                "Failed to load full simulation result: %s",
+                file_path,
+            )
+            return {
+                "database_configured": True,
+                "result": None,
+                "error": "Failed to load saved simulation result.",
+            }
+
+        return {
+            "database_configured": True,
+            "result": full_result,
+        }
+
+    except SQLAlchemyError:
+        logger.exception("Failed to load simulation result.")
+        return {
+            "database_configured": True,
+            "result": None,
+            "error": "Failed to load saved simulation result.",
+        }
+
+
 def delete_simulation_run(run_id):
     if not is_database_configured():
         return {
@@ -279,15 +351,34 @@ def delete_simulation_run(run_id):
                     "run_id": run_id,
                 },
             ).mappings().first()
+
+            if full_result is None:
+                return {
+                    "database_configured": True,
+                    "deleted": False,
+                }
+
             files_to_delete = list(artifacts)
 
-            if full_result and full_result["public_url"]:
+            if full_result["public_url"]:
                 files_to_delete.append(
                     {
                         "file_path": "",
                         "public_url": full_result["public_url"],
                     }
                 )
+
+            deleted_jobs = session.execute(
+                text(
+                    """
+                    DELETE FROM simulation_jobs
+                    WHERE result_run_id = :run_id
+                    """
+                ),
+                {
+                    "run_id": run_id,
+                },
+            ).rowcount
 
             deleted = session.execute(
                 text(
@@ -314,6 +405,7 @@ def delete_simulation_run(run_id):
             "database_configured": True,
             "deleted": True,
             "deleted_files": deleted_files,
+            "deleted_jobs": deleted_jobs,
         }
 
     except SQLAlchemyError:
@@ -337,6 +429,12 @@ def ensure_scene_columns(session):
 
 
 def ensure_scene_reference(session, scene_info=None):
+    """Keep only the minimal scene reference required by simulation history.
+
+    Full scene metadata and local asset paths intentionally live in
+    static/scenes/scenes.json. The PostgreSQL scenes row is only an ID/name
+    catalog entry used by the simulation_runs.scene_id foreign key.
+    """
     scene_info = scene_info or {}
     table_name = session.execute(
         text("SELECT to_regclass('public.scenes')")

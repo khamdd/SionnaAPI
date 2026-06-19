@@ -55,6 +55,47 @@ def test_simulation_run_detail_returns_not_found_for_missing_run(monkeypatch):
     assert response.status_code == 404
 
 
+def test_simulation_run_result_returns_saved_result(monkeypatch):
+    monkeypatch.setattr(
+        api_module,
+        "get_simulation_run_result",
+        lambda run_id: {
+            "database_configured": True,
+            "result": {
+                "status": "success",
+                "sinr_db": 12.5,
+            },
+        },
+    )
+
+    response = client.get(
+        "/api/v1/simulation-runs/00000000-0000-0000-0000-000000000000/result"
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "success",
+        "sinr_db": 12.5,
+    }
+
+
+def test_simulation_run_result_returns_not_found(monkeypatch):
+    monkeypatch.setattr(
+        api_module,
+        "get_simulation_run_result",
+        lambda run_id: {
+            "database_configured": True,
+            "result": None,
+        },
+    )
+
+    response = client.get(
+        "/api/v1/simulation-runs/00000000-0000-0000-0000-000000000000/result"
+    )
+
+    assert response.status_code == 404
+
+
 def test_delete_simulation_run_returns_success(monkeypatch):
     monkeypatch.setattr(
         api_module,
@@ -63,6 +104,7 @@ def test_delete_simulation_run_returns_success(monkeypatch):
             "database_configured": True,
             "deleted": True,
             "deleted_files": 1,
+            "deleted_jobs": 1,
         },
     )
 
@@ -73,6 +115,7 @@ def test_delete_simulation_run_returns_success(monkeypatch):
     assert response.status_code == 200
     assert response.json()["deleted"] is True
     assert response.json()["deleted_files"] == 1
+    assert response.json()["deleted_jobs"] == 1
 
 
 def test_delete_simulation_run_returns_not_found(monkeypatch):

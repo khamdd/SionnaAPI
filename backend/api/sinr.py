@@ -33,6 +33,7 @@ from backend.services.throughput_service import (
 from backend.services.simulation_store import (
     delete_simulation_run,
     get_simulation_run,
+    get_simulation_run_result,
     list_simulation_runs,
     store_simulation_result,
     utc_now,
@@ -421,6 +422,31 @@ def simulation_runs(limit: int = 25):
     return list_simulation_runs(limit=limit)
 
 
+@router.get("/simulation-runs/{run_id}/result")
+def simulation_run_result(run_id: str):
+    response = get_simulation_run_result(run_id)
+
+    if not response.get("database_configured"):
+        raise HTTPException(
+            status_code=503,
+            detail="Database is not configured.",
+        )
+
+    if response.get("error"):
+        raise HTTPException(
+            status_code=500,
+            detail=response["error"],
+        )
+
+    if response.get("result") is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Simulation result not found.",
+        )
+
+    return response["result"]
+
+
 @router.get("/simulation-runs/{run_id}")
 def simulation_run_detail(run_id: str):
     result = get_simulation_run(run_id)
@@ -476,6 +502,7 @@ def delete_simulation_run_history(run_id: str):
         database_configured=result.get("database_configured"),
         deleted=result.get("deleted"),
         deleted_files=result.get("deleted_files"),
+        deleted_jobs=result.get("deleted_jobs"),
     )
 
     return result

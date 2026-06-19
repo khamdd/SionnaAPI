@@ -63,8 +63,13 @@ async function pollSimulationJob(jobId) {
     const job = jobResponse.item || jobResponse;
 
     if (job.status === "succeeded") {
+      if (!job.result_run_id) {
+        throw new Error("Simulation finished without a saved result.");
+      }
+
+      const result = await getSimulationRunResult(job.result_run_id);
       return {
-        ...(job.result || {}),
+        ...result,
         job_id: job.id,
         result_run_id: job.result_run_id,
       };
@@ -111,6 +116,10 @@ export function listSimulationRuns(limit = 25) {
 
 export function getSimulationRun(runId) {
   return requestJson(`/api/v1/simulation-runs/${runId}`);
+}
+
+export function getSimulationRunResult(runId) {
+  return requestJson(`/api/v1/simulation-runs/${runId}/result`);
 }
 
 export function listScenes() {

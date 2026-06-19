@@ -169,6 +169,22 @@ Database-backed features:
 - Generated image metadata through `simulation_artifacts`
 - Optional scene references through `scenes` if that table exists
 
+### Scene storage model
+
+The local scene registry is the source of truth for scene metadata. Full scene information is stored in:
+
+```text
+static/scenes/scenes.json
+```
+
+Scene XML, PLY meshes, and preview SVG files are stored under:
+
+```text
+static/scenes/{scene_id}/
+```
+
+PostgreSQL `scenes` rows are intentionally minimal. The application writes only `id` and `name` so `simulation_runs.scene_id` can keep a stable foreign-key reference. Columns such as `bounds_geom`, `bounds_json`, `metrics_json`, `scene_path`, and `preview_url` are not used by the current local-registry design and remain `NULL`.
+
 The code does not contain a migration tool. The storage layer assumes these tables already exist and adds `simulation_runs.scene_id` automatically if missing.
 
 Simulation grid cells are not stored in their own table. Full grid details stay in the JSON response and in the stored `response_json`.
@@ -238,6 +254,7 @@ History:
 ```text
 GET    /api/v1/simulation-runs
 GET    /api/v1/simulation-runs/{run_id}
+GET    /api/v1/simulation-runs/{run_id}/result
 DELETE /api/v1/simulation-runs/{run_id}
 ```
 

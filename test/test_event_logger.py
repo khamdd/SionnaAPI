@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-import threading
+import queue
 import time
 
 from backend.services import event_logger
@@ -92,14 +92,9 @@ def test_worker_delivery_failure_does_not_raise(monkeypatch):
 
 
 def test_enqueue_does_not_wait_for_elasticsearch(monkeypatch):
-    send_started = threading.Event()
-    release_send = threading.Event()
-
-    def slow_send(*args):
-        send_started.set()
-        release_send.wait(timeout=1)
-
-    monkeypatch.setattr(event_logger, "send_to_elasticsearch", slow_send)
+    isolated_queue = queue.Queue(maxsize=4)
+    monkeypatch.setattr(event_logger, "_log_queue", isolated_queue)
+    monkeypatch.setattr(event_logger, "start_event_logger", lambda: None)
 
     started_at = time.perf_counter()
     accepted = event_logger.enqueue_log_event(
@@ -111,8 +106,8 @@ def test_enqueue_does_not_wait_for_elasticsearch(monkeypatch):
 
     assert accepted is True
     assert elapsed < 0.2
-    assert send_started.wait(timeout=0.5)
-
-    release_send.set()
-    event_logger._log_queue.join()
-    event_logger.stop_event_logger()
+    assert isolated_queue.get_nowait() == (
+        "http://localhost:9200",
+        "sionna-logs-test",
+        {"event": "test_event"},
+    )

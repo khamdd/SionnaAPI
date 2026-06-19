@@ -1,4 +1,5 @@
 import json
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 from backend.services import simulation_store
@@ -126,6 +127,77 @@ def test_delete_artifact_files_removes_full_result_url(tmp_path, monkeypatch):
 
     assert deleted == 1
     assert not artifact_path.exists()
+
+
+def test_get_simulation_run_result_loads_full_result_file(tmp_path, monkeypatch):
+    artifact_path = tmp_path / "simulation-results" / "run-1.json"
+    artifact_path.parent.mkdir()
+    artifact_path.write_text(
+        json.dumps({"status": "success", "grid": {"cells": [{"row": 0}]}}),
+        encoding="utf-8",
+    )
+    session = ResultSession({
+        "response_json": {
+            "status": "success",
+            "full_result_url": "/static/simulation-results/run-1.json",
+        },
+    })
+    monkeypatch.setattr(simulation_store, "STATIC_DIR", tmp_path)
+    monkeypatch.setattr(simulation_store, "is_database_configured", lambda: True)
+    monkeypatch.setattr(simulation_store, "db_session", fake_db_session(session))
+
+    response = simulation_store.get_simulation_run_result("run-1")
+
+    assert response["database_configured"] is True
+    assert response["result"] == {
+        "status": "success",
+        "grid": {"cells": [{"row": 0}]},
+    }
+
+
+def test_get_simulation_run_result_returns_small_database_result(monkeypatch):
+    session = ResultSession({
+        "response_json": {
+            "status": "success",
+            "sinr_db": 12.5,
+        },
+    })
+    monkeypatch.setattr(simulation_store, "is_database_configured", lambda: True)
+    monkeypatch.setattr(simulation_store, "db_session", fake_db_session(session))
+
+    response = simulation_store.get_simulation_run_result("run-1")
+
+    assert response["result"] == {
+        "status": "success",
+        "sinr_db": 12.5,
+    }
+
+
+def fake_db_session(session):
+    @contextmanager
+    def context():
+        yield session
+
+    return context
+
+
+class ResultSession:
+    def __init__(self, row):
+        self.row = row
+
+    def execute(self, query, params=None):
+        return ResultRows(self.row)
+
+
+class ResultRows:
+    def __init__(self, row):
+        self.row = row
+
+    def mappings(self):
+        return self
+
+    def first(self):
+        return self.row
 
 
 class CapturingSession:

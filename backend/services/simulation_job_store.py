@@ -154,11 +154,10 @@ def claim_next_simulation_job():
         return dict(row) if row else None
 
 
-def mark_simulation_job_succeeded(job_id, result, result_run_id=None):
+def mark_simulation_job_succeeded(job_id, result_run_id):
     update_simulation_job_finished(
         job_id,
         "succeeded",
-        result=result,
         result_run_id=result_run_id,
     )
 

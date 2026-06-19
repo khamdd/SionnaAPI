@@ -117,10 +117,20 @@ def run_simulation_job(job):
             )
             return
 
+        if run_id is None:
+            mark_simulation_job_failed(
+                job_id,
+                "Simulation completed but its result could not be stored.",
+                result={
+                    "status": "failure",
+                    "error": "Simulation result storage failed.",
+                },
+            )
+            return
+
         mark_simulation_job_succeeded(
             job_id,
-            result,
-            result_run_id=run_id,
+            run_id,
         )
 
     except Exception as exc:

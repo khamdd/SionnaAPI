@@ -157,6 +157,7 @@ def test_delete_history_success_logs_business_event(monkeypatch):
             "database_configured": True,
             "deleted": True,
             "deleted_files": 2,
+            "deleted_jobs": 1,
         },
     )
 
@@ -172,8 +173,9 @@ def test_delete_history_success_logs_business_event(monkeypatch):
             {
                 "run_id": "00000000-0000-0000-0000-000000000000",
                 "database_configured": True,
-                "deleted": True,
-                "deleted_files": 2,
-            },
+                    "deleted": True,
+                    "deleted_files": 2,
+                    "deleted_jobs": 1,
+                },
         )
     ]
