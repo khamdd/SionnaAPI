@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from backend.api.auth import router as auth_router
 from backend.api.sinr import router as sinr_router
 from backend.middleware.request_logging import RequestLoggingMiddleware
+from backend.database import initialize_database
 from backend.services.event_logger import (
     start_event_logger,
     stop_event_logger,
@@ -20,6 +21,7 @@ from backend.services.simulation_worker import (
 
 @asynccontextmanager
 async def lifespan(app):
+    initialize_database()
     start_event_logger()
     start_simulation_worker()
     try:
@@ -65,3 +67,8 @@ app.include_router(
     sinr_router,
     prefix="/api/v1"
 )
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}

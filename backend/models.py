@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -42,9 +44,15 @@ class AppUser(Base):
     username: Mapped[str] = mapped_column(Text, unique=True)
     password_hash: Mapped[str] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    last_login_at: Mapped[object | None] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[object] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[object] = mapped_column(DateTime, server_default=func.now())
+    last_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class Scene(Base):
@@ -59,8 +67,12 @@ class Scene(Base):
     metrics_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     scene_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     preview_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[object] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[object] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class SimulationRun(Base):
@@ -83,9 +95,15 @@ class SimulationRun(Base):
     response_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     coverage_map_image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    started_at: Mapped[object | None] = mapped_column(DateTime, nullable=True)
-    finished_at: Mapped[object | None] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[object] = mapped_column(DateTime, server_default=func.now())
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
     scene_id: Mapped[str] = mapped_column(
         ForeignKey("scenes.id", ondelete="RESTRICT"),
         default="munich",
@@ -142,8 +160,12 @@ class SimulationArtifact(Base):
     file_path: Mapped[str] = mapped_column(Text)
     public_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    created_at: Mapped[object] = mapped_column(DateTime, server_default=func.now())
-    expires_at: Mapped[object | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     simulation_run: Mapped[SimulationRun] = relationship(back_populates="artifacts")
 
@@ -167,9 +189,17 @@ class SimulationJob(Base):
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     base_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
-    queued_at: Mapped[object] = mapped_column(DateTime, server_default=func.now())
-    started_at: Mapped[object | None] = mapped_column(DateTime, nullable=True)
-    finished_at: Mapped[object | None] = mapped_column(DateTime, nullable=True)
-    updated_at: Mapped[object] = mapped_column(DateTime, server_default=func.now())
+    queued_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     result_run: Mapped[SimulationRun | None] = relationship(back_populates="jobs")

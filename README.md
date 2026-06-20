@@ -214,6 +214,74 @@ Stop it:
 docker compose -f docker-compose.elasticsearch.yml down
 ```
 
+## Docker deployment
+
+The complete application can run as five containers:
+
+- `frontend`: production React files served by Nginx
+- `backend`: FastAPI, Sionna RT, and the background simulation worker
+- `postgres`: PostgreSQL with PostGIS
+- `elasticsearch`: persistent application logs
+- `kibana`: log viewer
+
+The backend Docker image installs its Python packages directly in
+`Dockerfile.backend`; Docker does not use `backend/requirements.txt`.
+
+For local testing, the Compose defaults work immediately:
+
+```powershell
+docker compose up --build -d
+```
+
+Open:
+
+```text
+Application:   http://127.0.0.1:8080
+FastAPI:       http://127.0.0.1:8000
+Kibana:        http://127.0.0.1:5601
+PostgreSQL:    127.0.0.1:5433
+Elasticsearch: http://127.0.0.1:9200
+```
+
+For a shared or production deployment, copy `.env.docker.example` to a secure
+environment file, change both passwords/secrets, and pass it to Compose:
+
+```powershell
+Copy-Item .env.docker.example .env.docker
+docker compose --env-file .env.docker up --build -d
+```
+
+The backend creates missing tables from `backend/models.py` when it starts.
+A fresh PostgreSQL volume therefore starts with an empty application database
+and the required schema; no SQL initialization file is used.
+
+Persistent named volumes:
+
+- `postgres-data`: users, jobs, scene references, and simulation history
+- `elasticsearch-data`: logs
+- `application-static`: imported scenes and generated simulation artifacts
+
+Check the stack:
+
+```powershell
+docker compose ps
+docker compose logs -f backend
+```
+
+Stop containers while preserving data:
+
+```powershell
+docker compose down
+```
+
+Delete containers and all Docker-managed application data:
+
+```powershell
+docker compose down -v
+```
+
+Use `down -v` only when a complete data reset is intentional.
+
 Stop it and delete local log data:
 
 ```powershell

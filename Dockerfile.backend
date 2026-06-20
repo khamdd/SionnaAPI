@@ -1,0 +1,43 @@
+FROM python:3.11-slim-bookworm
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    MPLBACKEND=Agg
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libegl1 \
+        libgl1 \
+        libglib2.0-0 \
+        libatomic1 \
+        libx11-6 \
+        libxext6 \
+        libxrender1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python dependencies are intentionally declared here instead of requirements.txt.
+RUN python -m pip install \
+    fastapi==0.136.3 \
+    uvicorn==0.49.0 \
+    sionna-rt==2.0.1 \
+    pyngrok==8.1.2 \
+    numpy==2.4.6 \
+    matplotlib==3.10.9 \
+    python-multipart==0.0.32 \
+    pydantic==2.13.4 \
+    email-validator==2.3.0 \
+    SQLAlchemy==2.0.50 \
+    psycopg==3.3.4 \
+    psycopg-binary==3.3.4 \
+    python-dotenv==1.2.2
+
+COPY backend ./backend
+
+RUN mkdir -p /app/static/scenes /app/static/generated /app/static/simulation-results
+
+EXPOSE 8000
+
+CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
