@@ -16,6 +16,7 @@ backend/.sionna-venv/
 .env
 .env.*
 .env.example
+!.env.docker.example
 *.local
 
 # Generated simulation assets

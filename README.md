@@ -1,336 +1,254 @@
 # Sionna Simulation Planner
 
-This project is a local radio-network planning demo built with:
+A radio-network planning application built with FastAPI, React, NVIDIA Sionna RT,
+PostgreSQL/PostGIS, and Elasticsearch/Kibana.
 
-- **FastAPI** backend
-- **React/Vite** frontend
-- **NVIDIA Sionna RT** for radio-map simulation
-- Optional **PostgreSQL/PostGIS** storage for users and simulation history
-- Optional **Elasticsearch/Kibana** logging
+The application lets users manage scenes and antennas, run coverage, RSRP, SINR,
+and throughput simulations, and compare saved results.
 
-The app lets a user log in, choose or preview a scene, edit antenna tilt and transmit power, run Sionna RT simulations, inspect coverage/SINR/throughput results, and compare saved simulation history.
+## Run with Docker (recommended)
 
-## Current Repository Layout
+Docker Compose starts the complete application:
 
-```text
-SionnaSimulation/
-  backend/
-    main.py                         FastAPI app setup
-    api/
-      auth.py                       Login/register endpoints
-      sinr.py                       Simulation, history, and scene endpoints
-    core/
-      config.py                     Elasticsearch environment settings
-    middleware/
-      request_logging.py            Request logging middleware
-    schemas/
-      auth.py                       Auth request validation
-      requests.py                   Simulation and scene request validation
-    services/
-      auth_service.py               User creation/login logic
-      coverage_service.py           Coverage-map and network-coverage logic
-      event_logger.py               Optional Elasticsearch event logging
-      scene_service.py              Scene registry, preview, activate, delete
-      simulation_store.py           Optional PostgreSQL history storage
-      sinr_service.py               SINR endpoint logic
-      throughput_service.py         Throughput comparison logic
-    simulations/
-      antenna_factory.py            Add/update/remove Sionna transmitters
-      radio_calculator.py           Grid indexing, dB/dBm, throughput math
-      sionna_engine.py              Lazy-loaded shared Sionna scene
-    requirements.txt
-  frontend/
-    package.json
-    index.html
-    styles.css
-    src/
-      App.jsx                       Main app state, routes, workflow glue
-      api.js                        Frontend API client
-      constants.js                  Default solver and antenna settings
-      components/                   UI components
-      utils/                        Formatting, history, and map helpers
-  test/                             Pytest tests for backend logic
-  docker-compose.elasticsearch.yml  Optional local Elasticsearch/Kibana
-  README.md
-```
+- `frontend`: React application served by Nginx
+- `backend`: FastAPI and the Sionna simulation worker
+- `postgres`: users, jobs, scenes, and simulation history
+- `elasticsearch`: application event logs
+- `kibana`: log search and visualization
 
-Generated runtime files are intentionally ignored by Git:
+### 1. Requirements
 
-- `.env`
-- `static/`
-- frontend `node_modules/`
-- frontend build output such as `dist/`
+Install:
 
-There is currently no committed `.env.example` file.
+- [Git](https://git-scm.com/)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 
-## Requirements
+Start Docker Desktop before running the commands below.
 
-The backend expects a Windows machine with an NVIDIA GPU and a Sionna-compatible driver/environment.
-
-The environment used for this project is:
-
-- Python `3.11`
-- Conda environment named `sionna-rt-py311`
-- `sionna-rt==2.0.1`
-- FastAPI/Uvicorn
-- Pytest
-- Node.js/npm for the React frontend
-
-Python dependencies are listed in:
-
-```text
-backend/requirements.txt
-```
-
-Frontend dependencies are listed in:
-
-```text
-frontend/package.json
-```
-
-## Environment Variables
-
-Create a local `.env` file in the project root when you need database storage or Elasticsearch logging.
-
-Minimum database example:
-
-```text
-DATABASE_URL=postgresql+psycopg://postgres:your_password@localhost:5432/sionna_simulation
-AUTH_SECRET_KEY=replace-this-with-a-long-random-secret
-```
-
-Optional Elasticsearch example:
-
-```text
-ELASTICSEARCH_ENABLED=true
-ELASTICSEARCH_URL=http://localhost:9200
-ELASTICSEARCH_INDEX=sionna-logs-dev
-```
-
-The frontend can be pointed at a different backend by creating `frontend/.env`:
-
-```text
-VITE_API_BASE_URL=http://127.0.0.1:8000
-```
-
-If `DATABASE_URL` is not set, the backend still starts, but login/register and history storage will not work.
-
-`AUTH_SECRET_KEY` signs login tokens. Use a long random value before deploying the app. If you leave the default development secret, anyone with the source code can forge tokens.
-
-If `ELASTICSEARCH_ENABLED` is not true, logging silently stays disabled.
-
-## Start the Backend
-
-Open PowerShell:
+### 2. Clone and configure
 
 ```powershell
-cd D:\Workspace\Viettel\Miniproject\SionnaSimulation
-conda activate sionna-rt-py311
-python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+git clone <repository-url>
+cd SionnaSimulation
+Copy-Item .env.docker.example .env.docker
 ```
 
-FastAPI docs:
+Open `.env.docker` and replace the placeholder database password and authentication
+secret with long, random values. Do not commit or share this file.
 
-```text
-http://127.0.0.1:8000/docs
-```
-
-The backend serves generated images and scene previews from:
-
-```text
-http://127.0.0.1:8000/static/...
-```
-
-## Start the Frontend
-
-Open another PowerShell window:
+### 3. Build and start
 
 ```powershell
-cd D:\Workspace\Viettel\Miniproject\SionnaSimulation\frontend
-npm install
-npm run dev
+docker compose --env-file .env.docker up --build -d
 ```
 
-Vite normally starts at:
+The first build downloads the base images and Python/Node dependencies, so it takes
+longer than later starts.
 
-```text
-http://127.0.0.1:5173
-```
-
-## Optional Database
-
-The backend uses PostgreSQL/PostGIS through SQLAlchemy when `DATABASE_URL` is configured.
-
-Database access is implemented with the SQLAlchemy ORM models in `backend/models.py`. Service code builds model queries and does not contain handwritten SQL strings.
-
-Database-backed features:
-
-- Login/register through `app_users`
-- Saved simulation history through `simulation_runs`
-- Network antenna snapshots through `simulation_run_antennas`
-- Generated image metadata through `simulation_artifacts`
-- Optional scene references through `scenes` if that table exists
-
-### Scene storage model
-
-The local scene registry is the source of truth for scene metadata. Full scene information is stored in:
-
-```text
-static/scenes/scenes.json
-```
-
-Scene XML, PLY meshes, and preview SVG files are stored under:
-
-```text
-static/scenes/{scene_id}/
-```
-
-PostgreSQL `scenes` rows are intentionally minimal. The application writes `id` and `name` so `simulation_runs.scene_id` can keep a stable foreign-key reference. When a local scene is removed, its PostgreSQL row is retained for old simulation history and its `status` changes from `ready` to `deleted`. Columns such as `bounds_geom`, `bounds_json`, `metrics_json`, `scene_path`, and `preview_url` are not used by the current local-registry design and remain `NULL`.
-
-The code does not contain a migration tool. The storage layer assumes these tables already exist and adds `simulation_runs.scene_id` automatically if missing.
-
-Simulation grid cells are not stored in their own table. Full grid details stay in the JSON response and in the stored `response_json`.
-
-## Optional Elasticsearch Logging
-
-The app can log request, auth, scene, and simulation events to Elasticsearch.
-
-Start the local logging stack:
+Check that every service is running:
 
 ```powershell
-cd D:\Workspace\Viettel\Miniproject\SionnaSimulation
-docker compose -f docker-compose.elasticsearch.yml up -d
-```
-
-Open Kibana:
-
-```text
-http://127.0.0.1:5601
-```
-
-Stop it:
-
-```powershell
-docker compose -f docker-compose.elasticsearch.yml down
-```
-
-## Docker deployment
-
-The complete application can run as five containers:
-
-- `frontend`: production React files served by Nginx
-- `backend`: FastAPI, Sionna RT, and the background simulation worker
-- `postgres`: PostgreSQL with PostGIS
-- `elasticsearch`: persistent application logs
-- `kibana`: log viewer
-
-The backend Docker image installs its Python packages directly in
-`Dockerfile.backend`; Docker does not use `backend/requirements.txt`.
-
-For local testing, the Compose defaults work immediately:
-
-```powershell
-docker compose up --build -d
+docker compose ps
 ```
 
 Open:
 
-```text
-Application:   http://127.0.0.1:8080
-FastAPI:       http://127.0.0.1:8000
-Kibana:        http://127.0.0.1:5601
-PostgreSQL:    127.0.0.1:5433
-Elasticsearch: http://127.0.0.1:9200
-```
+| Service | Address |
+| --- | --- |
+| Application | http://127.0.0.1:8080 |
+| FastAPI documentation | http://127.0.0.1:8000/docs |
+| Kibana | http://127.0.0.1:5601 |
+| Elasticsearch | http://127.0.0.1:9200 |
+| PostgreSQL | `127.0.0.1:5433` by default |
 
-For a shared or production deployment, copy `.env.docker.example` to a secure
-environment file, change both passwords/secrets, and pass it to Compose:
+Register the first application user from the login page. The database schema is
+created automatically when the backend starts.
+
+### 4. Everyday Docker commands
+
+Start an existing installation:
 
 ```powershell
-Copy-Item .env.docker.example .env.docker
+docker compose --env-file .env.docker up -d
+```
+
+Rebuild after changing source code or dependencies:
+
+```powershell
 docker compose --env-file .env.docker up --build -d
 ```
 
-The backend creates missing tables from `backend/models.py` when it starts.
-A fresh PostgreSQL volume therefore starts with an empty application database
-and the required schema; no SQL initialization file is used.
-
-Persistent named volumes:
-
-- `postgres-data`: users, jobs, scene references, and simulation history
-- `elasticsearch-data`: logs
-- `application-static`: imported scenes and generated simulation artifacts
-
-Check the stack:
+View status and backend logs:
 
 ```powershell
 docker compose ps
 docker compose logs -f backend
 ```
 
-Stop containers while preserving data:
+Stop the application while preserving data:
 
 ```powershell
 docker compose down
 ```
 
-Delete containers and all Docker-managed application data:
+Delete the containers **and all stored application data**:
 
 ```powershell
 docker compose down -v
 ```
 
-Use `down -v` only when a complete data reset is intentional.
+Use `down -v` only when a complete reset is intentional.
 
-Stop it and delete local log data:
+## Docker configuration and secrets
+
+The Docker images do not contain `.env` or `.env.docker`. These files are excluded
+from the build context by `.dockerignore`.
+
+When this command runs:
 
 ```powershell
-docker compose -f docker-compose.elasticsearch.yml down -v
+docker compose --env-file .env.docker up -d
 ```
 
-The compose file binds Elasticsearch and Kibana to `127.0.0.1`, so they are local-only by default.
+Docker Compose reads `.env.docker` on the host, substitutes values referenced in
+`docker-compose.yml`, and injects those values into the running containers as
+environment variables. The backend reads them with `os.getenv()`.
 
-## Main User Flow
+Important distinctions:
 
-1. The user logs in or registers.
-2. The frontend loads the active scene.
-3. The default route is `/network`.
-4. The user edits antenna tilt or transmit power.
-5. Clicking **Run simulation** sends `POST /api/v1/network-coverage`.
-6. The backend locks the shared Sionna engine, loads the active scene if needed, adds transmitters, runs a radio map, renders a coverage image, builds grid-cell metrics, and removes temporary transmitters.
-7. The frontend displays the coverage image or 3D scene preview, overlays grid colors, and shows cell details.
-8. If the database is configured, the simulation is stored and can be viewed from History.
+- `.env.docker` configures the Compose deployment and is loaded only when passed
+  with `--env-file`.
+- `.env` is automatically used by Docker Compose when no `--env-file` is supplied,
+  and is also used when the backend runs directly on the host.
+- Environment files are not automatically copied into containers.
+- Only values declared or referenced by `docker-compose.yml` are passed to a
+  container.
+- Docker administrators can inspect container environment variables. Use a secret
+  manager or Docker secrets when deploying to a higher-security environment.
 
-## Important API Endpoints
+Never commit real passwords, tokens, or authentication secrets. Each installation
+should create its own `.env.docker` from `.env.docker.example`.
 
-Auth:
+## Giving the application to another user
+
+The simplest supported approach is to give the user access to this repository.
+They can then follow the Docker instructions at the top of this README and create
+their own `.env.docker` file.
+
+The current `docker-compose.yml` builds the backend and frontend images from source.
+It does not download prebuilt application images from a registry. To distribute
+prebuilt images instead, publish the backend and frontend images to Docker Hub or
+another container registry, then replace their Compose `build:` entries with
+versioned `image:` entries.
+
+Do not send your personal `.env.docker`. Send only `.env.docker.example` and have
+the receiving user generate their own secrets.
+
+## Persistent data
+
+Docker Compose uses named volumes:
+
+| Volume | Contents |
+| --- | --- |
+| `postgres-data` | Users, jobs, scene references, and simulation history |
+| `elasticsearch-data` | Application logs |
+| `application-static` | Imported scenes and generated simulation files |
+
+`docker compose down` preserves these volumes. `docker compose down -v` deletes
+them.
+
+## Kibana logs
+
+Open http://127.0.0.1:5601 and create a data view for:
 
 ```text
-POST /api/v1/auth/register
-POST /api/v1/auth/login
+sionna-logs-*
 ```
 
-Simulation:
+Use `@timestamp` as the time field. Useful Kibana Query Language filters include:
 
 ```text
-POST /api/v1/network-coverage
-POST /api/v1/coverage-map
-POST /api/v1/sinr
-POST /api/v1/throughput-comparison
+simulation_type: *
+event: "simulation_queued"
+event: "simulation_failed"
 ```
 
-History:
+Most generic HTTP request events do not contain `simulation_type`; that field is
+added to simulation-specific events.
+
+## Local development without the full Docker stack
+
+Docker is the supported first-run path. For backend development on the host, use
+Python 3.11 with the dependencies in `backend/requirements.txt`, and configure a
+root `.env` when database or Elasticsearch access is needed.
+
+Example `.env` for host development:
+
+```dotenv
+DATABASE_URL=postgresql+psycopg://postgres:replace-me@localhost:5432/sionna_simulation
+AUTH_SECRET_KEY=replace-with-a-long-random-secret
+ELASTICSEARCH_ENABLED=true
+ELASTICSEARCH_URL=http://localhost:9200
+ELASTICSEARCH_INDEX=sionna-logs-dev
+```
+
+Start the backend:
+
+```powershell
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+```
+
+Start the frontend in another terminal:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+The Vite development server normally opens at http://127.0.0.1:5173. To use a
+different backend, set `VITE_API_BASE_URL` in `frontend/.env`.
+
+## Tests
+
+Run backend tests from the repository root:
+
+```powershell
+python -m pytest test -q
+```
+
+Verify the frontend production build:
+
+```powershell
+cd frontend
+npm install
+npm run build
+```
+
+Full Sionna simulations are hardware-dependent and are not part of the normal unit
+test suite.
+
+## Main API endpoints
+
+The complete interactive API documentation is available at
+http://127.0.0.1:8000/docs while the backend is running.
 
 ```text
+POST   /api/v1/auth/register
+POST   /api/v1/auth/login
+
+POST   /api/v1/network-coverage
+POST   /api/v1/coverage-map
+POST   /api/v1/rsrp-simulation
+POST   /api/v1/sinr
+POST   /api/v1/throughput-comparison
+
+GET    /api/v1/simulation-jobs/{job_id}
 GET    /api/v1/simulation-runs
 GET    /api/v1/simulation-runs/{run_id}
 GET    /api/v1/simulation-runs/{run_id}/result
 DELETE /api/v1/simulation-runs/{run_id}
-```
 
-Scenes:
-
-```text
 GET    /api/v1/scenes
 GET    /api/v1/scenes/active
 POST   /api/v1/scenes/preview
@@ -338,229 +256,58 @@ POST   /api/v1/scenes/{scene_id}/activate
 DELETE /api/v1/scenes/{scene_id}
 ```
 
-## Where To Change Common Things
-
-Default antennas and solver settings:
+## Project structure
 
 ```text
-frontend/src/constants.js
+backend/                    FastAPI API, services, storage, and simulations
+frontend/                   React/Vite user interface
+test/                       Backend unit tests
+docker/                     Nginx configuration
+docker-compose.yml          Complete application stack
+Dockerfile.backend          Backend image
+Dockerfile.frontend         Frontend production image
+.env.docker.example         Safe Docker configuration template
 ```
 
-Frontend API base URL and request functions:
-
-```text
-frontend/src/api.js
-```
-
-Main frontend routes and app state:
-
-```text
-frontend/src/App.jsx
-```
-
-Coverage map UI:
-
-```text
-frontend/src/components/MapPanel.jsx
-frontend/src/components/Scene3DPreview.jsx
-frontend/src/utils/map.js
-```
-
-Request validation:
-
-```text
-backend/schemas/requests.py
-backend/schemas/auth.py
-```
-
-Simulation endpoint routing:
-
-```text
-backend/api/sinr.py
-backend/api/auth.py
-```
-
-Sionna scene loading:
-
-```text
-backend/simulations/sionna_engine.py
-```
-
-Radio math and grid indexing:
-
-```text
-backend/simulations/radio_calculator.py
-```
-
-Network coverage behavior:
-
-```text
-backend/services/coverage_service.py
-```
-
-History persistence:
-
-```text
-backend/services/simulation_store.py
-```
-
-Scene preview/activate/delete:
-
-```text
-backend/services/scene_service.py
-```
-
-## How Network Coverage Works
-
-The main endpoint is:
-
-```text
-POST /api/v1/network-coverage
-```
-
-The flow is:
-
-```text
-frontend/src/App.jsx
-  -> buildNetworkCoveragePayload()
-  -> frontend/src/api.js runNetworkCoverage()
-  -> backend/api/sinr.py network_coverage()
-  -> backend/services/coverage_service.py calculate_network_coverage_service()
-  -> backend/simulations/sionna_engine.py shared scene
-  -> Sionna RadioMapSolver
-  -> grid JSON + PNG URL
-  -> frontend/src/utils/map.js drawHeatmap()
-```
-
-The backend returns:
-
-- `status`
-- `coverage_map_image_url`
-- `grid.rows`
-- `grid.cols`
-- `grid.cells`
-- `solver`
-- `transmitter_pattern`
-- `antennas`
-
-Each grid cell can include:
-
-- row/column
-- world `x` and `y`
-- serving antenna
-- SINR in dB
-- signal power in dBm
-- neighbor antennas
-- estimated throughput in Mbps
-
-## Scene Management
-
-The default scene is Munich.
-
-Imported scenes are stored under:
-
-```text
-static/scenes/
-```
-
-The scene registry is stored at runtime in:
-
-```text
-static/scenes/scenes.json
-```
-
-Current limitation: the map picker validates and stores the selected real-world bounds, then creates a runnable scene from Sionna's bundled `simple_street_canyon` demo scene. It does not yet convert OpenStreetMap building geometry into a true Sionna RT scene.
-
-## Run Tests
-
-Backend unit tests:
-
-```powershell
-cd D:\Workspace\Viettel\Miniproject\SionnaSimulation
-conda activate sionna-rt-py311
-python -m pytest test -q
-```
-
-Frontend production build:
-
-```powershell
-cd D:\Workspace\Viettel\Miniproject\SionnaSimulation\frontend
-npm run build
-```
-
-The tests focus on request validation, API error handling, logging behavior, history behavior, generated image cleanup, Sionna engine lifecycle, grid indexing, neighbor selection, dB/dBm conversion, and throughput math.
-
-The tests do not run full GPU Sionna simulations because those are slower and hardware-dependent.
+Runtime scene files and generated simulation output are stored under `static/` on
+the host or in the `application-static` Docker volume. They are intentionally not
+committed to Git.
 
 ## Troubleshooting
 
-### Backend cannot import Sionna
-
-Activate the correct conda environment:
+### A container is unhealthy or repeatedly restarting
 
 ```powershell
-conda activate sionna-rt-py311
+docker compose ps
+docker compose logs --tail 200 backend
+docker compose logs --tail 200 postgres
 ```
 
-### Frontend cannot reach backend
+Confirm that `.env.docker` exists and that you used `--env-file .env.docker`.
 
-Check that the backend is running:
+### A port is already in use
 
-```text
-http://127.0.0.1:8000/docs
-```
-
-Then check the frontend API base URL in:
-
-```text
-frontend/src/constants.js
-```
-
-or override it with:
-
-```text
-frontend/.env
-```
+Change `POSTGRES_HOST_PORT` in `.env.docker` for PostgreSQL. For ports 8000, 8080,
+9200, or 5601, stop the conflicting program or change the corresponding host-side
+port in `docker-compose.yml`.
 
 ### Login or history does not work
 
-Check whether `DATABASE_URL` is set in the root `.env`.
+Check the backend and PostgreSQL logs. In Docker, the backend receives its database
+connection settings from the `POSTGRES_*` variables in `docker-compose.yml`.
 
-Without a database:
+### Kibana does not show simulation types
 
-- registration returns a database-not-configured error
-- login returns a database-not-configured error
-- history returns an empty/non-configured response
+Filter with `simulation_type: *`. Generic request and health-check events do not
+have a simulation type.
 
-### Port 8000 is already in use
+### Generated files disappeared
 
-Find the process:
+Generated files survive ordinary container restarts in the `application-static`
+volume. They are permanently removed by `docker compose down -v`.
 
-```powershell
-Get-NetTCPConnection -LocalPort 8000
-```
+## Current scene limitation
 
-Stop it:
-
-```powershell
-Stop-Process -Id <PID>
-```
-
-### Generated images are missing
-
-Generated coverage images are written to:
-
-```text
-static/
-```
-
-That directory is runtime-only and ignored by Git. A fresh clone will not include previous generated images.
-
-## Development Notes
-
-- The backend intentionally serializes simulations with `engine.lock` because Sionna scenes are mutated during each request.
-- Temporary transmitters are removed in `finally` blocks after simulations.
-- Request bodies are validated by Pydantic before service code runs.
-- Frontend route changes use `window.history.pushState`; this is a small custom router, not React Router.
-- `static/` is runtime output, not source code.
-- `.env` is local configuration and should not be committed.
+The map picker records the selected real-world bounds but currently creates a
+runnable scene from Sionna's bundled `simple_street_canyon` example. It does not
+yet convert OpenStreetMap building geometry into a complete Sionna RT scene.
