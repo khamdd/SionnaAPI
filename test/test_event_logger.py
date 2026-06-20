@@ -111,3 +111,12 @@ def test_enqueue_does_not_wait_for_elasticsearch(monkeypatch):
         "sionna-logs-test",
         {"event": "test_event"},
     )
+
+
+def test_daily_index_name_uses_event_timestamp():
+    index = event_logger.build_daily_index_name(
+        "sionna-logs-test",
+        {"@timestamp": "2026-06-20T11:43:34.476766+00:00"},
+    )
+
+    assert index == "sionna-logs-test-2026.06.20"

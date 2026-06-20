@@ -47,10 +47,34 @@ services:
         condition: service_healthy
     environment:
       ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+      SERVER_DEFAULTROUTE: /app/discover
     ports:
       - "127.0.0.1:5601:5601"
 
+  observability-setup:
+    image: sionna-simulation-backend:local
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    restart: "no"
+    environment:
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      ELASTICSEARCH_INDEX: ${ELASTICSEARCH_INDEX:-sionna-logs-dev}
+      ELASTICSEARCH_LOG_RETENTION_DAYS: ${ELASTICSEARCH_LOG_RETENTION_DAYS:-30}
+      KIBANA_URL: http://kibana:5601
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      kibana:
+        condition: service_started
+    command:
+      - python
+      - backend/observability_setup.py
+
   backend:
+    image: sionna-simulation-backend:local
+    pull_policy: never
     build:
       context: .
       dockerfile: Dockerfile.backend
@@ -70,6 +94,8 @@ services:
         condition: service_healthy
       elasticsearch:
         condition: service_healthy
+      observability-setup:
+        condition: service_completed_successfully
     ports:
       - "127.0.0.1:8000:8000"
     volumes:

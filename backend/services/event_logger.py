@@ -137,7 +137,8 @@ def build_log_payload(event, level="INFO", data=None):
 
 
 def send_to_elasticsearch(base_url, index, payload):
-    url = build_document_url(base_url, index)
+    daily_index = build_daily_index_name(index, payload)
+    url = build_document_url(base_url, daily_index)
     body = json.dumps(payload).encode("utf-8")
     request = Request(
         url,
@@ -157,6 +158,18 @@ def build_document_url(base_url, index):
         f"{base_url.rstrip('/')}/"
         f"{quote(index, safe='')}/_doc"
     )
+
+
+def build_daily_index_name(index, payload):
+    timestamp = str(payload.get("@timestamp", ""))
+    date_part = timestamp[:10]
+
+    try:
+        datetime.strptime(date_part, "%Y-%m-%d")
+    except ValueError:
+        date_part = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    return f"{index}-{date_part.replace('-', '.')}"
 
 
 def sanitize_log_value(value):

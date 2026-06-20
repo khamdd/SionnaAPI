@@ -14,7 +14,8 @@ Docker Compose starts the complete application:
 - `backend`: FastAPI and the Sionna simulation worker
 - `postgres`: users, jobs, scenes, and simulation history
 - `elasticsearch`: application event logs
-- `kibana`: log search and visualization
+- `kibana`: preconfigured log search and visualization
+- `observability-setup`: one-time index, retention, and data-view initialization
 
 ### 1. Requirements
 
@@ -57,7 +58,7 @@ Open:
 | --- | --- |
 | Application | http://127.0.0.1:8080 |
 | FastAPI documentation | http://127.0.0.1:8000/docs |
-| Kibana | http://127.0.0.1:5601 |
+| Kibana Discover | http://127.0.0.1:5601/app/discover |
 | Elasticsearch | http://127.0.0.1:9200 |
 | PostgreSQL | `127.0.0.1:5433` by default |
 
@@ -159,13 +160,12 @@ them.
 
 ## Kibana logs
 
-Open http://127.0.0.1:5601 and create a data view for:
+Open http://127.0.0.1:5601. Docker automatically creates daily log indices, their
+index template, a 30-day retention policy, and the default Kibana data view. Kibana
+opens directly in Discover, so no manual setup is required.
 
-```text
-sionna-logs-*
-```
-
-Use `@timestamp` as the time field. Useful Kibana Query Language filters include:
+Change `ELASTICSEARCH_LOG_RETENTION_DAYS` in `.env.docker` if a different retention
+period is needed. Useful Kibana Query Language filters include:
 
 ```text
 simulation_type: *
@@ -295,6 +295,12 @@ port in `docker-compose.yml`.
 
 Check the backend and PostgreSQL logs. In Docker, the backend receives its database
 connection settings from the `POSTGRES_*` variables in `docker-compose.yml`.
+
+`POSTGRES_PASSWORD` initializes a new PostgreSQL volume; changing it later does not
+change the password stored inside an existing database. Keep the original value,
+or deliberately synchronize the database role before restarting the backend. Using
+`docker compose down -v` also resolves a mismatch by creating a fresh database, but
+permanently deletes all existing users and simulation history.
 
 ### Kibana does not show simulation types
 
