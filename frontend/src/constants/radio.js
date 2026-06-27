@@ -16,6 +16,43 @@ export const DEFAULT_RSRP_USER_COUNT = 1000;
 export const MAX_RSRP_USER_COUNT = 5000;
 export const DEFAULT_USER_HEIGHT_M = 1.5;
 export const DEFAULT_RSRP_RANDOM_SEED = 42;
+export const RSRP_QUALITY_BANDS = [
+  {
+    key: "excellent",
+    label: "Excellent",
+    range: ">= -80 dBm",
+    description: "Strong signal",
+    color: "#16a34a",
+  },
+  {
+    key: "good",
+    label: "Good",
+    range: "-90 to -80 dBm",
+    description: "Reliable signal",
+    color: "#84cc16",
+  },
+  {
+    key: "fair",
+    label: "Fair",
+    range: "-100 to -90 dBm",
+    description: "Usable signal",
+    color: "#facc15",
+  },
+  {
+    key: "poor",
+    label: "Poor",
+    range: "-120 to -100 dBm",
+    description: "Weak signal",
+    color: "#f97316",
+  },
+  {
+    key: "no_coverage",
+    label: "No coverage",
+    range: "< -120 dBm",
+    description: "Below threshold",
+    color: "#ef4444",
+  },
+];
 
 function antenna(
   id,

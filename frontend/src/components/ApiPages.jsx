@@ -13,6 +13,7 @@ import {
   DEFAULT_USER_HEIGHT_M,
   EMPTY_ARRAY,
   MAX_RSRP_USER_COUNT,
+  RSRP_QUALITY_BANDS,
   TRANSMITTER_PATTERN,
 } from "../constants";
 import {
@@ -324,6 +325,7 @@ export function RsrpSimulationPage({ activeScene, antennas, onProgressChange, on
                     solver={solver}
                     viewMode="top"
                   />
+                  <RsrpMapLegend />
                   {selectedUser && (
                     <RsrpUserDialog
                       user={selectedUser}
@@ -347,6 +349,23 @@ export function RsrpSimulationPage({ activeScene, antennas, onProgressChange, on
         </div>
       </div>
     </section>
+  );
+}
+
+function RsrpMapLegend() {
+  return (
+    <div className="rsrp-map-legend" aria-label="RSRP map color legend">
+      <strong>RSRP signal strength</strong>
+      <div>
+        {RSRP_QUALITY_BANDS.map((band) => (
+          <span key={band.key}>
+            <i style={{ background: band.color }} />
+            <b>{band.label}</b>
+            <small>{band.range}</small>
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -486,11 +505,20 @@ function RsrpSummary({ result }) {
         <dt>Avg overlap</dt><dd>{formatMaybeNumber(summary.overlap_summary?.average_overlap_count)}</dd>
         <dt>Seed</dt><dd>{result.random_seed}</dd>
       </dl>
-      <div className="rsrp-quality-strip">
-        {["excellent", "good", "fair", "poor", "no_coverage"].map((quality) => (
-          <div key={quality} className={`rsrp-quality ${quality}`}>
-            <span>{qualityLabel(quality)}</span>
-            <strong>{qualityCounts[quality] || 0}</strong>
+      <div className="rsrp-legend-header">
+        <h3>RSRP quality legend</h3>
+        <p>Higher dBm values indicate stronger received signal at each user point.</p>
+      </div>
+      <div className="rsrp-quality-strip" aria-label="RSRP quality legend">
+        {RSRP_QUALITY_BANDS.map((band) => (
+          <div key={band.key} className={`rsrp-quality ${band.key}`}>
+            <span className="rsrp-quality-label">{band.label}</span>
+            <strong>
+              {qualityCounts[band.key] || 0}
+              <small> users</small>
+            </strong>
+            <span className="rsrp-quality-range">{band.range}</span>
+            <span className="rsrp-quality-description">{band.description}</span>
           </div>
         ))}
       </div>
