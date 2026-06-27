@@ -14,5 +14,7 @@ SCENE_PREVIEW_TTL_HOURS = 2
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 OVERPASS_FALLBACK_URL = "https://overpass.kumi.systems/api/interpreter"
+OVERPASS_QUERY_TIMEOUT_SECONDS = 60
+OVERPASS_HTTP_TIMEOUT_SECONDS = 90
 DEFAULT_BUILDING_HEIGHT_M = 9.0
 MIN_POLYGON_AREA_M2 = 4.0

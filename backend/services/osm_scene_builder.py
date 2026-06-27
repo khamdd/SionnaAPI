@@ -9,7 +9,14 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from backend.constants.scenes import OVERPASS_URL, OVERPASS_FALLBACK_URL, DEFAULT_BUILDING_HEIGHT_M, MIN_POLYGON_AREA_M2
+from backend.constants.scenes import (
+    DEFAULT_BUILDING_HEIGHT_M,
+    MIN_POLYGON_AREA_M2,
+    OVERPASS_FALLBACK_URL,
+    OVERPASS_HTTP_TIMEOUT_SECONDS,
+    OVERPASS_QUERY_TIMEOUT_SECONDS,
+    OVERPASS_URL,
+)
 
 
 @dataclass(frozen=True)
@@ -76,7 +83,7 @@ def validate_sionna_scene(scene_path):
 
 def fetch_osm_building_elements(bounds):
     query = f"""
-    [out:json][timeout:25][bbox:{bounds.south},{bounds.west},{bounds.north},{bounds.east}];
+    [out:json][timeout:{OVERPASS_QUERY_TIMEOUT_SECONDS}][bbox:{bounds.south},{bounds.west},{bounds.north},{bounds.east}];
     way["building"];
     out tags geom;
     """
@@ -96,7 +103,7 @@ def fetch_osm_building_elements(bounds):
         )
 
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
+            with urllib.request.urlopen(request, timeout=OVERPASS_HTTP_TIMEOUT_SECONDS) as response:
                 payload = json.loads(response.read().decode("utf-8"))
                 return payload.get("elements", [])
         except HTTPError as exc:
