@@ -10,6 +10,7 @@ DEFAULT_SCENE_BOUNDS = {
 MAX_IMPORTED_SCENES = 3
 MAX_SCENE_AREA_KM2 = 1.0
 MAX_SCENE_SIDE_M = 1500.0
+SCENE_PREVIEW_TTL_HOURS = 2
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 OVERPASS_FALLBACK_URL = "https://overpass.kumi.systems/api/interpreter"

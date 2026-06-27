@@ -3,7 +3,7 @@ import math
 import shutil
 import threading
 import uuid
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from backend.constants import (
@@ -13,6 +13,7 @@ from backend.constants import (
     MAX_SCENE_AREA_KM2,
     MAX_SCENE_SIDE_M,
     SCENE_REGISTRY_PATH,
+    SCENE_PREVIEW_TTL_HOURS,
     SCENE_ROOT,
 )
 from backend.schemas.requests import SceneBoundsRequest
@@ -29,6 +30,7 @@ _lock = threading.RLock()
 def list_scenes():
     with _lock:
         registry = load_registry()
+        cleanup_expired_preview_scenes(registry)
         scenes = [
             serialize_scene(scene)
             for scene in registry["scenes"]
@@ -48,6 +50,7 @@ def list_scenes():
 def get_active_scene():
     with _lock:
         registry = load_registry()
+        cleanup_expired_preview_scenes(registry)
         active_scene_id = registry.get("active_scene_id") or DEFAULT_SCENE_ID
         scene = find_scene(registry, active_scene_id)
 
@@ -60,12 +63,13 @@ def get_active_scene():
 def create_scene_preview(req: SceneBoundsRequest, base_url):
     with _lock:
         registry = load_registry()
+        cleanup_expired_preview_scenes(registry)
 
         if count_imported_scenes(registry) >= MAX_IMPORTED_SCENES:
             return {
                 "status": "failure",
                 "status_code": 409,
-                "error": f"Only {MAX_IMPORTED_SCENES} imported scenes are allowed.",
+                "error": f"Only {MAX_IMPORTED_SCENES} imported or preview scenes are allowed.",
             }
 
         metrics = calculate_bounds_metrics(req)
@@ -115,6 +119,7 @@ def create_scene_preview(req: SceneBoundsRequest, base_url):
             "mesh_count": build_result.mesh_count,
             "preview_url": public_static_url(base_url, f"scenes/{scene_id}/preview.svg"),
             "created_at": utc_now().isoformat(),
+            "expires_at": preview_expires_at().isoformat(),
         }
 
         registry["scenes"].append(scene)
@@ -129,6 +134,7 @@ def create_scene_preview(req: SceneBoundsRequest, base_url):
 def activate_scene(scene_id):
     with _lock:
         registry = load_registry()
+        cleanup_expired_preview_scenes(registry)
         scene = find_scene(registry, scene_id)
 
         if scene is None:
@@ -140,6 +146,7 @@ def activate_scene(scene_id):
 
         if scene.get("status") == "preview":
             scene["status"] = "ready"
+            scene.pop("expires_at", None)
 
         registry["active_scene_id"] = scene_id
         save_registry(registry)
@@ -153,6 +160,7 @@ def activate_scene(scene_id):
 def delete_scene(scene_id):
     with _lock:
         registry = load_registry()
+        cleanup_expired_preview_scenes(registry)
         active_scene_id = registry.get("active_scene_id") or DEFAULT_SCENE_ID
         scene = find_scene(registry, scene_id)
 
@@ -284,8 +292,73 @@ def count_imported_scenes(registry):
     return sum(
         1
         for scene in registry.get("scenes", [])
-        if not scene.get("is_default") and scene.get("status") == "ready"
+        if not scene.get("is_default")
     )
+
+
+def cleanup_expired_preview_scenes(registry):
+    scenes = registry.get("scenes", [])
+    kept_scenes = []
+    expired_scene_ids = []
+    active_scene_id = registry.get("active_scene_id") or DEFAULT_SCENE_ID
+    now = utc_now()
+
+    for scene in scenes:
+        if not is_expired_preview_scene(scene, now):
+            kept_scenes.append(scene)
+            continue
+
+        scene_id = scene.get("id")
+        if scene_id == active_scene_id:
+            kept_scenes.append(scene)
+            continue
+
+        if scene_id:
+            expired_scene_ids.append(scene_id)
+
+    if not expired_scene_ids:
+        return False
+
+    registry["scenes"] = kept_scenes
+    save_registry(registry)
+
+    for scene_id in expired_scene_ids:
+        delete_scene_files(scene_id)
+
+    return True
+
+
+def is_expired_preview_scene(scene, now):
+    if scene.get("is_default") or scene.get("status") != "preview":
+        return False
+
+    expires_at = parse_scene_datetime(scene.get("expires_at"))
+    if expires_at is None:
+        created_at = parse_scene_datetime(scene.get("created_at"))
+        if created_at is None:
+            return True
+        expires_at = created_at + timedelta(hours=SCENE_PREVIEW_TTL_HOURS)
+
+    return expires_at <= now
+
+
+def preview_expires_at():
+    return utc_now() + timedelta(hours=SCENE_PREVIEW_TTL_HOURS)
+
+
+def parse_scene_datetime(value):
+    if not value:
+        return None
+
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+
+    return parsed.astimezone(timezone.utc)
 
 
 def serialize_scene(scene):
