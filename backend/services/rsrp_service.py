@@ -145,7 +145,7 @@ def build_rsrp_result(radio_map, req: RSRPRequest, users):
 
     return {
         "users": analyzed_users,
-        "antenna_summary": summarize_antennas(req, antenna_stats),
+        "antenna_summary": summarize_antennas(req, antenna_stats, analyzed_users),
         "overlap_summary": summarize_overlap(analyzed_users),
         "summary": summarize_users(analyzed_users),
     }
@@ -170,10 +170,11 @@ def analyze_user_rsrp(rss, req: RSRPRequest, user, antenna_stats):
         rsrp_values,
         key=lambda item: item["rsrp_dbm"],
     )
-    serving_stats = antenna_stats[serving["antenna"]]
-    serving_stats["served_user_count"] += 1
+    has_coverage = serving["rsrp_dbm"] >= MIN_NEIGHBOR_SIGNAL_DBM
 
-    if serving["rsrp_dbm"] >= MIN_NEIGHBOR_SIGNAL_DBM:
+    if has_coverage:
+        serving_stats = antenna_stats[serving["antenna"]]
+        serving_stats["served_user_count"] += 1
         serving_stats["serving_values"].append(serving["rsrp_dbm"])
 
     neighbors = build_rsrp_neighbors(
@@ -194,7 +195,7 @@ def analyze_user_rsrp(rss, req: RSRPRequest, user, antenna_stats):
             "row": row,
             "col": col,
         },
-        "serving_antenna": serving["antenna"],
+        "serving_antenna": serving["antenna"] if has_coverage else "No coverage",
         "rsrp_dbm": serving["rsrp_dbm"],
         "quality": rsrp_quality(serving["rsrp_dbm"]),
         "neighbors": neighbors,
@@ -259,8 +260,8 @@ def build_rsrp_neighbors(rsrp_values, serving):
     )
 
 
-def summarize_antennas(req: RSRPRequest, antenna_stats):
-    return [
+def summarize_antennas(req: RSRPRequest, antenna_stats, users):
+    summary = [
         {
             "antenna": antenna.id,
             "average_rsrp_dbm": average_dbm(stats["all_values"]),
@@ -271,6 +272,24 @@ def summarize_antennas(req: RSRPRequest, antenna_stats):
         for antenna in req.antennas
         for stats in [antenna_stats[antenna.id]]
     ]
+
+    no_coverage_count = sum(
+        1
+        for user in users
+        if user["quality"] == "no_coverage"
+    )
+    if no_coverage_count:
+        summary.append(
+            {
+                "antenna": "No coverage",
+                "average_rsrp_dbm": None,
+                "average_serving_rsrp_dbm": None,
+                "served_user_count": no_coverage_count,
+                "measured_user_count": 0,
+            }
+        )
+
+    return summary
 
 
 def summarize_users(users):

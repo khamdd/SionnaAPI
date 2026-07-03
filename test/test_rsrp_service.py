@@ -138,7 +138,31 @@ def test_build_rsrp_result_omits_neighbors_for_no_coverage_user():
     user = result["users"][0]
 
     assert user["rsrp_dbm"] == -140.0
+    assert user["serving_antenna"] == "No coverage"
     assert user["quality"] == "no_coverage"
     assert user["neighbors"] == []
+    assert result["antenna_summary"] == [
+        {
+            "antenna": "A1",
+            "average_rsrp_dbm": None,
+            "average_serving_rsrp_dbm": None,
+            "served_user_count": 0,
+            "measured_user_count": 0,
+        },
+        {
+            "antenna": "A2",
+            "average_rsrp_dbm": None,
+            "average_serving_rsrp_dbm": None,
+            "served_user_count": 0,
+            "measured_user_count": 0,
+        },
+        {
+            "antenna": "No coverage",
+            "average_rsrp_dbm": None,
+            "average_serving_rsrp_dbm": None,
+            "served_user_count": 1,
+            "measured_user_count": 0,
+        },
+    ]
     assert result["summary"]["covered_user_count"] == 0
     assert result["summary"]["coverage_percent"] == 0.0
