@@ -44,9 +44,11 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 - Imported scene previews are limited by count and size, expire while still in
   preview status, and are cleaned up if not kept.
 - The Choose scene modal uses a Docker-served offline MapLibre/PMTiles map from
-  `frontend/public/data/` with `vietnam.pmtiles` and
-  `hanoi-buildings.pmtiles`; these large assets are ignored by git but checked
-  during the frontend Docker build.
+  `frontend/public/data/` with `vietnam.pmtiles`, `building-regions.json`, and
+  regional `vn-buildings-*.pmtiles` archives. At zoom 13.5+, visible 1-degree
+  building regions are loaded as 3D fill-extrusion layers and unloaded when they
+  leave the viewport. Large PMTiles assets are ignored by git but checked during
+  the frontend Docker build.
 - OpenStreetMap scene building exists in `backend/services/osm_scene_builder.py`
   and uses Overpass endpoints/timeouts from `backend/constants/scenes.py`.
 - Observability is wired through `backend/services/event_logger.py`,

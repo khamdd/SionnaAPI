@@ -24,6 +24,7 @@ export default function SceneChooserModal({
 }) {
   const mapNodeRef = useRef(null);
   const mapRef = useRef(null);
+  const buildingRegionManagerRef = useRef(null);
   const drawStartRef = useRef(null);
   const mapViewRef = useRef(null);
   const [isSelectingArea, setIsSelectingArea] = useState(false);
@@ -63,6 +64,7 @@ export default function SceneChooserModal({
       SCENE_CHOOSER_DEFAULT_CENTER[1],
       SCENE_CHOOSER_DEFAULT_CENTER[0],
     ];
+    const dataBaseUrl = offlineMapDataBaseUrl();
     const map = new Map({
       container: node,
       center: savedView?.center || defaultCenter,
@@ -71,7 +73,7 @@ export default function SceneChooserModal({
       maxZoom: 18,
       pitch: savedView?.pitch ?? 48,
       bearing: savedView?.bearing ?? -18,
-      style: createOfflineSceneMapStyle(),
+      style: createOfflineSceneMapStyle(dataBaseUrl),
       attributionControl: false,
     });
 
@@ -82,6 +84,13 @@ export default function SceneChooserModal({
       setIsMapReady(true);
       setStatus("Offline map loaded. Move and zoom the map, then click Select area to draw a scene rectangle.");
       setError(false);
+
+      const buildingRegionManager = createBuildingRegionManager(map, dataBaseUrl);
+      buildingRegionManagerRef.current = buildingRegionManager;
+      buildingRegionManager.load().catch((caught) => {
+        setStatus(`Offline map loaded, but buildings could not be loaded: ${caught.message}`);
+        setError(true);
+      });
     });
 
     map.on("error", (event) => {
@@ -109,6 +118,8 @@ export default function SceneChooserModal({
         bearing: map.getBearing(),
       };
       observer.disconnect();
+      buildingRegionManagerRef.current?.dispose();
+      buildingRegionManagerRef.current = null;
       map.remove();
       mapRef.current = null;
 
@@ -448,7 +459,7 @@ export default function SceneChooserModal({
               <input
                 type="search"
                 value={locationQuery}
-                placeholder="Search location, e.g. Munich, Hanoi, Times Square"
+              placeholder="Search Vietnam location or coordinates, e.g. Hanoi, Da Nang, 21.0278, 105.8342"
                 autoComplete="off"
                 disabled={isBusy}
                 onBlur={() => window.setTimeout(() => setShowLocationResults(false), 150)}
@@ -568,19 +579,17 @@ export default function SceneChooserModal({
   );
 }
 
-function createOfflineSceneMapStyle() {
-  const dataBaseUrl = new URL("data/", window.location.origin + import.meta.env.BASE_URL).toString();
+function offlineMapDataBaseUrl() {
+  return new URL("data/", window.location.origin + import.meta.env.BASE_URL).toString();
+}
 
+function createOfflineSceneMapStyle(dataBaseUrl) {
   return {
     version: 8,
     sources: {
       vietnam: {
         type: "vector",
         url: `pmtiles://${dataBaseUrl}vietnam.pmtiles`,
-      },
-      hanoiBuildings: {
-        type: "vector",
-        url: `pmtiles://${dataBaseUrl}hanoi-buildings.pmtiles`,
       },
     },
     layers: [
@@ -639,10 +648,88 @@ function createOfflineSceneMapStyle() {
           ],
         },
       },
+    ],
+  };
+}
+
+function createBuildingRegionManager(map, dataBaseUrl) {
+  const activeRegionIds = new Set();
+  let buildingRegions = [];
+  let disposed = false;
+
+  async function load() {
+    const response = await fetch(`${dataBaseUrl}building-regions.json`, {
+      headers: {
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`manifest HTTP ${response.status}`);
+    }
+
+    const loadedRegions = await response.json();
+
+    if (!Array.isArray(loadedRegions)) {
+      throw new Error("building region manifest is invalid");
+    }
+
+    buildingRegions = loadedRegions.filter(isValidBuildingRegion);
+
+    if (!buildingRegions.length) {
+      throw new Error("building region manifest is empty");
+    }
+
+    update();
+    map.on("moveend", update);
+    map.on("zoomend", update);
+  }
+
+  function update() {
+    if (disposed || !map.isStyleLoaded()) {
+      return;
+    }
+
+    if (map.getZoom() < 13.5) {
+      removeAllRegions();
+      return;
+    }
+
+    const requiredRegions = buildingRegions.filter((region) => regionIntersectsMap(map, region));
+    const requiredIds = new Set(requiredRegions.map((region) => region.id));
+
+    for (const region of requiredRegions) {
+      if (!activeRegionIds.has(region.id)) {
+        addRegion(region);
+      }
+    }
+
+    for (const region of buildingRegions) {
+      if (activeRegionIds.has(region.id) && !requiredIds.has(region.id)) {
+        removeRegion(region);
+      }
+    }
+  }
+
+  function addRegion(region) {
+    const sourceId = buildingSourceId(region);
+    const layerId = buildingLayerId(region);
+
+    if (map.getSource(sourceId)) {
+      activeRegionIds.add(region.id);
+      return;
+    }
+
+    map.addSource(sourceId, {
+      type: "vector",
+      url: `pmtiles://${dataBaseUrl}${region.file}`,
+    });
+
+    map.addLayer(
       {
-        id: "offline-hanoi-buildings",
+        id: layerId,
         type: "fill-extrusion",
-        source: "hanoiBuildings",
+        source: sourceId,
         "source-layer": "buildings",
         minzoom: 14,
         paint: {
@@ -659,8 +746,77 @@ function createOfflineSceneMapStyle() {
           "fill-extrusion-opacity": 0.9,
         },
       },
-    ],
+      map.getLayer("scene-selection-fill") ? "scene-selection-fill" : undefined,
+    );
+
+    activeRegionIds.add(region.id);
+  }
+
+  function removeAllRegions() {
+    for (const region of buildingRegions) {
+      if (activeRegionIds.has(region.id)) {
+        removeRegion(region);
+      }
+    }
+  }
+
+  function removeRegion(region) {
+    const sourceId = buildingSourceId(region);
+    const layerId = buildingLayerId(region);
+
+    if (map.getLayer(layerId)) {
+      map.removeLayer(layerId);
+    }
+
+    if (map.getSource(sourceId)) {
+      map.removeSource(sourceId);
+    }
+
+    activeRegionIds.delete(region.id);
+  }
+
+  function dispose() {
+    disposed = true;
+    map.off("moveend", update);
+    map.off("zoomend", update);
+    removeAllRegions();
+  }
+
+  return {
+    dispose,
+    load,
   };
+}
+
+function isValidBuildingRegion(region) {
+  return (
+    region
+    && typeof region.id === "string"
+    && typeof region.file === "string"
+    && Number.isFinite(Number(region.west))
+    && Number.isFinite(Number(region.east))
+    && Number.isFinite(Number(region.south))
+    && Number.isFinite(Number(region.north))
+  );
+}
+
+function regionIntersectsMap(map, region) {
+  const bounds = map.getBounds();
+
+  return (
+    Number(region.east) > bounds.getWest()
+    && Number(region.west) < bounds.getEast()
+    && Number(region.north) > bounds.getSouth()
+    && Number(region.south) < bounds.getNorth()
+  );
+}
+
+function buildingSourceId(region) {
+  return `building-source-${region.id}`;
+}
+
+function buildingLayerId(region) {
+  return `building-layer-${region.id}`;
 }
 
 function ensureSelectionLayers(map) {
@@ -736,25 +892,175 @@ function boundsFromLngLats(start, end) {
 }
 
 async function fetchLocationResults(query, limit, signal) {
-  const params = new URLSearchParams({
-    format: "jsonv2",
-    addressdetails: "1",
-    limit: String(limit),
-    q: query,
-  });
-  const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
-    headers: {
-      Accept: "application/json",
-    },
-    signal,
-  });
-
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
+  if (signal?.aborted) {
+    throw new DOMException("Aborted", "AbortError");
   }
 
-  return response.json();
+  const coordinateResult = parseCoordinateSearch(query);
+
+  if (coordinateResult) {
+    return [coordinateResult];
+  }
+
+  const normalizedQuery = normalizeSearchText(query);
+
+  return OFFLINE_VIETNAM_PLACES
+    .filter((place) => place.searchText.includes(normalizedQuery))
+    .slice(0, limit);
 }
+
+function parseCoordinateSearch(query) {
+  const match = query.trim().match(/^(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)$/);
+
+  if (!match) {
+    return null;
+  }
+
+  const first = Number(match[1]);
+  const second = Number(match[2]);
+
+  if (!Number.isFinite(first) || !Number.isFinite(second)) {
+    return null;
+  }
+
+  const [lat, lon] = isVietnamCoordinate(first, second)
+    ? [first, second]
+    : isVietnamCoordinate(second, first)
+      ? [second, first]
+      : [null, null];
+
+  if (lat === null || lon === null) {
+    return null;
+  }
+
+  return buildOfflinePlace({
+    id: `coords-${lat}-${lon}`,
+    name: `${lat.toFixed(5)}, ${lon.toFixed(5)}`,
+    displayName: "Custom coordinates",
+    lat,
+    lon,
+    delta: 0.02,
+  });
+}
+
+function isVietnamCoordinate(lat, lon) {
+  return lat >= 8 && lat <= 24 && lon >= 102 && lon <= 110;
+}
+
+function buildOfflinePlace({ id, name, displayName, lat, lon, delta = 0.08 }) {
+  const place = {
+    boundingbox: [
+      String(lat - delta),
+      String(lat + delta),
+      String(lon - delta),
+      String(lon + delta),
+    ],
+    display_name: `${name}, ${displayName}`,
+    lat: String(lat),
+    lon: String(lon),
+    name,
+    place_id: id,
+  };
+
+  return {
+    ...place,
+    searchText: normalizeSearchText(`${place.name} ${place.display_name}`),
+  };
+}
+
+function normalizeSearchText(value) {
+  return String(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+const OFFLINE_VIETNAM_PLACES = [
+  buildOfflinePlace({
+    id: "hanoi",
+    name: "Hanoi",
+    displayName: "Vietnam",
+    lat: 21.0278,
+    lon: 105.8342,
+  }),
+  buildOfflinePlace({
+    id: "ho-chi-minh-city",
+    name: "Ho Chi Minh City",
+    displayName: "Vietnam",
+    lat: 10.7769,
+    lon: 106.7009,
+  }),
+  buildOfflinePlace({
+    id: "da-nang",
+    name: "Da Nang",
+    displayName: "Vietnam",
+    lat: 16.0544,
+    lon: 108.2022,
+  }),
+  buildOfflinePlace({
+    id: "hai-phong",
+    name: "Hai Phong",
+    displayName: "Vietnam",
+    lat: 20.8449,
+    lon: 106.6881,
+  }),
+  buildOfflinePlace({
+    id: "can-tho",
+    name: "Can Tho",
+    displayName: "Vietnam",
+    lat: 10.0452,
+    lon: 105.7469,
+  }),
+  buildOfflinePlace({
+    id: "hue",
+    name: "Hue",
+    displayName: "Vietnam",
+    lat: 16.4637,
+    lon: 107.5909,
+  }),
+  buildOfflinePlace({
+    id: "nha-trang",
+    name: "Nha Trang",
+    displayName: "Vietnam",
+    lat: 12.2388,
+    lon: 109.1967,
+  }),
+  buildOfflinePlace({
+    id: "vung-tau",
+    name: "Vung Tau",
+    displayName: "Vietnam",
+    lat: 10.4114,
+    lon: 107.1362,
+  }),
+  buildOfflinePlace({
+    id: "da-lat",
+    name: "Da Lat",
+    displayName: "Vietnam",
+    lat: 11.9404,
+    lon: 108.4583,
+  }),
+  buildOfflinePlace({
+    id: "vinh",
+    name: "Vinh",
+    displayName: "Vietnam",
+    lat: 18.6796,
+    lon: 105.6813,
+  }),
+  buildOfflinePlace({
+    id: "thai-nguyen",
+    name: "Thai Nguyen",
+    displayName: "Vietnam",
+    lat: 21.5672,
+    lon: 105.8252,
+  }),
+  buildOfflinePlace({
+    id: "ha-long",
+    name: "Ha Long",
+    displayName: "Vietnam",
+    lat: 20.9712,
+    lon: 107.0448,
+  }),
+];
 
 function calculateMetrics(bounds) {
   const midLat = ((bounds.south + bounds.north) / 2) * (Math.PI / 180);
