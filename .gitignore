@@ -21,6 +21,15 @@ backend/.sionna-venv/
 
 # Generated simulation assets
 static/
+data/raw/
+data/processed/
+*.osm.pbf
+*.pmtiles
+*.mbtiles
+*.geojson
+*.gpkg
+*.geoparquet
+*.parquet
 *.log
 
 # Frontend dependencies/build output, if a package-based frontend is added later
