@@ -10,6 +10,6 @@ export const DEFAULT_ACTIVE_SCENE = {
   },
 };
 
-export const SCENE_CHOOSER_DEFAULT_CENTER = [48.1374, 11.5755];
-export const SCENE_CHOOSER_DEFAULT_ZOOM = 14;
+export const SCENE_CHOOSER_DEFAULT_CENTER = [21.0278, 105.8342];
+export const SCENE_CHOOSER_DEFAULT_ZOOM = 15;
 export const MAX_SCENE_AREA_KM2 = 1;

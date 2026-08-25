@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import L from "leaflet";
+import {
+  Map,
+  NavigationControl,
+  addProtocol,
+  removeProtocol,
+  setWorkerUrl,
+} from "maplibre-gl";
+import { Protocol } from "pmtiles";
+import "maplibre-gl/dist/maplibre-gl.css";
+import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { activateScene, createScenePreview, deleteScene } from "../api";
 import {
   MAX_SCENE_AREA_KM2,
@@ -16,12 +25,12 @@ export default function SceneChooserModal({
 }) {
   const mapNodeRef = useRef(null);
   const mapRef = useRef(null);
-  const rectangleRef = useRef(null);
   const drawStartRef = useRef(null);
   const previewSceneRef = useRef(null);
   const keptSceneRef = useRef(false);
   const mapViewRef = useRef(null);
   const [isSelectingArea, setIsSelectingArea] = useState(false);
+  const [isMapReady, setIsMapReady] = useState(false);
   const [locationQuery, setLocationQuery] = useState("");
   const [locationResults, setLocationResults] = useState([]);
   const [showLocationResults, setShowLocationResults] = useState(false);
@@ -45,38 +54,72 @@ export default function SceneChooserModal({
       return undefined;
     }
 
+    setWorkerUrl(workerUrl);
+
+    setIsMapReady(false);
+
+    const protocol = new Protocol();
+    addProtocol("pmtiles", protocol.tile);
+
     const savedView = mapViewRef.current;
-    const map = L.map(node, {
-      center: savedView?.center || SCENE_CHOOSER_DEFAULT_CENTER,
+    const defaultCenter = [
+      SCENE_CHOOSER_DEFAULT_CENTER[1],
+      SCENE_CHOOSER_DEFAULT_CENTER[0],
+    ];
+    const map = new Map({
+      container: node,
+      center: savedView?.center || defaultCenter,
       zoom: savedView?.zoom || SCENE_CHOOSER_DEFAULT_ZOOM,
       minZoom: 2,
       maxZoom: 18,
-      scrollWheelZoom: true,
-      zoomControl: true,
+      pitch: savedView?.pitch ?? 48,
+      bearing: savedView?.bearing ?? -18,
+      style: createOfflineSceneMapStyle(),
+      attributionControl: false,
     });
 
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: "&copy; OpenStreetMap contributors",
-    }).addTo(map);
+    map.addControl(new NavigationControl({ visualizePitch: true }), "top-right");
+
+    map.on("load", () => {
+      ensureSelectionLayers(map);
+      setIsMapReady(true);
+      setStatus("Offline map loaded. Move and zoom the map, then click Select area to draw a scene rectangle.");
+      setError(false);
+    });
+
+    map.on("error", (event) => {
+      const message = event?.error?.message || "offline map tiles could not be loaded";
+      setIsMapReady(false);
+      setStatus(`Map failed to load: ${message}`);
+      setError(true);
+    });
 
     mapRef.current = map;
 
     const observer = new ResizeObserver(() => {
-      map.invalidateSize();
+      map.resize();
     });
     observer.observe(node);
 
-    setTimeout(() => map.invalidateSize(), 0);
+    setTimeout(() => map.resize(), 0);
 
     return () => {
+      const center = map.getCenter();
       mapViewRef.current = {
-        center: [map.getCenter().lat, map.getCenter().lng],
+        center: [center.lng, center.lat],
         zoom: map.getZoom(),
+        pitch: map.getPitch(),
+        bearing: map.getBearing(),
       };
       observer.disconnect();
       map.remove();
       mapRef.current = null;
+
+      try {
+        removeProtocol("pmtiles");
+      } catch {
+        // MapLibre throws if the protocol was already removed by a hot reload.
+      }
     };
   }, [previewScene]);
 
@@ -131,57 +174,49 @@ export default function SceneChooserModal({
   useEffect(() => {
     const map = mapRef.current;
 
-    if (!map) {
+    if (!map || !isMapReady) {
       return undefined;
     }
 
-    const container = map.getContainer();
+    const container = map.getCanvasContainer();
     container.classList.toggle("selecting-area", isSelectingArea);
 
     if (!isSelectingArea || previewScene || isBusy) {
-      map.dragging.enable();
+      map.dragPan.enable();
       return undefined;
     }
 
-    map.dragging.disable();
+    map.dragPan.disable();
     setStatus("Selection mode enabled. Drag on the map to draw a small scene area.");
 
     function handleMouseDown(event) {
-      drawStartRef.current = event.latlng;
+      if (event.originalEvent.button !== 0) {
+        return;
+      }
+
+      drawStartRef.current = event.lngLat;
       setBounds(null);
       removeRectangle();
-
-      rectangleRef.current = L.rectangle(
-        L.latLngBounds(event.latlng, event.latlng),
-        {
-          color: "#2563eb",
-          weight: 2,
-          fillColor: "#2563eb",
-          fillOpacity: 0.16,
-          interactive: false,
-        },
-      ).addTo(map);
+      updateSelectionBounds(map, boundsFromLngLats(event.lngLat, event.lngLat));
     }
 
     function handleMouseMove(event) {
-      if (!drawStartRef.current || !rectangleRef.current) {
+      if (!drawStartRef.current) {
         return;
       }
 
-      rectangleRef.current.setBounds(
-        L.latLngBounds(drawStartRef.current, event.latlng),
-      );
+      updateSelectionBounds(map, boundsFromLngLats(drawStartRef.current, event.lngLat));
     }
 
     function handleMouseUp(event) {
-      if (!drawStartRef.current || !rectangleRef.current) {
+      if (!drawStartRef.current) {
         return;
       }
 
-      const nextBounds = L.latLngBounds(drawStartRef.current, event.latlng);
-      rectangleRef.current.setBounds(nextBounds);
+      const nextBounds = boundsFromLngLats(drawStartRef.current, event.lngLat);
+      updateSelectionBounds(map, nextBounds);
       drawStartRef.current = null;
-      setBounds(serializeBounds(nextBounds));
+      setBounds(nextBounds);
       setIsSelectingArea(false);
       setStatus("Area selected. Preview it or select a different area.");
     }
@@ -194,22 +229,23 @@ export default function SceneChooserModal({
       map.off("mousedown", handleMouseDown);
       map.off("mousemove", handleMouseMove);
       map.off("mouseup", handleMouseUp);
-      map.dragging.enable();
+      map.dragPan.enable();
       container.classList.remove("selecting-area");
       drawStartRef.current = null;
     };
-  }, [isBusy, isSelectingArea, previewScene]);
+  }, [isBusy, isMapReady, isSelectingArea, previewScene]);
 
   function removeRectangle() {
-    if (rectangleRef.current && mapRef.current) {
-      rectangleRef.current.removeFrom(mapRef.current);
+    const map = mapRef.current;
+
+    if (map?.getSource("scene-selection")) {
+      map.getSource("scene-selection").setData(emptyFeatureCollection());
     }
 
-    rectangleRef.current = null;
   }
 
   function startSelection() {
-    if (previewScene || isBusy) {
+    if (previewScene || isBusy || !isMapReady) {
       return;
     }
 
@@ -275,8 +311,8 @@ export default function SceneChooserModal({
       if ([south, north, west, east].every(Number.isFinite)) {
         map.fitBounds(
           [
-            [south, west],
-            [north, east],
+            [west, south],
+            [east, north],
           ],
           {
             maxZoom: 16,
@@ -291,7 +327,7 @@ export default function SceneChooserModal({
     const lon = Number(place.lon);
 
     if (Number.isFinite(lat) && Number.isFinite(lon)) {
-      map.setView([lat, lon], 15);
+      map.flyTo({ center: [lon, lat], zoom: 15 });
     }
   }
 
@@ -451,7 +487,7 @@ export default function SceneChooserModal({
                 </div>
               )}
             </div>
-            <button className="primary-button" type="submit" disabled={isBusy || !locationQuery.trim()}>
+            <button className="primary-button" type="submit" disabled={isBusy || !isMapReady || !locationQuery.trim()}>
               Search
             </button>
           </form>
@@ -459,7 +495,7 @@ export default function SceneChooserModal({
             <button
               className={isSelectingArea ? "primary-button" : "ghost-button"}
               type="button"
-              disabled={isBusy}
+              disabled={isBusy || !isMapReady}
               onClick={startSelection}
             >
               Select area
@@ -491,7 +527,7 @@ export default function SceneChooserModal({
             ref={mapNodeRef}
             className="scene-map"
             role="application"
-            aria-label="Selectable OpenStreetMap area"
+            aria-label="Selectable offline map area"
           />
           <div className="scene-selection-footer">
             <div>
@@ -540,6 +576,173 @@ export default function SceneChooserModal({
   );
 }
 
+function createOfflineSceneMapStyle() {
+  const dataBaseUrl = new URL("data/", window.location.origin + import.meta.env.BASE_URL).toString();
+
+  return {
+    version: 8,
+    sources: {
+      vietnam: {
+        type: "vector",
+        url: `pmtiles://${dataBaseUrl}vietnam.pmtiles`,
+      },
+      hanoiBuildings: {
+        type: "vector",
+        url: `pmtiles://${dataBaseUrl}hanoi-buildings.pmtiles`,
+      },
+    },
+    layers: [
+      {
+        id: "offline-background",
+        type: "background",
+        paint: {
+          "background-color": "#eef1f4",
+        },
+      },
+      {
+        id: "offline-land",
+        type: "fill",
+        source: "vietnam",
+        "source-layer": "land",
+        paint: {
+          "fill-color": "#dce8c8",
+          "fill-opacity": 0.72,
+        },
+      },
+      {
+        id: "offline-ocean",
+        type: "fill",
+        source: "vietnam",
+        "source-layer": "ocean",
+        paint: {
+          "fill-color": "#aad3df",
+        },
+      },
+      {
+        id: "offline-water",
+        type: "fill",
+        source: "vietnam",
+        "source-layer": "water_polygons",
+        paint: {
+          "fill-color": "#9ecae1",
+        },
+      },
+      {
+        id: "offline-roads",
+        type: "line",
+        source: "vietnam",
+        "source-layer": "streets",
+        paint: {
+          "line-color": "#ffffff",
+          "line-width": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            8,
+            0.5,
+            12,
+            1.5,
+            16,
+            4,
+          ],
+        },
+      },
+      {
+        id: "offline-hanoi-buildings",
+        type: "fill-extrusion",
+        source: "hanoiBuildings",
+        "source-layer": "buildings",
+        minzoom: 14,
+        paint: {
+          "fill-extrusion-color": "#d18b62",
+          "fill-extrusion-height": [
+            "case",
+            ["has", "height"],
+            ["get", "height"],
+            ["has", "levels"],
+            ["*", ["get", "levels"], 3],
+            9,
+          ],
+          "fill-extrusion-base": 0,
+          "fill-extrusion-opacity": 0.9,
+        },
+      },
+    ],
+  };
+}
+
+function ensureSelectionLayers(map) {
+  if (!map.getSource("scene-selection")) {
+    map.addSource("scene-selection", {
+      type: "geojson",
+      data: emptyFeatureCollection(),
+    });
+  }
+
+  if (!map.getLayer("scene-selection-fill")) {
+    map.addLayer({
+      id: "scene-selection-fill",
+      type: "fill",
+      source: "scene-selection",
+      paint: {
+        "fill-color": "#2563eb",
+        "fill-opacity": 0.18,
+      },
+    });
+  }
+
+  if (!map.getLayer("scene-selection-line")) {
+    map.addLayer({
+      id: "scene-selection-line",
+      type: "line",
+      source: "scene-selection",
+      paint: {
+        "line-color": "#2563eb",
+        "line-width": 2,
+      },
+    });
+  }
+}
+
+function updateSelectionBounds(map, bounds) {
+  ensureSelectionLayers(map);
+  map.getSource("scene-selection").setData({
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        properties: {},
+        geometry: {
+          type: "Polygon",
+          coordinates: [[
+            [bounds.west, bounds.south],
+            [bounds.east, bounds.south],
+            [bounds.east, bounds.north],
+            [bounds.west, bounds.north],
+            [bounds.west, bounds.south],
+          ]],
+        },
+      },
+    ],
+  });
+}
+
+function emptyFeatureCollection() {
+  return {
+    type: "FeatureCollection",
+    features: [],
+  };
+}
+
+function boundsFromLngLats(start, end) {
+  return {
+    south: Math.min(start.lat, end.lat),
+    west: Math.min(start.lng, end.lng),
+    north: Math.max(start.lat, end.lat),
+    east: Math.max(start.lng, end.lng),
+  };
+}
+
 async function fetchLocationResults(query, limit, signal) {
   const params = new URLSearchParams({
     format: "jsonv2",
@@ -559,18 +762,6 @@ async function fetchLocationResults(query, limit, signal) {
   }
 
   return response.json();
-}
-
-function serializeBounds(bounds) {
-  const southWest = bounds.getSouthWest();
-  const northEast = bounds.getNorthEast();
-
-  return {
-    south: southWest.lat,
-    west: southWest.lng,
-    north: northEast.lat,
-    east: northEast.lng,
-  };
 }
 
 function calculateMetrics(bounds) {

@@ -1689,7 +1689,13 @@ textarea:disabled {
   margin: 0;
 }
 
+.scene-map .maplibregl-canvas {
+  outline: none;
+}
+
 .scene-map.selecting-area,
+.scene-map .selecting-area,
+.scene-map .selecting-area .maplibregl-canvas,
 .scene-map.selecting-area .leaflet-grab,
 .scene-map.selecting-area .leaflet-interactive {
   cursor: crosshair;

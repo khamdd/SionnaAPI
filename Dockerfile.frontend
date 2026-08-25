@@ -6,6 +6,8 @@ COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 
 COPY frontend/ ./
+RUN test -f public/data/vietnam.pmtiles \
+    && test -f public/data/hanoi-buildings.pmtiles
 RUN npm run build
 
 FROM nginx:1.27-alpine
