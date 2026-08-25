@@ -16,7 +16,6 @@ import {
   SCENE_CHOOSER_DEFAULT_ZOOM,
 } from "../constants";
 import { formatMaybeNumber } from "../utils/format";
-import Scene3DPreview from "./Scene3DPreview";
 
 export default function SceneChooserModal({
   onClose,
@@ -26,8 +25,6 @@ export default function SceneChooserModal({
   const mapNodeRef = useRef(null);
   const mapRef = useRef(null);
   const drawStartRef = useRef(null);
-  const previewSceneRef = useRef(null);
-  const keptSceneRef = useRef(false);
   const mapViewRef = useRef(null);
   const [isSelectingArea, setIsSelectingArea] = useState(false);
   const [isMapReady, setIsMapReady] = useState(false);
@@ -38,7 +35,7 @@ export default function SceneChooserModal({
   const [sceneName, setSceneName] = useState("");
   const [bounds, setBounds] = useState(null);
   const [previewBounds, setPreviewBounds] = useState(null);
-  const [previewScene, setPreviewScene] = useState(null);
+  const [isPreviewing, setIsPreviewing] = useState(false);
   const [status, setStatus] = useState("Move and zoom the map, then click Select area to draw a scene rectangle.");
   const [sceneNameError, setSceneNameError] = useState("");
   const [error, setError] = useState(false);
@@ -50,7 +47,7 @@ export default function SceneChooserModal({
   useEffect(() => {
     const node = mapNodeRef.current;
 
-    if (previewScene || !node || mapRef.current) {
+    if (!node || mapRef.current) {
       return undefined;
     }
 
@@ -121,24 +118,12 @@ export default function SceneChooserModal({
         // MapLibre throws if the protocol was already removed by a hot reload.
       }
     };
-  }, [previewScene]);
-
-  useEffect(() => {
-    previewSceneRef.current = previewScene;
-  }, [previewScene]);
-
-  useEffect(() => () => {
-    const scene = previewSceneRef.current;
-
-    if (scene && !keptSceneRef.current) {
-      deleteScene(scene.id).catch(() => {});
-    }
   }, []);
 
   useEffect(() => {
     const query = locationQuery.trim();
 
-    if (query.length < 3 || previewScene) {
+    if (query.length < 3) {
       setLocationResults([]);
       setShowLocationResults(false);
       setIsSearchingLocation(false);
@@ -169,7 +154,7 @@ export default function SceneChooserModal({
       window.clearTimeout(timerId);
       controller.abort();
     };
-  }, [locationQuery, previewScene]);
+  }, [locationQuery]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -181,7 +166,7 @@ export default function SceneChooserModal({
     const container = map.getCanvasContainer();
     container.classList.toggle("selecting-area", isSelectingArea);
 
-    if (!isSelectingArea || previewScene || isBusy) {
+    if (!isSelectingArea || isBusy || isPreviewing) {
       map.dragPan.enable();
       return undefined;
     }
@@ -233,7 +218,7 @@ export default function SceneChooserModal({
       container.classList.remove("selecting-area");
       drawStartRef.current = null;
     };
-  }, [isBusy, isMapReady, isSelectingArea, previewScene]);
+  }, [isBusy, isMapReady, isPreviewing, isSelectingArea]);
 
   function removeRectangle() {
     const map = mapRef.current;
@@ -241,15 +226,16 @@ export default function SceneChooserModal({
     if (map?.getSource("scene-selection")) {
       map.getSource("scene-selection").setData(emptyFeatureCollection());
     }
-
   }
 
   function startSelection() {
-    if (previewScene || isBusy || !isMapReady) {
+    if (isBusy || !isMapReady) {
       return;
     }
 
     setError(false);
+    setIsPreviewing(false);
+    setPreviewBounds(null);
     setBounds(null);
     removeRectangle();
     setIsSelectingArea(true);
@@ -293,6 +279,8 @@ export default function SceneChooserModal({
     setLocationResults([]);
     setShowLocationResults(false);
     setBounds(null);
+    setIsPreviewing(false);
+    setPreviewBounds(null);
     removeRectangle();
     setIsSelectingArea(false);
     setStatus(`Moved map to ${place.display_name || "selected location"}.`);
@@ -331,7 +319,7 @@ export default function SceneChooserModal({
     }
   }
 
-  async function previewSelectedArea() {
+  function previewSelectedArea() {
     const trimmedSceneName = sceneName.trim();
 
     if (!bounds) {
@@ -355,85 +343,93 @@ export default function SceneChooserModal({
       return;
     }
 
+    setPreviewBounds(bounds);
+    setIsPreviewing(true);
+    setIsSelectingArea(false);
+    setSceneNameError("");
+    setError(false);
+    setStatus("Preview ready. Keep it, select a new area, or cancel.");
+    focusMapOnBounds(bounds);
+  }
+
+  async function keepScene() {
+    const selectedBounds = previewBounds || bounds;
+    const trimmedSceneName = sceneName.trim();
+
+    if (!selectedBounds || !trimmedSceneName) {
+      return;
+    }
+
     setIsBusy(true);
     setSceneNameError("");
     setError(false);
-    setStatus("Creating scene preview...");
+    setStatus("Creating Sionna scene...");
+
+    let createdScene = null;
 
     try {
-      const result = await createScenePreview({
+      const previewResult = await createScenePreview({
         name: trimmedSceneName,
-        south: bounds.south,
-        west: bounds.west,
-        north: bounds.north,
-        east: bounds.east,
+        south: selectedBounds.south,
+        west: selectedBounds.west,
+        north: selectedBounds.north,
+        east: selectedBounds.east,
       });
+      createdScene = previewResult.scene;
 
-      setPreviewBounds(bounds);
-      setPreviewScene(result.scene);
-      setStatus("Preview ready. Keep it, select a new area, or cancel.");
+      setStatus("Loading scene...");
+      const activationResult = await activateScene(createdScene.id);
+      onSceneActivated(activationResult.scene);
     } catch (caught) {
       if (caught.message.includes("Only 3")) {
         onLimitReached(caught.message);
         return;
       }
 
-      setStatus(`Preview failed: ${caught.message}`);
+      if (createdScene?.id) {
+        deleteScene(createdScene.id).catch(() => {});
+      }
+
+      setStatus(`Scene load failed: ${caught.message}`);
       setError(true);
     } finally {
       setIsBusy(false);
     }
   }
 
-  async function keepScene() {
-    if (!previewScene) {
-      return;
-    }
-
-    setIsBusy(true);
-    setError(false);
-    setStatus("Loading scene...");
-
-    try {
-      const result = await activateScene(previewScene.id);
-      keptSceneRef.current = true;
-      onSceneActivated(result.scene);
-    } catch (caught) {
-      setStatus(`Load failed: ${caught.message}`);
-      setError(true);
-    } finally {
-      setIsBusy(false);
-    }
-  }
-
-  async function selectNewArea() {
-    await cleanupPreview();
-    setPreviewScene(null);
-    setBounds(null);
+  function selectNewArea() {
+    setIsPreviewing(false);
     setPreviewBounds(null);
+    setBounds(null);
     removeRectangle();
     setError(false);
     setIsSelectingArea(true);
     setStatus("Selection mode enabled. Drag on the map to draw a small scene area.");
   }
 
-  async function cancelSelection() {
-    await cleanupPreview();
+  function cancelSelection() {
     onClose();
   }
 
-  async function cleanupPreview() {
-    if (!previewScene) {
+  function focusMapOnBounds(nextBounds) {
+    const map = mapRef.current;
+
+    if (!map) {
       return;
     }
 
-    try {
-      await deleteScene(previewScene.id);
-    } catch {
-      // Best effort cleanup. The scene page can still remove abandoned previews.
-    }
-
-    previewSceneRef.current = null;
+    window.setTimeout(() => {
+      map.fitBounds(
+        [
+          [nextBounds.west, nextBounds.south],
+          [nextBounds.east, nextBounds.north],
+        ],
+        {
+          duration: 350,
+          padding: 52,
+        },
+      );
+    }, 0);
   }
 
   return (
@@ -445,7 +441,7 @@ export default function SceneChooserModal({
         </div>
       </div>
 
-      {!previewScene && (
+      {!isPreviewing && (
         <>
           <form className="scene-location-search" onSubmit={searchLocation}>
             <div className="scene-location-input-wrap">
@@ -523,41 +519,37 @@ export default function SceneChooserModal({
             />
             {sceneNameError && <small className="field-error">{sceneNameError}</small>}
           </label>
-          <div
-            ref={mapNodeRef}
-            className="scene-map"
-            role="application"
-            aria-label="Selectable offline map area"
-          />
-          <div className="scene-selection-footer">
-            <div>
-              <strong>{metrics ? `${formatMaybeNumber(metrics.widthM)} m x ${formatMaybeNumber(metrics.heightM)} m` : "No area selected"}</strong>
-              <span>{metrics ? `${formatMaybeNumber(metrics.areaKm2)} km2 selected` : "Maximum 1 km2 per scene"}</span>
-              {isTooLarge && <span className="error-text">Selected area is too large.</span>}
-            </div>
-            <button
-              className="primary-button"
-              type="button"
-              disabled={isBusy || isTooLarge}
-              onClick={previewSelectedArea}
-            >
-              Preview scene
-            </button>
-          </div>
         </>
       )}
-
-      {previewScene && (
+      <div
+        ref={mapNodeRef}
+        className={`scene-map ${isPreviewing ? "scene-map-previewing" : ""}`}
+        role="application"
+        aria-label="Selectable offline map area"
+      />
+      {!isPreviewing && (
+        <div className="scene-selection-footer">
+          <div>
+            <strong>{metrics ? `${formatMaybeNumber(metrics.widthM)} m x ${formatMaybeNumber(metrics.heightM)} m` : "No area selected"}</strong>
+            <span>{metrics ? `${formatMaybeNumber(metrics.areaKm2)} km2 selected` : "Maximum 1 km2 per scene"}</span>
+            {isTooLarge && <span className="error-text">Selected area is too large.</span>}
+          </div>
+          <button
+            className="primary-button"
+            type="button"
+            disabled={isBusy || !isMapReady || isTooLarge}
+            onClick={previewSelectedArea}
+          >
+            Preview scene
+          </button>
+        </div>
+      )}
+      {isPreviewing && (
         <div className="scene-preview">
-          {previewBounds ? (
-            <Scene3DPreview bounds={previewBounds} sceneName={previewScene.name} />
-          ) : (
-            <img src={previewScene.preview_url} alt={`${previewScene.name} preview`} />
-          )}
           <dl className="scene-preview-meta">
-            <dt>Scene</dt><dd>{previewScene.name}</dd>
-            <dt>Area</dt><dd>{previewScene.metrics?.area_km2 ?? "--"} km2</dd>
-            <dt>Size</dt><dd>{previewScene.metrics?.width_m ?? "--"} x {previewScene.metrics?.height_m ?? "--"} m</dd>
+            <dt>Scene</dt><dd>{sceneName.trim()}</dd>
+            <dt>Area</dt><dd>{metrics?.areaKm2 ? formatMaybeNumber(metrics.areaKm2) : "--"} km2</dd>
+            <dt>Size</dt><dd>{metrics ? `${formatMaybeNumber(metrics.widthM)} x ${formatMaybeNumber(metrics.heightM)} m` : "--"}</dd>
           </dl>
           <div className="scene-preview-actions">
             <button className="ghost-button" type="button" disabled={isBusy} onClick={selectNewArea}>
