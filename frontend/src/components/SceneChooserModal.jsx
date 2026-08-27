@@ -39,6 +39,7 @@ export default function SceneChooserPage({
   const [sceneNameError, setSceneNameError] = useState("");
   const [error, setError] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
+  const [isControlPanelVisible, setIsControlPanelVisible] = useState(true);
 
   const metrics = bounds ? calculateMetrics(bounds) : null;
   const isTooLarge = metrics && metrics.areaKm2 > MAX_SCENE_AREA_KM2;
@@ -389,95 +390,118 @@ export default function SceneChooserPage({
         aria-label="Selectable offline map area"
       />
 
-      <section className="scene-control-panel" aria-label="Scene selection controls">
-        <div className="scene-page-header">
-          <div>
-            <h1>Choose Scene Area</h1>
-            <p className={error ? "error-text" : ""}>{status}</p>
-          </div>
-          <button className="ghost-button" type="button" disabled={isBusy} onClick={onCancel}>
-            Back
+      {isControlPanelVisible ? (
+        <section className="scene-control-panel" aria-label="Scene selection controls">
+          <button
+            className="scene-controls-toggle scene-panel-toggle"
+            type="button"
+            aria-label="Hide controls"
+            title="Hide controls"
+            onClick={() => setIsControlPanelVisible(false)}
+          >
+            &lt;
           </button>
-        </div>
-        <button className="ghost-button" type="button" disabled={isBusy} onClick={() => downloadAntennaTemplate()}>
-          Download antennas template
-        </button>
+          <div className="scene-page-header">
+            <div>
+              <h1>Choose Scene Area</h1>
+              <p className={error ? "error-text" : ""}>{status}</p>
+            </div>
+            <div className="scene-header-actions">
+              <button className="ghost-button" type="button" disabled={isBusy} onClick={onCancel}>
+                Back
+              </button>
+            </div>
+          </div>
+          <button className="ghost-button" type="button" disabled={isBusy} onClick={() => downloadAntennaTemplate()}>
+            Download antennas template
+          </button>
 
-        {!isPreviewing && (
-          <div className="scene-page-form">
-            <label className="scene-city-field">
-              <span>City</span>
-              <select value={selectedCityId} disabled={isBusy || !isMapReady} onChange={selectCity}>
-                <option value="">Jump to a Vietnam city</option>
-                {OFFLINE_VIETNAM_PLACES.map((place) => (
-                  <option key={place.place_id} value={place.place_id}>
-                    {place.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="scene-name-field">
-              <span>Scene name</span>
-              <input
-                type="text"
-                value={sceneName}
-                placeholder="Required, e.g. Hanoi test area"
-                maxLength={80}
-                required
-                disabled={isBusy}
-                onChange={(event) => {
-                  setSceneName(event.target.value);
-                  if (event.target.value.trim()) {
-                    setSceneNameError("");
-                  }
-                  if (error) {
-                    setError(false);
-                  }
-                }}
-              />
-              {sceneNameError && <small className="field-error">{sceneNameError}</small>}
-            </label>
-            <div className="scene-action-stack">
-              <button
-                className={isSelectingArea ? "primary-button" : "ghost-button"}
-                type="button"
-                disabled={isBusy || !isMapReady}
-                onClick={startSelection}
-              >
-                Select area
-              </button>
-              <button
-                className="primary-button"
-                type="button"
-                disabled={isBusy || !isMapReady || isTooLarge}
-                onClick={previewSelectedArea}
-              >
-                Preview scene
-              </button>
+          {!isPreviewing && (
+            <div className="scene-page-form">
+              <label className="scene-city-field">
+                <span>City</span>
+                <select value={selectedCityId} disabled={isBusy || !isMapReady} onChange={selectCity}>
+                  <option value="">Jump to a Vietnam city</option>
+                  {OFFLINE_VIETNAM_PLACES.map((place) => (
+                    <option key={place.place_id} value={place.place_id}>
+                      {place.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="scene-name-field">
+                <span>Scene name</span>
+                <input
+                  type="text"
+                  value={sceneName}
+                  placeholder="Required, e.g. Hanoi test area"
+                  maxLength={80}
+                  required
+                  disabled={isBusy}
+                  onChange={(event) => {
+                    setSceneName(event.target.value);
+                    if (event.target.value.trim()) {
+                      setSceneNameError("");
+                    }
+                    if (error) {
+                      setError(false);
+                    }
+                  }}
+                />
+                {sceneNameError && <small className="field-error">{sceneNameError}</small>}
+              </label>
+              <div className="scene-action-stack">
+                <button
+                  className={isSelectingArea ? "primary-button" : "ghost-button"}
+                  type="button"
+                  disabled={isBusy || !isMapReady}
+                  onClick={startSelection}
+                >
+                  Select area
+                </button>
+                <button
+                  className="primary-button"
+                  type="button"
+                  disabled={isBusy || !isMapReady || isTooLarge}
+                  onClick={previewSelectedArea}
+                >
+                  Preview scene
+                </button>
+              </div>
             </div>
-          </div>
-        )}
-        {isPreviewing && (
-          <div className="scene-preview scene-preview-panel">
-            <dl className="scene-preview-meta">
-              <dt>Scene</dt><dd>{sceneName.trim()}</dd>
-              <dt>Area</dt><dd>{metrics?.areaKm2 ? formatMaybeNumber(metrics.areaKm2) : "--"} km2</dd>
-              <dt>Size</dt><dd>{metrics ? `${formatMaybeNumber(metrics.widthM)} x ${formatMaybeNumber(metrics.heightM)} m` : "--"}</dd>
-            </dl>
-            <div className="scene-preview-actions">
-              <button className="ghost-button" type="button" disabled={isBusy} onClick={selectNewArea}>
-                Select new area
-              </button>
-              <button className="ghost-button" type="button" disabled={isBusy} onClick={cancelSelection}>
-                Cancel
-              </button>
-              <button className="primary-button" type="button" disabled={isBusy} onClick={keepScene}>
-                Keep and load scene
-              </button>
+          )}
+          {isPreviewing && (
+            <div className="scene-preview scene-preview-panel">
+              <dl className="scene-preview-meta">
+                <dt>Scene</dt><dd>{sceneName.trim()}</dd>
+                <dt>Area</dt><dd>{metrics?.areaKm2 ? formatMaybeNumber(metrics.areaKm2) : "--"} km2</dd>
+                <dt>Size</dt><dd>{metrics ? `${formatMaybeNumber(metrics.widthM)} x ${formatMaybeNumber(metrics.heightM)} m` : "--"}</dd>
+              </dl>
+              <div className="scene-preview-actions">
+                <button className="ghost-button" type="button" disabled={isBusy} onClick={selectNewArea}>
+                  Select new area
+                </button>
+                <button className="ghost-button" type="button" disabled={isBusy} onClick={cancelSelection}>
+                  Cancel
+                </button>
+                <button className="primary-button" type="button" disabled={isBusy} onClick={keepScene}>
+                  Keep and load scene
+                </button>
+              </div>
             </div>
-          </div>
-        )}
-      </section>
+          )}
+        </section>
+      ) : (
+        <button
+          className="scene-controls-toggle scene-panel-toggle"
+          type="button"
+          aria-label="Show controls"
+          title="Show controls"
+          onClick={() => setIsControlPanelVisible(true)}
+        >
+          &gt;
+        </button>
+      )}
 
       {!isPreviewing && (
         <div className="scene-selection-footer">

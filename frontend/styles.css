@@ -1771,11 +1771,48 @@ textarea:disabled {
 
 .scene-control-panel {
   top: 18px;
-  left: 18px;
+  left: 56px;
   display: grid;
   gap: 14px;
-  width: min(390px, calc(100% - 36px));
+  width: min(390px, calc(100% - 74px));
   padding: 16px;
+}
+
+.scene-controls-toggle {
+  position: absolute;
+  z-index: 3;
+  top: 34px;
+  left: 20px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.16);
+  backdrop-filter: blur(10px);
+}
+
+.scene-control-panel > .scene-controls-toggle {
+  top: 16px;
+  left: -36px;
+}
+
+.scene-panel-toggle {
+  display: grid;
+  width: 34px;
+  height: 38px;
+  min-height: 38px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 0;
+}
+
+.scene-panel-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent-dark);
 }
 
 .scene-page-header {
@@ -1783,6 +1820,11 @@ textarea:disabled {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: start;
+}
+
+.scene-header-actions {
+  display: grid;
+  gap: 8px;
 }
 
 .scene-page-header h1 {
@@ -2340,9 +2382,19 @@ textarea:disabled {
 
   .scene-control-panel {
     top: 10px;
-    left: 10px;
-    width: calc(100% - 20px);
+    left: 46px;
+    width: calc(100% - 56px);
     padding: 12px;
+  }
+
+  .scene-controls-toggle {
+    top: 10px;
+    left: 10px;
+  }
+
+  .scene-control-panel > .scene-controls-toggle {
+    top: 12px;
+    left: -36px;
   }
 
   .scene-page-header,
