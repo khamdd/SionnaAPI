@@ -433,14 +433,44 @@ export default function SceneChooserPage({
               />
               {sceneNameError && <small className="field-error">{sceneNameError}</small>}
             </label>
-            <button
-              className={isSelectingArea ? "primary-button" : "ghost-button"}
-              type="button"
-              disabled={isBusy || !isMapReady}
-              onClick={startSelection}
-            >
-              Select area
-            </button>
+            <div className="scene-action-stack">
+              <button
+                className={isSelectingArea ? "primary-button" : "ghost-button"}
+                type="button"
+                disabled={isBusy || !isMapReady}
+                onClick={startSelection}
+              >
+                Select area
+              </button>
+              <button
+                className="primary-button"
+                type="button"
+                disabled={isBusy || !isMapReady || isTooLarge}
+                onClick={previewSelectedArea}
+              >
+                Preview scene
+              </button>
+            </div>
+          </div>
+        )}
+        {isPreviewing && (
+          <div className="scene-preview scene-preview-panel">
+            <dl className="scene-preview-meta">
+              <dt>Scene</dt><dd>{sceneName.trim()}</dd>
+              <dt>Area</dt><dd>{metrics?.areaKm2 ? formatMaybeNumber(metrics.areaKm2) : "--"} km2</dd>
+              <dt>Size</dt><dd>{metrics ? `${formatMaybeNumber(metrics.widthM)} x ${formatMaybeNumber(metrics.heightM)} m` : "--"}</dd>
+            </dl>
+            <div className="scene-preview-actions">
+              <button className="ghost-button" type="button" disabled={isBusy} onClick={selectNewArea}>
+                Select new area
+              </button>
+              <button className="ghost-button" type="button" disabled={isBusy} onClick={cancelSelection}>
+                Cancel
+              </button>
+              <button className="primary-button" type="button" disabled={isBusy} onClick={keepScene}>
+                Keep and load scene
+              </button>
+            </div>
           </div>
         )}
       </section>
@@ -451,34 +481,6 @@ export default function SceneChooserPage({
             <strong>{metrics ? `${formatMaybeNumber(metrics.widthM)} m x ${formatMaybeNumber(metrics.heightM)} m` : "No area selected"}</strong>
             <span>{metrics ? `${formatMaybeNumber(metrics.areaKm2)} km2 selected` : "Maximum 1 km2 per scene"}</span>
             {isTooLarge && <span className="error-text">Selected area is too large.</span>}
-          </div>
-          <button
-            className="primary-button"
-            type="button"
-            disabled={isBusy || !isMapReady || isTooLarge}
-            onClick={previewSelectedArea}
-          >
-            Preview scene
-          </button>
-        </div>
-      )}
-      {isPreviewing && (
-        <div className="scene-preview scene-preview-panel">
-          <dl className="scene-preview-meta">
-            <dt>Scene</dt><dd>{sceneName.trim()}</dd>
-            <dt>Area</dt><dd>{metrics?.areaKm2 ? formatMaybeNumber(metrics.areaKm2) : "--"} km2</dd>
-            <dt>Size</dt><dd>{metrics ? `${formatMaybeNumber(metrics.widthM)} x ${formatMaybeNumber(metrics.heightM)} m` : "--"}</dd>
-          </dl>
-          <div className="scene-preview-actions">
-            <button className="ghost-button" type="button" disabled={isBusy} onClick={selectNewArea}>
-              Select new area
-            </button>
-            <button className="ghost-button" type="button" disabled={isBusy} onClick={cancelSelection}>
-              Cancel
-            </button>
-            <button className="primary-button" type="button" disabled={isBusy} onClick={keepScene}>
-              Keep and load scene
-            </button>
           </div>
         </div>
       )}

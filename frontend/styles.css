@@ -1810,6 +1810,16 @@ textarea:disabled {
   margin-bottom: 0;
 }
 
+.scene-action-stack {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 8px;
+}
+
+.scene-action-stack button {
+  width: 100%;
+}
+
 .scene-city-field {
   display: grid;
   gap: 6px;
@@ -1844,6 +1854,23 @@ textarea:disabled {
   bottom: 18px;
   width: min(460px, calc(100% - 36px));
   padding: 16px;
+}
+
+.scene-control-panel .scene-preview-panel {
+  position: static;
+  width: auto;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 14px 0 0;
+  backdrop-filter: none;
+}
+
+.scene-control-panel .scene-preview-actions {
+  display: grid;
+  grid-template-columns: 1fr;
 }
 
 .result-summary h3 {
