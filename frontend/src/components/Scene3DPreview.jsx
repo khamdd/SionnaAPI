@@ -224,18 +224,9 @@ async function fetchBuildings(bounds, signal) {
 }
 
 function parseOfflineBuildingElement(element, index) {
-  const tags = element.tags || {};
   const geometry = element.geometry || [];
 
-  return {
-    id: element.id || `offline-${index}`,
-    points: geometry.map((point) => ({
-      lat: Number(point.lat),
-      lon: Number(point.lon),
-    })),
-    height: getBuildingHeight(tags),
-    heightSource: getBuildingHeightSource(tags),
-  };
+  return buildBuildingRecord(element.id || `offline-${index}`, element.tags, geometry);
 }
 
 async function fetchBuildingsWithRetry(bounds, signal, retries = 1) {
