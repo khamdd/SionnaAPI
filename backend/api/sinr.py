@@ -543,6 +543,26 @@ def preview_scene(req: SceneBoundsRequest, request: Request):
 
     return return_or_raise(result)
 
+@router.get("/offline-buildings")
+def offline_buildings(south: float, west: float, north: float, east: float):
+    from backend.schemas.requests import SceneBoundsRequest
+    from backend.services.osm_scene_builder import load_offline_building_elements
+
+    bounds = SceneBoundsRequest(
+        name="frontend-preview",
+        south=south,
+        west=west,
+        north=north,
+        east=east,
+    )
+
+    elements = load_offline_building_elements(bounds)
+
+    return {
+        "status": "success",
+        "elements": elements,
+    }
+
 
 @router.post("/scenes/{scene_id}/activate")
 def activate_scene_route(scene_id: str):

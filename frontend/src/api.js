@@ -228,3 +228,16 @@ async function readErrorMessage(response) {
 
   return `HTTP ${response.status}`;
 }
+
+export function getOfflineBuildings(bounds, signal) {
+  const params = new URLSearchParams({
+    south: String(bounds.south),
+    west: String(bounds.west),
+    north: String(bounds.north),
+    east: String(bounds.east),
+  });
+
+  return requestJson(`/api/v1/offline-buildings?${params.toString()}`, {
+    signal,
+  });
+}

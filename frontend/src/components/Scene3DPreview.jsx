@@ -7,6 +7,7 @@ import {
   HOVER_CELL_OUTLINE,
   SELECTED_CELL_OUTLINE,
 } from "../constants";
+import { getOfflineBuildings } from "../api";
 
 const SCENE_MODEL_CACHE_LIMIT = 3;
 const sceneModelCache = new Map();
@@ -215,31 +216,26 @@ function setSceneModelCache(boundsKey, value) {
 }
 
 async function fetchBuildings(bounds, signal) {
-  const query = `
-    [out:json][timeout:25];
-    (
-      way["building"](${bounds.south},${bounds.west},${bounds.north},${bounds.east});
-      relation["building"](${bounds.south},${bounds.west},${bounds.north},${bounds.east});
-    );
-    out tags geom;
-  `;
-  const response = await fetch("https://overpass-api.de/api/interpreter", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-    },
-    body: new URLSearchParams({ data: query }),
-    signal,
-  });
+  const data = await getOfflineBuildings(bounds, signal);
 
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
-  }
-
-  const data = await response.json();
   return (data.elements || [])
-    .flatMap((item, index) => parseOsmElement(item, index))
+    .map((element, index) => parseOfflineBuildingElement(element, index))
     .filter((building) => building.points.length >= 3);
+}
+
+function parseOfflineBuildingElement(element, index) {
+  const tags = element.tags || {};
+  const geometry = element.geometry || [];
+
+  return {
+    id: element.id || `offline-${index}`,
+    points: geometry.map((point) => ({
+      lat: Number(point.lat),
+      lon: Number(point.lon),
+    })),
+    height: getBuildingHeight(tags),
+    heightSource: getBuildingHeightSource(tags),
+  };
 }
 
 async function fetchBuildingsWithRetry(bounds, signal, retries = 1) {
