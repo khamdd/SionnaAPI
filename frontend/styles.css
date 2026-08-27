@@ -1741,6 +1741,111 @@ textarea:disabled {
   border-radius: 8px;
 }
 
+.scene-page {
+  position: relative;
+  height: calc(100vh - 59px);
+  min-height: 620px;
+  overflow: hidden;
+  background: #dbeafe;
+}
+
+.scene-page-map.scene-map {
+  position: absolute;
+  inset: 0;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+}
+
+.scene-control-panel,
+.scene-selection-footer,
+.scene-preview-panel {
+  position: absolute;
+  z-index: 3;
+  border: 1px solid rgba(148, 163, 184, 0.42);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(10px);
+}
+
+.scene-control-panel {
+  top: 18px;
+  left: 18px;
+  display: grid;
+  gap: 14px;
+  width: min(390px, calc(100% - 36px));
+  padding: 16px;
+}
+
+.scene-page-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.scene-page-header h1 {
+  margin: 0 0 4px;
+  font-size: 20px;
+  line-height: 1.15;
+}
+
+.scene-page-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.scene-page-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.scene-page-form .scene-name-field {
+  grid-column: 1 / -1;
+  margin-bottom: 0;
+}
+
+.scene-city-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.scene-city-field select {
+  min-height: 38px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 0 36px 0 12px;
+  font-weight: 600;
+}
+
+.scene-page > .scene-selection-footer {
+  right: 18px;
+  bottom: 18px;
+  left: auto;
+  width: min(430px, calc(100% - 36px));
+  margin-top: 0;
+  padding: 14px;
+}
+
+.scene-preview-panel {
+  right: 18px;
+  bottom: 18px;
+  width: min(460px, calc(100% - 36px));
+  padding: 16px;
+}
+
 .result-summary h3 {
   margin-top: 14px;
   font-size: 13px;
@@ -2199,6 +2304,37 @@ textarea:disabled {
 
   .scene-map {
     height: 360px;
+  }
+
+  .scene-page {
+    height: calc(100vh - 114px);
+    min-height: 620px;
+  }
+
+  .scene-control-panel {
+    top: 10px;
+    left: 10px;
+    width: calc(100% - 20px);
+    padding: 12px;
+  }
+
+  .scene-page-header,
+  .scene-page-form,
+  .scene-page > .scene-selection-footer,
+  .scene-preview-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .scene-page > .scene-selection-footer,
+  .scene-preview-panel {
+    right: 10px;
+    bottom: 10px;
+    width: calc(100% - 20px);
+    padding: 12px;
+  }
+
+  .scene-page .scene-map {
+    height: auto;
   }
 
   .page-title.with-action,

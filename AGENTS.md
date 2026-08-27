@@ -41,6 +41,9 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   many saved runs, and comparing compatible successful runs.
 - Scene management supports listing, previewing, activating, deleting imported
   scenes, and keeping the default Munich scene.
+- Scene choosing now lives at `/choose-scene` as a full-page offline Vietnam map
+  with a major-city dropdown, scene-name entry, area drawing, preview, and
+  keep/load actions.
 - Imported scene previews are limited by count and size, expire while still in
   preview status, and are cleaned up if not kept.
 - The Choose scene modal uses a Docker-served offline MapLibre/PMTiles map from
@@ -99,6 +102,8 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 - `/throughput`: throughput comparison tool.
 - `/history`: saved simulation runs, detail, delete, compare.
 - `/scenes`: scene list and management.
+- `/choose-scene`: full-screen offline Vietnam map for drawing and importing a
+  Sionna scene area.
 
 ## Runtime Behavior To Preserve
 

@@ -17,8 +17,8 @@ import {
 } from "../constants";
 import { formatMaybeNumber } from "../utils/format";
 
-export default function SceneChooserModal({
-  onClose,
+export default function SceneChooserPage({
+  onCancel,
   onLimitReached,
   onSceneActivated,
 }) {
@@ -29,10 +29,7 @@ export default function SceneChooserModal({
   const mapViewRef = useRef(null);
   const [isSelectingArea, setIsSelectingArea] = useState(false);
   const [isMapReady, setIsMapReady] = useState(false);
-  const [locationQuery, setLocationQuery] = useState("");
-  const [locationResults, setLocationResults] = useState([]);
-  const [showLocationResults, setShowLocationResults] = useState(false);
-  const [isSearchingLocation, setIsSearchingLocation] = useState(false);
+  const [selectedCityId, setSelectedCityId] = useState("");
   const [sceneName, setSceneName] = useState("");
   const [bounds, setBounds] = useState(null);
   const [previewBounds, setPreviewBounds] = useState(null);
@@ -132,42 +129,6 @@ export default function SceneChooserModal({
   }, []);
 
   useEffect(() => {
-    const query = locationQuery.trim();
-
-    if (query.length < 3) {
-      setLocationResults([]);
-      setShowLocationResults(false);
-      setIsSearchingLocation(false);
-      return undefined;
-    }
-
-    const controller = new AbortController();
-    const timerId = window.setTimeout(async () => {
-      setIsSearchingLocation(true);
-
-      try {
-        const results = await fetchLocationResults(query, 5, controller.signal);
-        setLocationResults(results);
-        setShowLocationResults(true);
-      } catch (caught) {
-        if (caught.name !== "AbortError") {
-          setLocationResults([]);
-          setShowLocationResults(false);
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setIsSearchingLocation(false);
-        }
-      }
-    }, 650);
-
-    return () => {
-      window.clearTimeout(timerId);
-      controller.abort();
-    };
-  }, [locationQuery]);
-
-  useEffect(() => {
     const map = mapRef.current;
 
     if (!map || !isMapReady) {
@@ -252,49 +213,24 @@ export default function SceneChooserModal({
     setIsSelectingArea(true);
   }
 
-  async function searchLocation(event) {
-    event.preventDefault();
+  function selectCity(event) {
+    const placeId = event.target.value;
+    const place = OFFLINE_VIETNAM_PLACES.find((item) => item.place_id === placeId);
 
-    const query = locationQuery.trim();
+    setSelectedCityId(placeId);
 
-    if (!query || isBusy) {
+    if (!place || isBusy) {
       return;
     }
 
-    setIsBusy(true);
-    setError(false);
-    setStatus("Searching location...");
-
-    try {
-      const results = await fetchLocationResults(query, 5);
-      const place = results[0];
-
-      if (!place) {
-        setStatus(`No location found for "${query}".`);
-        setError(true);
-        return;
-      }
-
-      selectLocationResult(place);
-    } catch (caught) {
-      setStatus(`Location search failed: ${caught.message}`);
-      setError(true);
-    } finally {
-      setIsBusy(false);
-    }
-  }
-
-  function selectLocationResult(place) {
     moveMapToPlace(place);
-    setLocationQuery(place.display_name || "");
-    setLocationResults([]);
-    setShowLocationResults(false);
     setBounds(null);
     setIsPreviewing(false);
     setPreviewBounds(null);
     removeRectangle();
     setIsSelectingArea(false);
-    setStatus(`Moved map to ${place.display_name || "selected location"}.`);
+    setError(false);
+    setStatus(`Moved map to ${place.name}.`);
   }
 
   function moveMapToPlace(place) {
@@ -419,7 +355,7 @@ export default function SceneChooserModal({
   }
 
   function cancelSelection() {
-    onClose();
+    onCancel();
   }
 
   function focusMapOnBounds(nextBounds) {
@@ -444,61 +380,59 @@ export default function SceneChooserModal({
   }
 
   return (
-    <div className="scene-modal">
-      <div className="scene-modal-header">
-        <div>
-          <h2>Choose Scene Area</h2>
-          <p className={error ? "error-text" : ""}>{status}</p>
-        </div>
-      </div>
+    <main className="scene-page">
+      <div
+        ref={mapNodeRef}
+        className={`scene-map scene-page-map ${isPreviewing ? "scene-map-previewing" : ""}`}
+        role="application"
+        aria-label="Selectable offline map area"
+      />
 
-      {!isPreviewing && (
-        <>
-          <form className="scene-location-search" onSubmit={searchLocation}>
-            <div className="scene-location-input-wrap">
+      <section className="scene-control-panel" aria-label="Scene selection controls">
+        <div className="scene-page-header">
+          <div>
+            <h1>Choose Scene Area</h1>
+            <p className={error ? "error-text" : ""}>{status}</p>
+          </div>
+          <button className="ghost-button" type="button" disabled={isBusy} onClick={onCancel}>
+            Back
+          </button>
+        </div>
+
+        {!isPreviewing && (
+          <div className="scene-page-form">
+            <label className="scene-city-field">
+              <span>City</span>
+              <select value={selectedCityId} disabled={isBusy || !isMapReady} onChange={selectCity}>
+                <option value="">Jump to a Vietnam city</option>
+                {OFFLINE_VIETNAM_PLACES.map((place) => (
+                  <option key={place.place_id} value={place.place_id}>
+                    {place.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="scene-name-field">
+              <span>Scene name</span>
               <input
-                type="search"
-                value={locationQuery}
-              placeholder="Search Vietnam location or coordinates, e.g. Hanoi, Da Nang, 21.0278, 105.8342"
-                autoComplete="off"
+                type="text"
+                value={sceneName}
+                placeholder="Required, e.g. Hanoi test area"
+                maxLength={80}
+                required
                 disabled={isBusy}
-                onBlur={() => window.setTimeout(() => setShowLocationResults(false), 150)}
                 onChange={(event) => {
-                  setLocationQuery(event.target.value);
-                  setShowLocationResults(true);
-                }}
-                onFocus={() => {
-                  if (locationResults.length) {
-                    setShowLocationResults(true);
+                  setSceneName(event.target.value);
+                  if (event.target.value.trim()) {
+                    setSceneNameError("");
+                  }
+                  if (error) {
+                    setError(false);
                   }
                 }}
               />
-              {showLocationResults && (locationResults.length > 0 || isSearchingLocation) && (
-                <div className="scene-location-results">
-                  {isSearchingLocation && (
-                    <div className="scene-location-result muted">Searching...</div>
-                  )}
-                  {locationResults.map((place) => (
-                    <button
-                      key={place.place_id}
-                      className="scene-location-result"
-                      type="button"
-                      disabled={isBusy}
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => selectLocationResult(place)}
-                    >
-                      <strong>{place.name || place.display_name?.split(",")[0] || "Unnamed place"}</strong>
-                      <span>{place.display_name}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <button className="primary-button" type="submit" disabled={isBusy || !isMapReady || !locationQuery.trim()}>
-              Search
-            </button>
-          </form>
-          <div className="scene-map-toolbar">
+              {sceneNameError && <small className="field-error">{sceneNameError}</small>}
+            </label>
             <button
               className={isSelectingArea ? "primary-button" : "ghost-button"}
               type="button"
@@ -507,37 +441,10 @@ export default function SceneChooserModal({
             >
               Select area
             </button>
-            <span>Use the map controls or mouse wheel to zoom.</span>
           </div>
-          <label className="scene-name-field">
-            <span>Scene name</span>
-            <input
-              type="text"
-              value={sceneName}
-              placeholder="Required, e.g. Hanoi test area"
-              maxLength={80}
-              required
-              disabled={isBusy}
-              onChange={(event) => {
-                setSceneName(event.target.value);
-                if (event.target.value.trim()) {
-                  setSceneNameError("");
-                }
-                if (error) {
-                  setError(false);
-                }
-              }}
-            />
-            {sceneNameError && <small className="field-error">{sceneNameError}</small>}
-          </label>
-        </>
-      )}
-      <div
-        ref={mapNodeRef}
-        className={`scene-map ${isPreviewing ? "scene-map-previewing" : ""}`}
-        role="application"
-        aria-label="Selectable offline map area"
-      />
+        )}
+      </section>
+
       {!isPreviewing && (
         <div className="scene-selection-footer">
           <div>
@@ -556,7 +463,7 @@ export default function SceneChooserModal({
         </div>
       )}
       {isPreviewing && (
-        <div className="scene-preview">
+        <div className="scene-preview scene-preview-panel">
           <dl className="scene-preview-meta">
             <dt>Scene</dt><dd>{sceneName.trim()}</dd>
             <dt>Area</dt><dd>{metrics?.areaKm2 ? formatMaybeNumber(metrics.areaKm2) : "--"} km2</dd>
@@ -575,7 +482,7 @@ export default function SceneChooserModal({
           </div>
         </div>
       )}
-    </div>
+    </main>
   );
 }
 
@@ -891,64 +798,8 @@ function boundsFromLngLats(start, end) {
   };
 }
 
-async function fetchLocationResults(query, limit, signal) {
-  if (signal?.aborted) {
-    throw new DOMException("Aborted", "AbortError");
-  }
-
-  const coordinateResult = parseCoordinateSearch(query);
-
-  if (coordinateResult) {
-    return [coordinateResult];
-  }
-
-  const normalizedQuery = normalizeSearchText(query);
-
-  return OFFLINE_VIETNAM_PLACES
-    .filter((place) => place.searchText.includes(normalizedQuery))
-    .slice(0, limit);
-}
-
-function parseCoordinateSearch(query) {
-  const match = query.trim().match(/^(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)$/);
-
-  if (!match) {
-    return null;
-  }
-
-  const first = Number(match[1]);
-  const second = Number(match[2]);
-
-  if (!Number.isFinite(first) || !Number.isFinite(second)) {
-    return null;
-  }
-
-  const [lat, lon] = isVietnamCoordinate(first, second)
-    ? [first, second]
-    : isVietnamCoordinate(second, first)
-      ? [second, first]
-      : [null, null];
-
-  if (lat === null || lon === null) {
-    return null;
-  }
-
-  return buildOfflinePlace({
-    id: `coords-${lat}-${lon}`,
-    name: `${lat.toFixed(5)}, ${lon.toFixed(5)}`,
-    displayName: "Custom coordinates",
-    lat,
-    lon,
-    delta: 0.02,
-  });
-}
-
-function isVietnamCoordinate(lat, lon) {
-  return lat >= 8 && lat <= 24 && lon >= 102 && lon <= 110;
-}
-
 function buildOfflinePlace({ id, name, displayName, lat, lon, delta = 0.08 }) {
-  const place = {
+  return {
     boundingbox: [
       String(lat - delta),
       String(lat + delta),
@@ -961,18 +812,6 @@ function buildOfflinePlace({ id, name, displayName, lat, lon, delta = 0.08 }) {
     name,
     place_id: id,
   };
-
-  return {
-    ...place,
-    searchText: normalizeSearchText(`${place.name} ${place.display_name}`),
-  };
-}
-
-function normalizeSearchText(value) {
-  return String(value)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
 }
 
 const OFFLINE_VIETNAM_PLACES = [

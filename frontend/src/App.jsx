@@ -29,7 +29,7 @@ import HistoryModal, { HistoryModalBody } from "./components/HistoryModal";
 import HistoryPanel from "./components/HistoryPanel";
 import LoginPage from "./components/LoginPage";
 import MapPanel from "./components/MapPanel";
-import SceneChooserModal from "./components/SceneChooserModal";
+import SceneChooserPage from "./components/SceneChooserModal";
 import ScenesPage from "./components/ScenesPage";
 import { formatDateTime, formatSimulationType } from "./utils/format";
 import {
@@ -74,7 +74,6 @@ export default function App() {
   const [selectedComparisonIds, setSelectedComparisonIds] = useState(() => new Set());
   const [comparisonDetails, setComparisonDetails] = useState(() => new Map());
   const [modalContent, setModalContent] = useState(null);
-  const [sceneChooserOpen, setSceneChooserOpen] = useState(false);
   const [scenes, setScenes] = useState([]);
   const [activeScene, setActiveScene] = useState(null);
   const [isSceneListLoading, setIsSceneListLoading] = useState(true);
@@ -383,7 +382,7 @@ export default function App() {
         return;
       }
 
-      setSceneChooserOpen(true);
+      navigate("/choose-scene");
     } catch (error) {
       setSceneNotice(`Failed to check scenes: ${error.message}`, true);
       navigate("/scenes");
@@ -392,9 +391,9 @@ export default function App() {
 
   function handleSceneActivated(scene) {
     setActiveScene(enrichScene(scene));
-    setSceneChooserOpen(false);
     setSceneNotice(`${scene.name} is now active.`);
     loadScenes().catch(() => {});
+    navigate("/network");
   }
 
   function setSceneNotice(message, error = false) {
@@ -735,6 +734,16 @@ export default function App() {
           scenes={scenes}
         />
       )}
+      {route === "/choose-scene" && (
+        <SceneChooserPage
+          onCancel={() => navigate("/scenes")}
+          onLimitReached={(message) => {
+            setSceneNotice(message, true);
+            navigate("/scenes");
+          }}
+          onSceneActivated={handleSceneActivated}
+        />
+      )}
 
       {modalContent && (
         <HistoryModal
@@ -742,19 +751,6 @@ export default function App() {
           progressLabel={modalProgressLabel}
         >
           {modalContent}
-        </HistoryModal>
-      )}
-      {sceneChooserOpen && (
-        <HistoryModal onClose={() => setSceneChooserOpen(false)}>
-          <SceneChooserModal
-            onClose={() => setSceneChooserOpen(false)}
-            onLimitReached={(message) => {
-              setSceneChooserOpen(false);
-              setSceneNotice(message, true);
-              navigate("/scenes");
-            }}
-            onSceneActivated={handleSceneActivated}
-          />
         </HistoryModal>
       )}
     </div>
@@ -777,20 +773,24 @@ function Navbar({
         <span>Scene: {activeScene?.name || "Loading..."}</span>
       </div>
       <nav aria-label="Primary navigation">
-        {ROUTES.map((item) => (
-          <button
-            key={item.path}
-            className={route === item.path ? "active" : ""}
-            type="button"
-            disabled={isBusy}
-            onClick={() => onNavigate(item.path)}
-          >
-            {item.label}
-          </button>
-        ))}
-        <button className="scene-picker-button" type="button" disabled={isBusy} onClick={onChooseScene}>
-          Choose scene
-        </button>
+        {ROUTES.map((item) => {
+          const isSceneChooser = item.path === "/choose-scene";
+
+          return (
+            <button
+              key={item.path}
+              className={[
+                route === item.path ? "active" : "",
+                isSceneChooser ? "scene-picker-button" : "",
+              ].filter(Boolean).join(" ")}
+              type="button"
+              disabled={isBusy}
+              onClick={() => (isSceneChooser ? onChooseScene() : onNavigate(item.path))}
+            >
+              {item.label}
+            </button>
+          );
+        })}
         <button className="logout-button" type="button" onClick={onLogout}>
           {currentUser?.username || "Logout"} | Logout
         </button>

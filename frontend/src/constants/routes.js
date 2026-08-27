@@ -6,4 +6,5 @@ export const ROUTES = [
   { path: "/throughput", label: "Throughput API" },
   { path: "/history", label: "History" },
   { path: "/scenes", label: "Scenes" },
+  { path: "/choose-scene", label: "Choose Scene" },
 ];
