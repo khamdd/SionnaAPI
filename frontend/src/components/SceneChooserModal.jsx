@@ -408,6 +408,19 @@ export default function SceneChooserPage({
     let createdScene = null;
 
     try {
+      const selectedAntennas = antennasForSelectedBounds(
+        importedAntennas,
+        antennaPlacementBounds,
+        selectedBounds,
+      );
+
+      if (importedAntennas.length > 0 && selectedAntennas.length === 0) {
+        setStatus("Selected area does not include any imported antennas.");
+        setError(true);
+        setIsBusy(false);
+        return;
+      }
+
       const previewResult = await createScenePreview({
         name: trimmedSceneName,
         south: selectedBounds.south,
@@ -419,7 +432,10 @@ export default function SceneChooserPage({
 
       setStatus("Loading scene...");
       const activationResult = await activateScene(createdScene.id);
-      onSceneActivated(activationResult.scene);
+      onSceneActivated(
+        activationResult.scene,
+        selectedAntennas.length > 0 ? selectedAntennas : null,
+      );
     } catch (caught) {
       if (caught.message.includes("Only 3")) {
         onLimitReached(caught.message);
@@ -934,6 +950,50 @@ function scenePositionToLngLat(position, bounds, metrics) {
     bounds.west + westEastRatio * (bounds.east - bounds.west),
     bounds.south + southNorthRatio * (bounds.north - bounds.south),
   ];
+}
+
+function antennasForSelectedBounds(antennas, placementBounds, selectedBounds) {
+  if (!Array.isArray(antennas) || antennas.length === 0 || !placementBounds || !selectedBounds) {
+    return [];
+  }
+
+  const placementMetrics = calculateMetrics(placementBounds);
+  const selectedMetrics = calculateMetrics(selectedBounds);
+
+  return antennas
+    .map((antenna) => {
+      const lngLat = scenePositionToLngLat(antenna.position, placementBounds, placementMetrics);
+
+      if (!lngLatInsideBounds(lngLat, selectedBounds)) {
+        return null;
+      }
+
+      return {
+        ...antenna,
+        position: [
+          roundMeters(lngLatToSceneX(lngLat[0], selectedBounds, selectedMetrics)),
+          roundMeters(lngLatToSceneY(lngLat[1], selectedBounds, selectedMetrics)),
+          antenna.position[2],
+        ],
+      };
+    })
+    .filter(Boolean);
+}
+
+function lngLatInsideBounds([lng, lat], bounds) {
+  return lng >= bounds.west && lng <= bounds.east && lat >= bounds.south && lat <= bounds.north;
+}
+
+function lngLatToSceneX(lng, bounds, metrics) {
+  return ((lng - bounds.west) / (bounds.east - bounds.west)) * metrics.widthM - metrics.widthM / 2;
+}
+
+function lngLatToSceneY(lat, bounds, metrics) {
+  return ((lat - bounds.south) / (bounds.north - bounds.south)) * metrics.heightM - metrics.heightM / 2;
+}
+
+function roundMeters(value) {
+  return Number(value.toFixed(2));
 }
 
 function createAntennaMarkerElement(antenna) {

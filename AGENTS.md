@@ -46,6 +46,7 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   keep/load actions.
 - Imported scene previews are limited by count and size, expire while still in
   preview status, and are cleaned up if not kept.
+- Imported scene bounds allow up to 5 km² and up to 5000 m width/height.
 - The Choose scene modal uses a Docker-served offline MapLibre/PMTiles map from
   `frontend/public/data/` with `vietnam.pmtiles`, `building-regions.json`, and
   regional `vn-buildings-*.pmtiles` archives. At zoom 13.5+, visible 1-degree
@@ -65,7 +66,10 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   `antenna-template.xlsx` from the current antenna schema. The Choose Scene page
   can import that workbook, validate antenna rows, and immediately render valid
   antennas on the map before or after a scene area is selected. Imported
-  antennas are allowed to sit outside the selected scene area.
+  antennas are allowed to sit outside the selected scene area. When a chosen
+  scene is kept and loaded, only imported antennas inside that selected area are
+  carried into Network Coverage, preserving their map positions in the new
+  scene coordinate system.
 
 ## Important Files
 
@@ -119,7 +123,10 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   `frontend/src/constants`.
 - Simulation API calls may return queued job IDs; `frontend/src/api.js` polls
   `/api/v1/simulation-jobs/{job_id}` and then fetches the saved result.
-- Scene dimensions drive solver bounds and default antenna scaling on the frontend.
+- Scene dimensions drive solver bounds on the frontend.
+- Default antennas are no longer scaled to fit scene dimensions; imported
+  antennas selected from the Choose Scene page are used as-is for that active
+  scene.
 - `MAX_GRID_CELLS` protects the backend by enlarging cell size for large scenes.
 - Delete operations must remove database rows and generated artifact files where
   applicable.

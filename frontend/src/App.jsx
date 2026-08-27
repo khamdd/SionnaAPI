@@ -42,7 +42,6 @@ import {
   summarizeGrid,
 } from "./utils/map";
 import {
-  sceneSizeMeters,
   solverForScene,
 } from "./utils/scene";
 
@@ -81,6 +80,7 @@ export default function App() {
   const [sceneNotice, setSceneNoticeState] = useState(null);
   const [hover, setHover] = useState(null);
   const [authStatus, setAuthStatus] = useState("checking");
+  const [sceneAntennaOverrides, setSceneAntennaOverrides] = useState(() => new Map());
 
   const canvasRef = useRef(null);
   const mapStageRef = useRef(null);
@@ -231,14 +231,14 @@ export default function App() {
       return;
     }
 
-    setAntennas(antennasForScene(activeScene));
+    setAntennas(antennasForActiveScene(activeScene, sceneAntennaOverrides));
     setLatestSolver(solverForScene(activeScene));
     setLatestGrid(null);
     setCoverageImageUrl("");
     setHover(null);
     setRunStatus("Ready");
     setRunError(false);
-  }, [activeScene?.id]);
+  }, [activeScene?.id, sceneAntennaOverrides]);
 
   useEffect(() => {
     if (comparisonType && selectedComparisonIds.size === 0) {
@@ -327,7 +327,7 @@ export default function App() {
   }
 
   function resetAntennas() {
-    setAntennas(antennasForScene(activeScene));
+    setAntennas(antennasForActiveScene(activeScene, sceneAntennaOverrides));
     setLatestGrid(null);
     setLatestSolver(solverForScene(activeScene));
     setCoverageImageUrl("");
@@ -389,7 +389,15 @@ export default function App() {
     }
   }
 
-  function handleSceneActivated(scene) {
+  function handleSceneActivated(scene, sceneAntennas = null) {
+    if (Array.isArray(sceneAntennas)) {
+      setSceneAntennaOverrides((current) => {
+        const next = new Map(current);
+        next.set(scene.id, clone(sceneAntennas));
+        return next;
+      });
+    }
+
     setActiveScene(enrichScene(scene));
     setSceneNotice(`${scene.name} is now active.`);
     loadScenes().catch(() => {});
@@ -959,39 +967,14 @@ function buildNetworkCoveragePayload(antennas, activeScene) {
   };
 }
 
-function antennasForScene(scene) {
-  const size = sceneSizeMeters(scene);
+function antennasForActiveScene(scene, sceneAntennaOverrides) {
+  const override = sceneAntennaOverrides.get(scene?.id);
 
-  if (!size) {
-    return clone(DEFAULT_ANTENNAS);
+  if (Array.isArray(override) && override.length > 0) {
+    return clone(override);
   }
 
-  const { width, height } = size;
-  const scaleX = width / DEFAULT_SOLVER.size[0];
-  const scaleY = height / DEFAULT_SOLVER.size[1];
-  const xLimit = width / 2;
-  const yLimit = height / 2;
-
-  return DEFAULT_ANTENNAS.map((antenna) => {
-    const [x, y, z] = antenna.position;
-
-    return {
-      ...clone(antenna),
-      position: [
-        roundPosition(clamp(x * scaleX, -xLimit, xLimit)),
-        roundPosition(clamp(y * scaleY, -yLimit, yLimit)),
-        z,
-      ],
-    };
-  });
-}
-
-function roundPosition(value) {
-  return Number(value.toFixed(2));
-}
-
-function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
+  return clone(DEFAULT_ANTENNAS);
 }
 
 async function loadComparisonDetails(selectedIds, cachedDetails) {
