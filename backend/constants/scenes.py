@@ -1,3 +1,6 @@
+import os 
+from pathlib import Path
+
 DEFAULT_SCENE_ID = "munich"
 DEFAULT_SCENE_NAME = "Munich"
 DEFAULT_SCENE_BOUNDS = {
@@ -6,6 +9,11 @@ DEFAULT_SCENE_BOUNDS = {
     "north": 48.1404,
     "east": 11.5795,
 }
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+OFFLINE_BUILDINGS_DIR = Path(
+    os.getenv("OFFLINE_BUILDINGS_DIR", PROJECT_ROOT / "static" / "offline-buildings")
+)
 
 MAX_IMPORTED_SCENES = 3
 MAX_SCENE_AREA_KM2 = 1.0

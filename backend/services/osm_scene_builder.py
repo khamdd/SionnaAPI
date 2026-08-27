@@ -12,6 +12,7 @@ from urllib.error import HTTPError, URLError
 from backend.constants.scenes import (
     DEFAULT_BUILDING_HEIGHT_M,
     MIN_POLYGON_AREA_M2,
+    OFFLINE_BUILDINGS_DIR,
     OVERPASS_FALLBACK_URL,
     OVERPASS_HTTP_TIMEOUT_SECONDS,
     OVERPASS_QUERY_TIMEOUT_SECONDS,
@@ -43,7 +44,7 @@ def build_osm_sionna_scene(bounds, output_dir, elements=None):
     mesh_dir = output_dir / "meshes"
     mesh_dir.mkdir(parents=True, exist_ok=True)
 
-    osm_elements = elements if elements is not None else fetch_osm_building_elements(bounds)
+    osm_elements = elements if elements is not None else load_offline_building_elements(bounds)
     buildings = parse_osm_buildings(osm_elements)
     projected = project_buildings_to_local_meters(buildings, bounds)
 
@@ -80,40 +81,162 @@ def validate_sionna_scene(scene_path):
 
     load_scene(str(scene_path), merge_shapes=True, remove_duplicate_vertices=True)
 
+def load_offline_building_elements(bounds):
+    files = offline_geojson_files_for_bounds(bounds)
 
-def fetch_osm_building_elements(bounds):
-    query = f"""
-    [out:json][timeout:{OVERPASS_QUERY_TIMEOUT_SECONDS}][bbox:{bounds.south},{bounds.west},{bounds.north},{bounds.east}];
-    way["building"];
-    out tags geom;
-    """
-    body = urllib.parse.urlencode({"data": query}).encode("utf-8")
+    if not files:
+        raise RuntimeError(f"Offline building data not found in {OFFLINE_BUILDINGS_DIR}")
 
-    last_error = None
-    for url in (OVERPASS_URL, OVERPASS_FALLBACK_URL):
-        request = urllib.request.Request(
-            url,
-            data=body,
-            headers={
-                "Accept": "application/json",
-                "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-                "User-Agent": "SionnaSimulation/1.0 (local radio planning tool)",
-            },
-            method="POST",
-        )
+    elements = []
 
-        try:
-            with urllib.request.urlopen(request, timeout=OVERPASS_HTTP_TIMEOUT_SECONDS) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-                return payload.get("elements", [])
-        except HTTPError as exc:
-            last_error = exc
-            if exc.code not in {406, 429, 502, 503, 504}:
-                break
-        except (TimeoutError, URLError, OSError) as exc:
-            last_error = exc
+    for path in files:
+        with path.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
 
-    raise RuntimeError(f"OpenStreetMap building lookup failed: {last_error}")
+        for index, feature in enumerate(data.get("features", [])):
+            elements.extend(
+                geojson_feature_to_osm_elements(
+                    feature,
+                    bounds,
+                    f"{path.stem}-{index}",
+                )
+            )
+
+    return elements
+
+
+def offline_geojson_files_for_bounds(bounds):
+    data_dir = Path(OFFLINE_BUILDINGS_DIR)
+    manifest_path = data_dir / "building-regions.json"
+
+    if manifest_path.exists():
+        with manifest_path.open("r", encoding="utf-8") as handle:
+            regions = json.load(handle)
+
+        files = []
+
+        for region in regions:
+            if not region_intersects_bounds(region, bounds):
+                continue
+
+            file_name = str(region.get("file", "")).replace(".pmtiles", ".geojson")
+            path = data_dir / file_name
+
+            if path.exists():
+                files.append(path)
+
+        return files
+
+    return sorted(data_dir.glob("*.geojson"))
+
+
+def region_intersects_bounds(region, bounds):
+    return not (
+        float(region["north"]) < bounds.south
+        or float(region["south"]) > bounds.north
+        or float(region["east"]) < bounds.west
+        or float(region["west"]) > bounds.east
+    )
+
+
+def geojson_feature_to_osm_elements(feature, bounds, source_id):
+    geometry = feature.get("geometry") or {}
+    properties = feature.get("properties") or {}
+    geometry_type = geometry.get("type")
+    coordinates = geometry.get("coordinates") or []
+
+    if geometry_type == "Polygon":
+        polygons = [coordinates]
+    elif geometry_type == "MultiPolygon":
+        polygons = coordinates
+    else:
+        return []
+
+    tags = {
+        str(key): str(value)
+        for key, value in properties.items()
+        if value is not None
+    }
+    tags.setdefault("building", "yes")
+
+    elements = []
+
+    for polygon_index, polygon in enumerate(polygons):
+        if not polygon:
+            continue
+
+        outer_ring = polygon[0]
+
+        if not ring_intersects_bounds(outer_ring, bounds):
+            continue
+
+        geometry_points = [
+            {"lon": float(point[0]), "lat": float(point[1])}
+            for point in outer_ring
+            if len(point) >= 2
+        ]
+
+        if len(geometry_points) < 3:
+            continue
+
+        elements.append({
+            "id": f"{source_id}-{polygon_index}",
+            "tags": tags,
+            "geometry": geometry_points,
+        })
+
+    return elements
+
+
+def ring_intersects_bounds(ring, bounds):
+    points = [point for point in ring if len(point) >= 2]
+
+    if not points:
+        return False
+
+    lons = [float(point[0]) for point in points]
+    lats = [float(point[1]) for point in points]
+
+    return not (
+        max(lats) < bounds.south
+        or min(lats) > bounds.north
+        or max(lons) < bounds.west
+        or min(lons) > bounds.east
+    )
+
+# def fetch_osm_building_elements(bounds):
+#     query = f"""
+#     [out:json][timeout:{OVERPASS_QUERY_TIMEOUT_SECONDS}][bbox:{bounds.south},{bounds.west},{bounds.north},{bounds.east}];
+#     way["building"];
+#     out tags geom;
+#     """
+#     body = urllib.parse.urlencode({"data": query}).encode("utf-8")
+
+#     last_error = None
+#     for url in (OVERPASS_URL, OVERPASS_FALLBACK_URL):
+#         request = urllib.request.Request(
+#             url,
+#             data=body,
+#             headers={
+#                 "Accept": "application/json",
+#                 "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+#                 "User-Agent": "SionnaSimulation/1.0 (local radio planning tool)",
+#             },
+#             method="POST",
+#         )
+
+#         try:
+#             with urllib.request.urlopen(request, timeout=OVERPASS_HTTP_TIMEOUT_SECONDS) as response:
+#                 payload = json.loads(response.read().decode("utf-8"))
+#                 return payload.get("elements", [])
+#         except HTTPError as exc:
+#             last_error = exc
+#             if exc.code not in {406, 429, 502, 503, 504}:
+#                 break
+#         except (TimeoutError, URLError, OSError) as exc:
+#             last_error = exc
+
+#     raise RuntimeError(f"OpenStreetMap building lookup failed: {last_error}")
 
 
 def parse_osm_buildings(elements):
