@@ -61,6 +61,8 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 - Raw SQL has been converted to SQLAlchemy ORM models in `backend/models.py`.
 - RSRP work includes no-coverage rows for served/measured output and a legend UI
   update.
+- Antenna import work has started with a frontend download button that creates
+  `antenna-template.xlsx` from the current antenna schema.
 
 ## Important Files
 

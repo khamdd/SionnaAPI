@@ -15,6 +15,7 @@ import {
   SCENE_CHOOSER_DEFAULT_CENTER,
   SCENE_CHOOSER_DEFAULT_ZOOM,
 } from "../constants";
+import { downloadAntennaTemplate } from "../utils/antennaTemplate";
 import { formatMaybeNumber } from "../utils/format";
 
 export default function SceneChooserPage({
@@ -398,6 +399,9 @@ export default function SceneChooserPage({
             Back
           </button>
         </div>
+        <button className="ghost-button" type="button" disabled={isBusy} onClick={() => downloadAntennaTemplate()}>
+          Download antennas template
+        </button>
 
         {!isPreviewing && (
           <div className="scene-page-form">
