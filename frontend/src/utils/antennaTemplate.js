@@ -1,8 +1,8 @@
-import { DEFAULT_ANTENNAS } from "../constants";
+import { DEFAULT_ANTENNAS } from "../constants/radio.js";
 
 const XLSX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
-const ANTENNA_TEMPLATE_COLUMNS = [
+export const ANTENNA_TEMPLATE_COLUMNS = [
   "antenna_id",
   "x_m",
   "y_m",
@@ -40,7 +40,7 @@ export function downloadAntennaTemplate(antennas = DEFAULT_ANTENNAS) {
   URL.revokeObjectURL(url);
 }
 
-function buildAntennaTemplateWorkbook(antennas) {
+export function buildAntennaTemplateWorkbook(antennas) {
   return createZip([
     ["[Content_Types].xml", contentTypesXml()],
     ["_rels/.rels", rootRelationshipsXml()],

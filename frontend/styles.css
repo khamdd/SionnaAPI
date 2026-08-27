@@ -1862,6 +1862,23 @@ textarea:disabled {
   width: 100%;
 }
 
+.scene-template-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.scene-template-actions button {
+  min-width: 0;
+}
+
+.scene-import-status {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .scene-city-field {
   display: grid;
   gap: 6px;
@@ -1913,6 +1930,51 @@ textarea:disabled {
 .scene-control-panel .scene-preview-actions {
   display: grid;
   grid-template-columns: 1fr;
+}
+
+.scene-antenna-marker {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  transform: translateY(2px);
+  pointer-events: auto;
+}
+
+.scene-antenna-marker i {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: #dc2626;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.3);
+}
+
+.scene-antenna-marker i::after {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  width: 2px;
+  height: 14px;
+  background: #dc2626;
+  content: "";
+  transform: translateX(-50%) rotate(var(--azimuth));
+  transform-origin: 50% 100%;
+}
+
+.scene-antenna-marker span {
+  max-width: 68px;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #991b1b;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 4px 5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .result-summary h3 {

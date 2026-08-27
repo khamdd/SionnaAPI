@@ -62,7 +62,10 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 - RSRP work includes no-coverage rows for served/measured output and a legend UI
   update.
 - Antenna import work has started with a frontend download button that creates
-  `antenna-template.xlsx` from the current antenna schema.
+  `antenna-template.xlsx` from the current antenna schema. The Choose Scene page
+  can import that workbook, validate antenna rows, and immediately render valid
+  antennas on the map before or after a scene area is selected. Imported
+  antennas are allowed to sit outside the selected scene area.
 
 ## Important Files
 

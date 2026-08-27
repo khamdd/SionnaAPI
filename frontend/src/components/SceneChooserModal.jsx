@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Map,
+  Marker,
   NavigationControl,
   addProtocol,
   removeProtocol,
@@ -15,6 +16,9 @@ import {
   SCENE_CHOOSER_DEFAULT_CENTER,
   SCENE_CHOOSER_DEFAULT_ZOOM,
 } from "../constants";
+import {
+  importAntennasFromWorkbook,
+} from "../utils/antennaImport";
 import { downloadAntennaTemplate } from "../utils/antennaTemplate";
 import { formatMaybeNumber } from "../utils/format";
 
@@ -27,11 +31,17 @@ export default function SceneChooserPage({
   const mapRef = useRef(null);
   const buildingRegionManagerRef = useRef(null);
   const drawStartRef = useRef(null);
+  const fileInputRef = useRef(null);
   const mapViewRef = useRef(null);
+  const antennaMarkersRef = useRef([]);
   const [isSelectingArea, setIsSelectingArea] = useState(false);
   const [isMapReady, setIsMapReady] = useState(false);
   const [selectedCityId, setSelectedCityId] = useState("");
   const [sceneName, setSceneName] = useState("");
+  const [importedAntennas, setImportedAntennas] = useState([]);
+  const [antennaImportStatus, setAntennaImportStatus] = useState("");
+  const [antennaImportError, setAntennaImportError] = useState(false);
+  const [antennaPlacementBounds, setAntennaPlacementBounds] = useState(null);
   const [bounds, setBounds] = useState(null);
   const [previewBounds, setPreviewBounds] = useState(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
@@ -43,6 +53,7 @@ export default function SceneChooserPage({
 
   const metrics = bounds ? calculateMetrics(bounds) : null;
   const isTooLarge = metrics && metrics.areaKm2 > MAX_SCENE_AREA_KM2;
+  const antennaDisplayBounds = antennaPlacementBounds;
 
   useEffect(() => {
     const node = mapNodeRef.current;
@@ -117,6 +128,7 @@ export default function SceneChooserPage({
         bearing: map.getBearing(),
       };
       observer.disconnect();
+      clearAntennaMarkers();
       buildingRegionManagerRef.current?.dispose();
       buildingRegionManagerRef.current = null;
       map.remove();
@@ -129,6 +141,41 @@ export default function SceneChooserPage({
       }
     };
   }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+
+    clearAntennaMarkers();
+
+    if (!map || !isMapReady || importedAntennas.length === 0) {
+      return undefined;
+    }
+
+    if (!antennaDisplayBounds) {
+      setAntennaImportStatus(`Imported ${importedAntennas.length} antenna(s), but the map is not ready to place them yet.`);
+      setAntennaImportError(true);
+      return undefined;
+    }
+
+    const displayMetrics = calculateMetrics(antennaDisplayBounds);
+
+    setAntennaImportStatus(`Imported ${importedAntennas.length} antenna(s).`);
+    setAntennaImportError(false);
+
+    antennaMarkersRef.current = importedAntennas.map((antenna) => {
+      const element = createAntennaMarkerElement(antenna);
+      const marker = new Marker({
+        element,
+        anchor: "bottom",
+      })
+        .setLngLat(scenePositionToLngLat(antenna.position, antennaDisplayBounds, displayMetrics))
+        .addTo(map);
+
+      return marker;
+    });
+
+    return clearAntennaMarkers;
+  }, [antennaDisplayBounds, importedAntennas, isMapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -202,6 +249,11 @@ export default function SceneChooserPage({
     }
   }
 
+  function clearAntennaMarkers() {
+    antennaMarkersRef.current.forEach((marker) => marker.remove());
+    antennaMarkersRef.current = [];
+  }
+
   function startSelection() {
     if (isBusy || !isMapReady) {
       return;
@@ -233,6 +285,45 @@ export default function SceneChooserPage({
     setIsSelectingArea(false);
     setError(false);
     setStatus(`Moved map to ${place.name}.`);
+  }
+
+  async function importAntennaFile(event) {
+    const file = event.target.files?.[0];
+
+    event.target.value = "";
+
+    if (!file || isBusy) {
+      return;
+    }
+
+    setIsBusy(true);
+    setAntennaImportStatus(`Importing ${file.name}...`);
+    setAntennaImportError(false);
+
+    try {
+      const antennas = await importAntennasFromWorkbook(file);
+      const nextAntennaPlacementBounds = previewBounds
+        || bounds
+        || createAntennaImportBounds(antennas, mapRef.current);
+
+      if (nextAntennaPlacementBounds) {
+        setAntennaPlacementBounds(nextAntennaPlacementBounds);
+
+        if (!previewBounds && !bounds) {
+          focusMapOnBounds(nextAntennaPlacementBounds);
+        }
+      }
+
+      setImportedAntennas(antennas);
+      setAntennaImportStatus(`Imported ${antennas.length} antenna(s) and displayed them on the map.`);
+      setAntennaImportError(false);
+    } catch (caught) {
+      setImportedAntennas([]);
+      setAntennaImportStatus(`Import failed: ${caught.message}`);
+      setAntennaImportError(true);
+    } finally {
+      setIsBusy(false);
+    }
   }
 
   function moveMapToPlace(place) {
@@ -412,16 +503,38 @@ export default function SceneChooserPage({
               </button>
             </div>
           </div>
-          <button className="ghost-button" type="button" disabled={isBusy} onClick={() => downloadAntennaTemplate()}>
-            Download antennas template
-          </button>
+          <div className="scene-template-actions">
+            <button className="ghost-button" type="button" disabled={isBusy} onClick={() => downloadAntennaTemplate()}>
+              Download template
+            </button>
+            <button
+              className="ghost-button"
+              type="button"
+              disabled={isBusy || !isMapReady}
+              title={isMapReady ? "Import antennas" : "Wait for the map to finish loading"}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Import antennas
+            </button>
+            <input
+              ref={fileInputRef}
+              className="hidden"
+              type="file"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              onChange={importAntennaFile}
+            />
+          </div>
+          {antennaImportStatus && (
+            <p className={`scene-import-status ${antennaImportError ? "error-text" : ""}`}>
+              {antennaImportStatus}
+            </p>
+          )}
 
           {!isPreviewing && (
             <div className="scene-page-form">
               <label className="scene-city-field">
-                <span>City</span>
+                <span>Location</span>
                 <select value={selectedCityId} disabled={isBusy || !isMapReady} onChange={selectCity}>
-                  <option value="">Jump to a Vietnam city</option>
                   {OFFLINE_VIETNAM_PLACES.map((place) => (
                     <option key={place.place_id} value={place.place_id}>
                       {place.name}
@@ -507,7 +620,7 @@ export default function SceneChooserPage({
         <div className="scene-selection-footer">
           <div>
             <strong>{metrics ? `${formatMaybeNumber(metrics.widthM)} m x ${formatMaybeNumber(metrics.heightM)} m` : "No area selected"}</strong>
-            <span>{metrics ? `${formatMaybeNumber(metrics.areaKm2)} km2 selected` : "Maximum 1 km2 per scene"}</span>
+            <span>{metrics ? `${formatMaybeNumber(metrics.areaKm2)} km2 selected` : `Maximum ${MAX_SCENE_AREA_KM2} km2 per scene`}</span>
             {isTooLarge && <span className="error-text">Selected area is too large.</span>}
           </div>
         </div>
@@ -810,6 +923,54 @@ function updateSelectionBounds(map, bounds) {
       },
     ],
   });
+}
+
+function scenePositionToLngLat(position, bounds, metrics) {
+  const [x, y] = position;
+  const westEastRatio = (x + metrics.widthM / 2) / metrics.widthM;
+  const southNorthRatio = (y + metrics.heightM / 2) / metrics.heightM;
+
+  return [
+    bounds.west + westEastRatio * (bounds.east - bounds.west),
+    bounds.south + southNorthRatio * (bounds.north - bounds.south),
+  ];
+}
+
+function createAntennaMarkerElement(antenna) {
+  const element = document.createElement("div");
+  const label = document.createElement("span");
+  const dot = document.createElement("i");
+
+  element.className = "scene-antenna-marker";
+  element.title = `${antenna.id}: ${antenna.position.join(", ")} m`;
+  element.style.setProperty("--azimuth", `${antenna.azimuth || 0}deg`);
+  label.textContent = antenna.id;
+  element.append(dot, label);
+
+  return element;
+}
+
+function createAntennaImportBounds(antennas, map) {
+  if (!map || !Array.isArray(antennas) || antennas.length === 0) {
+    return null;
+  }
+
+  const center = map.getCenter();
+  const maxAbsX = Math.max(...antennas.map((antenna) => Math.abs(Number(antenna.position[0]) || 0)));
+  const maxAbsY = Math.max(...antennas.map((antenna) => Math.abs(Number(antenna.position[1]) || 0)));
+  const widthM = Math.max(maxAbsX * 2 + 80, 250);
+  const heightM = Math.max(maxAbsY * 2 + 80, 250);
+  const metersPerDegreeLat = 111320;
+  const metersPerDegreeLon = metersPerDegreeLat * Math.max(Math.cos(center.lat * (Math.PI / 180)), 0.01);
+  const halfLatDelta = (heightM / metersPerDegreeLat) / 2;
+  const halfLonDelta = (widthM / metersPerDegreeLon) / 2;
+
+  return {
+    south: center.lat - halfLatDelta,
+    west: center.lng - halfLonDelta,
+    north: center.lat + halfLatDelta,
+    east: center.lng + halfLonDelta,
+  };
 }
 
 function emptyFeatureCollection() {
