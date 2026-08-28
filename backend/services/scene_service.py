@@ -178,13 +178,6 @@ def delete_scene(scene_id):
                 "error": "The default Munich scene cannot be deleted.",
             }
 
-        if scene_id == active_scene_id:
-            return {
-                "status": "failure",
-                "status_code": 400,
-                "error": "The active scene cannot be deleted.",
-            }
-
         database_result = mark_scene_reference_deleted(scene_id)
         if database_result.get("error"):
             return {
@@ -196,14 +189,18 @@ def delete_scene(scene_id):
         registry["scenes"] = [
             item
             for item in registry["scenes"]
-            if item.get("id") != scene_id
+                if item.get("id") != scene_id
         ]
+        active_scene_reset = scene_id == active_scene_id
+        if active_scene_reset:
+            registry["active_scene_id"] = DEFAULT_SCENE_ID
         save_registry(registry)
         delete_scene_files(scene_id)
 
         return {
             "status": "success",
             "deleted": True,
+            "active_scene_reset": active_scene_reset,
             "database_status_updated": database_result["updated"],
         }
 

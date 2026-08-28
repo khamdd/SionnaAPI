@@ -53,6 +53,13 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   Scenes as a normal tab; users return there from the username dropdown's Change
   scene action, and direct simulation URLs redirect back to `/scenes` when no
   work scene is selected.
+- The Change scene action asks for confirmation, then clears the frontend work
+  scene state before returning to `/scenes`.
+- Imported scenes can be deleted from the scene selector even if the persisted
+  registry still marks them active from an older session; deletion resets the
+  backend active scene back to Munich. The frontend scene selector also retries
+  deletion by activating Munich first if an older backend responds that the scene
+  is active.
 - Imported scene previews are limited by count and size, expire while still in
   preview status, and are cleaned up if not kept.
 - Imported scene bounds allow up to 5 km² and up to 5000 m width/height.

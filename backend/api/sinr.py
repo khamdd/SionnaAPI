@@ -620,4 +620,8 @@ def delete_scene_route(scene_id: str):
         scene_id=scene_id,
     )
 
+    if result.get("active_scene_reset"):
+        with engine.lock:
+            engine.set_active_scene(get_active_scene())
+
     return return_or_raise(result)

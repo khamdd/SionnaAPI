@@ -177,7 +177,8 @@ export default function App() {
     }
   }, [comparisonSceneId, comparisonType]);
 
-  const loadScenes = useCallback(async () => {
+  const loadScenes = useCallback(async (options = {}) => {
+    const syncActiveScene = options.syncActiveScene ?? hasWorkScene;
     setIsSceneListLoading(true);
 
     try {
@@ -191,8 +192,10 @@ export default function App() {
       );
 
       setScenes(nextScenes);
-      setActiveScene(nextActiveScene);
-      setLatestSolver(solverForScene(nextActiveScene));
+      if (syncActiveScene) {
+        setActiveScene(nextActiveScene);
+        setLatestSolver(solverForScene(nextActiveScene));
+      }
       return {
         ...result,
         active_scene: nextActiveScene,
@@ -201,7 +204,7 @@ export default function App() {
     } finally {
       setIsSceneListLoading(false);
     }
-  }, []);
+  }, [hasWorkScene]);
 
   useEffect(() => {
     function handlePopState() {
@@ -234,10 +237,12 @@ export default function App() {
     }
 
     loadScenes().catch((error) => {
-      setActiveScene(clone(DEFAULT_ACTIVE_SCENE));
+      if (hasWorkScene) {
+        setActiveScene(clone(DEFAULT_ACTIVE_SCENE));
+      }
       setSceneNotice(`Failed to load scenes: ${error.message}`, true);
     });
-  }, [authStatus, loadScenes]);
+  }, [authStatus, hasWorkScene, loadScenes]);
 
   useEffect(() => {
     if (!activeScene) {
@@ -412,7 +417,23 @@ export default function App() {
   }
 
   function changeWorkScene() {
+    const confirmed = window.confirm("Change scene? The current work scene will be cleared and simulations will be unavailable until you select another scene.");
+
+    if (!confirmed) {
+      return;
+    }
+
     setHasWorkScene(false);
+    setActiveScene(null);
+    setAntennas(clone(DEFAULT_ANTENNAS));
+    setLatestSolver(clone(DEFAULT_SOLVER));
+    setLatestGrid(null);
+    setCoverageImageUrl("");
+    setHover(null);
+    setRunStatus("Ready");
+    setRunError(false);
+    cancelComparison();
+    setSceneNotice("No work scene is active. Select or create a scene to continue.");
     navigate(SCENE_SELECTION_ROUTE, { allowWithoutWorkScene: true });
   }
 
@@ -428,7 +449,7 @@ export default function App() {
     setActiveScene(enrichScene(scene));
     setHasWorkScene(true);
     setSceneNotice(`${scene.name} is now active.`);
-    loadScenes().catch(() => {});
+    loadScenes({ syncActiveScene: true }).catch(() => {});
     navigate(SIMULATION_ENTRY_ROUTE, { allowWithoutWorkScene: true });
   }
 

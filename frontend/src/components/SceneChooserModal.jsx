@@ -510,7 +510,7 @@ export default function SceneChooserPage({
           </button>
           <div className="scene-page-header">
             <div>
-              <h1>Choose Scene Area</h1>
+              <h1>Create Scene Area</h1>
               <p className={error ? "error-text" : ""}>{status}</p>
             </div>
             <div className="scene-header-actions">

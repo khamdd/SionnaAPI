@@ -1,5 +1,5 @@
 import { activateScene, deleteScene } from "../api";
-import { SCENE_CARD_PREVIEW_PADDING } from "../constants";
+import { DEFAULT_ACTIVE_SCENE, SCENE_CARD_PREVIEW_PADDING } from "../constants";
 import { formatDateTime, formatMaybeNumber } from "../utils/format";
 import { TrashIcon } from "./Icons";
 import SceneMapPreview from "./SceneMapPreview";
@@ -44,7 +44,7 @@ export default function ScenesPage({
     onSetNotice("Deleting scene...");
 
     try {
-      await deleteScene(scene.id);
+      await deleteSceneFromSelector(scene.id);
       await onRefresh();
       onSetNotice(`Deleted ${scene.name}.`);
     } catch (error) {
@@ -76,7 +76,7 @@ export default function ScenesPage({
       <section className="scene-list">
         {scenes.map((scene) => {
           const isActive = scene.id === activeSceneId;
-          const canDelete = !scene.is_default && !isActive;
+          const canDelete = !scene.is_default;
           const metrics = scene.metrics || {};
 
           return (
@@ -117,7 +117,7 @@ export default function ScenesPage({
                     className="history-delete"
                     type="button"
                     disabled={!canDelete || isLoading}
-                    title={canDelete ? "Delete scene" : "Active/default scene cannot be deleted"}
+                    title={canDelete ? "Delete scene" : "The default Munich scene cannot be deleted"}
                     onClick={() => removeScene(scene)}
                   >
                     <TrashIcon />
@@ -130,4 +130,17 @@ export default function ScenesPage({
       </section>
     </main>
   );
+}
+
+async function deleteSceneFromSelector(sceneId) {
+  try {
+    return await deleteScene(sceneId);
+  } catch (error) {
+    if (!/active scene cannot be deleted/i.test(error.message || "")) {
+      throw error;
+    }
+
+    await activateScene(DEFAULT_ACTIVE_SCENE.id);
+    return deleteScene(sceneId);
+  }
 }
