@@ -423,6 +423,7 @@ export default function SceneChooserPage({
 
       const previewResult = await createScenePreview({
         name: trimmedSceneName,
+        fixed_antennas: selectedAntennas,
         south: selectedBounds.south,
         west: selectedBounds.west,
         north: selectedBounds.north,

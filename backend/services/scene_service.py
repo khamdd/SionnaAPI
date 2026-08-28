@@ -115,7 +115,11 @@ def create_scene_preview(req: SceneBoundsRequest, base_url):
             "name": scene_name,
             "status": "preview",
             "is_default": False,
-            "bounds": req.model_dump(mode="json"),
+            "bounds": req.model_dump(mode="json", exclude={"fixed_antennas"}),
+            "fixed_antennas": [
+                antenna.model_dump(mode="json")
+                for antenna in req.fixed_antennas
+            ],
             "metrics": metrics,
             "scene_path": str(build_result.scene_path),
             "building_count": build_result.building_count,

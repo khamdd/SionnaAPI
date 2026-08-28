@@ -258,6 +258,11 @@ class SceneBoundsRequest(BaseModel):
         max_length=80,
     )
 
+    fixed_antennas: List[AntennaConfig] = Field(
+        default_factory=list,
+        max_length=10,
+    )
+
     south: float = Field(
         ge=-90.0,
         le=90.0,

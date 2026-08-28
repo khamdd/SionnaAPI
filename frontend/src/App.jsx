@@ -8,11 +8,11 @@ import {
   getCurrentUser,
 } from "./api";
 import {
-  DEFAULT_ANTENNAS,
   DEFAULT_SOLVER,
   ROUTES,
   TRANSMITTER_PATTERN,
   AUTH_TOKEN_STORAGE_KEY,
+  SCENE_FIXED_ANTENNAS_STORAGE_KEY,
   USER_STORAGE_KEY,
 } from "./constants";
 import AntennaPanel from "./components/AntennaPanel";
@@ -56,7 +56,7 @@ const HISTORY_PAGE_LIMIT = 200;
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [route, setRoute] = useState(() => normalizeRoute(window.location.pathname));
-  const [antennas, setAntennas] = useState(() => clone(DEFAULT_ANTENNAS));
+  const [antennas, setAntennas] = useState([]);
   const [latestGrid, setLatestGrid] = useState(null);
   const [latestSolver, setLatestSolver] = useState(() => clone(DEFAULT_SOLVER));
   const [coverageImageUrl, setCoverageImageUrl] = useState("");
@@ -452,7 +452,7 @@ export default function App() {
 
     setHasWorkScene(false);
     setActiveScene(null);
-    setAntennas(clone(DEFAULT_ANTENNAS));
+    setAntennas([]);
     setLatestSolver(clone(DEFAULT_SOLVER));
     setLatestGrid(null);
     setCoverageImageUrl("");
@@ -465,10 +465,15 @@ export default function App() {
   }
 
   function handleSceneActivated(scene, sceneAntennas = null) {
-    if (Array.isArray(sceneAntennas)) {
+    const fixedAntennas = Array.isArray(sceneAntennas)
+      ? sceneAntennas
+      : scene?.fixed_antennas;
+
+    if (Array.isArray(fixedAntennas)) {
+      saveSceneFixedAntennas(scene.id, fixedAntennas);
       setSceneAntennaOverrides((current) => {
         const next = new Map(current);
-        next.set(scene.id, clone(sceneAntennas));
+        next.set(scene.id, clone(fixedAntennas));
         return next;
       });
     }
@@ -1069,7 +1074,11 @@ function antennasForActiveScene(scene, sceneAntennaOverrides) {
     return clone(override);
   }
 
-  return clone(DEFAULT_ANTENNAS);
+  if (Array.isArray(scene?.fixed_antennas) && scene.fixed_antennas.length > 0) {
+    return clone(scene.fixed_antennas);
+  }
+
+  return [];
 }
 
 async function loadComparisonDetails(selectedIds, cachedDetails) {
@@ -1122,7 +1131,44 @@ function isWorkSceneRequiredRoute(pathname) {
 }
 
 function enrichScene(scene) {
+  const cachedFixedAntennas = readSceneFixedAntennas(scene?.id);
+
+  if (cachedFixedAntennas) {
+    return {
+      ...scene,
+      fixed_antennas: cachedFixedAntennas,
+    };
+  }
+
   return scene;
+}
+
+function readSceneFixedAntennas(sceneId) {
+  if (!sceneId) {
+    return null;
+  }
+
+  try {
+    const saved = JSON.parse(localStorage.getItem(SCENE_FIXED_ANTENNAS_STORAGE_KEY) || "{}");
+    const antennas = saved[sceneId];
+    return Array.isArray(antennas) ? antennas : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSceneFixedAntennas(sceneId, antennas) {
+  if (!sceneId || !Array.isArray(antennas)) {
+    return;
+  }
+
+  try {
+    const saved = JSON.parse(localStorage.getItem(SCENE_FIXED_ANTENNAS_STORAGE_KEY) || "{}");
+    saved[sceneId] = antennas;
+    localStorage.setItem(SCENE_FIXED_ANTENNAS_STORAGE_KEY, JSON.stringify(saved));
+  } catch {
+    // Local cache is best-effort; backend scene metadata is the primary store.
+  }
 }
 
 function toggleSetValue(current, value) {

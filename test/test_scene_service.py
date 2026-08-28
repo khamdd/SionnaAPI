@@ -7,9 +7,10 @@ from backend.services import scene_service
 from backend.services.osm_scene_builder import SceneBuildResult
 
 
-def make_request():
+def make_request(fixed_antennas=None):
     return SceneBoundsRequest(
         name="Hanoi test scene",
+        fixed_antennas=fixed_antennas or [],
         south=21.0000,
         west=105.8000,
         north=21.0010,
@@ -62,7 +63,23 @@ def test_create_scene_preview_registers_generated_osm_scene(tmp_path, monkeypatc
     monkeypatch.setattr(scene_service, "validate_sionna_scene", lambda scene_path: None)
 
     result = scene_service.create_scene_preview(
-        make_request(),
+        make_request([
+            {
+                "id": "HN-1",
+                "position": [12.0, 18.0, 35.0],
+                "tilt": {
+                    "min": 2.0,
+                    "current": 8.0,
+                    "max": 16.0,
+                },
+                "azimuth": 45.0,
+                "tx_power": {
+                    "min": 20.0,
+                    "current": 30.0,
+                    "max": 40.0,
+                },
+            }
+        ]),
         "http://127.0.0.1:8000/",
     )
 
@@ -73,15 +90,19 @@ def test_create_scene_preview_registers_generated_osm_scene(tmp_path, monkeypatc
     assert scene["expires_at"]
     assert scene["building_count"] == 7
     assert scene["mesh_count"] == 2
+    assert scene["fixed_antennas"][0]["id"] == "HN-1"
+    assert "fixed_antennas" not in scene["bounds"]
     assert scene["scene_path"].endswith("runtime_scene\\osm_scene.xml") or scene["scene_path"].endswith("runtime_scene/osm_scene.xml")
     assert (scene_root / scene["id"] / "preview.svg").exists()
 
     activate_result = scene_service.activate_scene(scene["id"])
     assert activate_result["status"] == "success"
     assert activate_result["scene"]["status"] == "ready"
+    assert activate_result["scene"]["fixed_antennas"][0]["id"] == "HN-1"
 
     list_result = scene_service.list_scenes()
     assert list_result["active_scene_id"] == scene["id"]
+    assert list_result["active_scene"]["fixed_antennas"][0]["id"] == "HN-1"
     assert list_result["imported_scene_count"] == 1
 
 

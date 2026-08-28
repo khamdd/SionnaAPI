@@ -85,8 +85,12 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   antennas on the map before or after a scene area is selected. Imported
   antennas are allowed to sit outside the selected scene area. When a chosen
   scene is kept and loaded, only imported antennas inside that selected area are
-  carried into Network Coverage, preserving their map positions in the new
-  scene coordinate system.
+  saved as `fixed_antennas` on the scene registry metadata and carried into
+  Network Coverage, preserving their map positions in the new scene coordinate
+  system. Fixed antennas are not stored as database antenna rows, but they do
+  persist with the static scene metadata and reload when the scene is selected.
+  The frontend also keeps a localStorage backup keyed by scene ID so fixed
+  antennas can be restored if a stale backend ignores the scene metadata field.
 
 ## Important Files
 
@@ -135,15 +139,15 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 
 - Backend startup initializes database tables only when database configuration is
   present, then starts the Elasticsearch logger and simulation worker.
-- Frontend redirects `/` and unknown paths to `/network`.
+- Frontend redirects `/` and unknown paths to `/scenes`.
 - Frontend stores auth token/user in localStorage using constants from
   `frontend/src/constants`.
 - Simulation API calls may return queued job IDs; `frontend/src/api.js` polls
   `/api/v1/simulation-jobs/{job_id}` and then fetches the saved result.
 - Scene dimensions drive solver bounds on the frontend.
-- Default antennas are no longer scaled to fit scene dimensions; imported
-  antennas selected from the Choose Scene page are used as-is for that active
-  scene.
+- Imported fixed antennas are no longer scaled to fit scene dimensions. A scene
+  with saved `fixed_antennas` uses those antennas as-is; a scene without fixed
+  antennas starts with an empty antenna list instead of the old A1-A10 defaults.
 - `MAX_GRID_CELLS` protects the backend by enlarging cell size for large scenes.
 - Delete operations must remove database rows and generated artifact files where
   applicable.
