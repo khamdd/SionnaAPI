@@ -44,6 +44,15 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 - Scene choosing now lives at `/choose-scene` as a full-page offline Vietnam map
   with a major-city dropdown, scene-name entry, area drawing, preview, and
   keep/load actions.
+- The frontend flow is scene-first: after login and from `/`, users land on
+  `/scenes`, choose Munich/imported scenes there, or use Create new scene to open
+  `/choose-scene`. Activating or creating a scene moves users into Network
+  Coverage with that scene as the shared simulation context.
+- Simulation/history routes are gated until the user explicitly chooses or
+  creates a work scene in the current session. The top navbar does not expose
+  Scenes as a normal tab; users return there from the username dropdown's Change
+  scene action, and direct simulation URLs redirect back to `/scenes` when no
+  work scene is selected.
 - Imported scene previews are limited by count and size, expire while still in
   preview status, and are cleaned up if not kept.
 - Imported scene bounds allow up to 5 km² and up to 5000 m width/height.

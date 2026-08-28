@@ -49,6 +49,10 @@ function clone(value) {
   return structuredClone(value);
 }
 
+const SCENE_SELECTION_ROUTE = "/scenes";
+const SCENE_CREATION_ROUTE = "/choose-scene";
+const SIMULATION_ENTRY_ROUTE = "/network";
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [route, setRoute] = useState(() => normalizeRoute(window.location.pathname));
@@ -81,6 +85,7 @@ export default function App() {
   const [hover, setHover] = useState(null);
   const [authStatus, setAuthStatus] = useState("checking");
   const [sceneAntennaOverrides, setSceneAntennaOverrides] = useState(() => new Map());
+  const [hasWorkScene, setHasWorkScene] = useState(false);
 
   const canvasRef = useRef(null);
   const mapStageRef = useRef(null);
@@ -91,6 +96,7 @@ export default function App() {
     localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(authResult.user));
     setCurrentUser(authResult.user);
     setAuthStatus("authenticated");
+    navigate(SCENE_SELECTION_ROUTE);
   }
 
   useEffect(() => {
@@ -119,6 +125,7 @@ export default function App() {
     localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
     setCurrentUser(null);
     setAuthStatus("unauthenticated");
+    setHasWorkScene(false);
   }
 
   const handleApiProgressChange = useCallback((active, label) => {
@@ -210,10 +217,16 @@ export default function App() {
       return;
     }
 
+    if (!hasWorkScene && isWorkSceneRequiredRoute(route)) {
+      setSceneNotice("Select or create a work scene before opening simulations.", true);
+      navigate(SCENE_SELECTION_ROUTE, { replace: true });
+      return;
+    }
+
     if (route === "/history") {
       loadHistory();
     }
-  }, [authStatus, route, loadHistory]);
+  }, [authStatus, hasWorkScene, route, loadHistory]);
 
   useEffect(() => {
     if(authStatus !== "authenticated") {
@@ -276,9 +289,18 @@ export default function App() {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [modalContent]);
 
-  function navigate(path) {
+  function navigate(path, options = {}) {
+    if (!options.allowWithoutWorkScene && !hasWorkScene && isWorkSceneRequiredRoute(path)) {
+      setSceneNotice("Select or create a work scene before opening simulations.", true);
+      path = SCENE_SELECTION_ROUTE;
+    }
+
     const nextRoute = normalizeRoute(path);
-    window.history.pushState({}, "", nextRoute);
+    if (options.replace) {
+      window.history.replaceState({}, "", nextRoute);
+    } else {
+      window.history.pushState({}, "", nextRoute);
+    }
     setRoute(nextRoute);
   }
 
@@ -378,15 +400,20 @@ export default function App() {
 
       if (importedCount >= maxScenes) {
         setSceneNotice(`Only ${maxScenes} imported scenes are allowed. Delete one before choosing a new scene.`, true);
-        navigate("/scenes");
+        navigate(SCENE_SELECTION_ROUTE);
         return;
       }
 
-      navigate("/choose-scene");
+      navigate(SCENE_CREATION_ROUTE);
     } catch (error) {
       setSceneNotice(`Failed to check scenes: ${error.message}`, true);
-      navigate("/scenes");
+      navigate(SCENE_SELECTION_ROUTE);
     }
+  }
+
+  function changeWorkScene() {
+    setHasWorkScene(false);
+    navigate(SCENE_SELECTION_ROUTE, { allowWithoutWorkScene: true });
   }
 
   function handleSceneActivated(scene, sceneAntennas = null) {
@@ -399,9 +426,10 @@ export default function App() {
     }
 
     setActiveScene(enrichScene(scene));
+    setHasWorkScene(true);
     setSceneNotice(`${scene.name} is now active.`);
     loadScenes().catch(() => {});
-    navigate("/network");
+    navigate(SIMULATION_ENTRY_ROUTE, { allowWithoutWorkScene: true });
   }
 
   function setSceneNotice(message, error = false) {
@@ -635,6 +663,9 @@ export default function App() {
       || (!modalContent && historyPreviewLoadCount > 0 ? "Loading history preview..." : "")
       || (isSceneLoading ? "Loading scene..." : "")
       || (isSceneListLoading ? "Loading scenes..." : "");
+  const visibleRoute = !hasWorkScene && isWorkSceneRequiredRoute(route)
+    ? SCENE_SELECTION_ROUTE
+    : route;
 
   if (authStatus === "checking") {
     return <p>Checking session...</p>
@@ -649,14 +680,15 @@ export default function App() {
       <Navbar
         activeScene={activeScene}
         currentUser={currentUser}
+        hasWorkScene={hasWorkScene}
         isBusy={Boolean(busyLabel)}
-        onChooseScene={chooseScene}
+        onChangeScene={changeWorkScene}
         onLogout={logout}
-        route={route}
+        route={visibleRoute}
         onNavigate={navigate}
       />
       <GlobalProgress active={Boolean(busyLabel)} label={busyLabel} />
-      {route === "/network" && (
+      {visibleRoute === "/network" && (
         <NetworkCoveragePage
           activeScene={activeScene}
           antennas={antennas}
@@ -679,14 +711,14 @@ export default function App() {
           summary={summary}
         />
       )}
-      {route === "/coverage" && (
+      {visibleRoute === "/coverage" && (
         <CoverageApiPage
           activeScene={activeScene}
           onProgressChange={handleApiProgressChange}
           onSceneLoadingChange={setIsSceneLoading}
         />
       )}
-      {route === "/rsrp" && (
+      {visibleRoute === "/rsrp" && (
         <RsrpSimulationPage
           activeScene={activeScene}
           antennas={antennas}
@@ -694,21 +726,21 @@ export default function App() {
           onSceneLoadingChange={setIsSceneLoading}
         />
       )}
-      {route === "/sinr" && (
+      {visibleRoute === "/sinr" && (
         <SinrApiPage
           activeScene={activeScene}
           onProgressChange={handleApiProgressChange}
           onSceneLoadingChange={setIsSceneLoading}
         />
       )}
-      {route === "/throughput" && (
+      {visibleRoute === "/throughput" && (
         <ThroughputApiPage
           activeScene={activeScene}
           onProgressChange={handleApiProgressChange}
           onSceneLoadingChange={setIsSceneLoading}
         />
       )}
-      {route === "/history" && (
+      {visibleRoute === "/history" && (
         <HistoryRoutePage
           comparisonType={comparisonType}
           historyError={historyError}
@@ -731,23 +763,24 @@ export default function App() {
           comparisonSceneName={comparisonSceneName}
         />
       )}
-      {route === "/scenes" && (
+      {visibleRoute === "/scenes" && (
         <ScenesPage
-          activeSceneId={activeScene?.id}
+          activeSceneId={hasWorkScene ? activeScene?.id : null}
           isLoading={isSceneListLoading || isSceneLoading}
           notice={sceneNotice}
+          onCreateScene={chooseScene}
           onRefresh={loadScenes}
           onSceneActivated={handleSceneActivated}
           onSetNotice={setSceneNotice}
           scenes={scenes}
         />
       )}
-      {route === "/choose-scene" && (
+      {visibleRoute === SCENE_CREATION_ROUTE && (
         <SceneChooserPage
-          onCancel={() => navigate("/scenes")}
+          onCancel={() => navigate(SCENE_SELECTION_ROUTE)}
           onLimitReached={(message) => {
             setSceneNotice(message, true);
-            navigate("/scenes");
+            navigate(SCENE_SELECTION_ROUTE);
           }}
           onSceneActivated={handleSceneActivated}
         />
@@ -766,42 +799,54 @@ export default function App() {
 }
 
 function Navbar({
-  activeScene,
   currentUser,
+  hasWorkScene,
   isBusy,
-  onChooseScene,
+  onChangeScene,
   onLogout,
   onNavigate,
   route,
 }) {
+  const visibleRoutes = hasWorkScene
+    ? ROUTES.filter((item) => item.path !== SCENE_SELECTION_ROUTE)
+    : [];
+
   return (
     <header className="app-navbar">
       <div>
         <strong>Sionna Planner</strong>
-        <span>Scene: {activeScene?.name || "Loading..."}</span>
       </div>
       <nav aria-label="Primary navigation">
-        {ROUTES.map((item) => {
-          const isSceneChooser = item.path === "/choose-scene";
-
+        {visibleRoutes.map((item) => {
           return (
             <button
               key={item.path}
-              className={[
-                route === item.path ? "active" : "",
-                isSceneChooser ? "scene-picker-button" : "",
-              ].filter(Boolean).join(" ")}
+              className={route === item.path ? "active" : ""}
               type="button"
               disabled={isBusy}
-              onClick={() => (isSceneChooser ? onChooseScene() : onNavigate(item.path))}
+              onClick={() => onNavigate(item.path)}
             >
               {item.label}
             </button>
           );
         })}
-        <button className="logout-button" type="button" onClick={onLogout}>
-          {currentUser?.username || "Logout"} | Logout
-        </button>
+        <div className="user-menu">
+          <button className="user-menu-trigger" type="button">
+            {currentUser?.username || "User"}
+          </button>
+          <div className="user-menu-panel">
+            <button
+              type="button"
+              disabled={isBusy}
+              onClick={onChangeScene}
+            >
+              Change scene
+            </button>
+            <button type="button" onClick={onLogout}>
+              Logout
+            </button>
+          </div>
+        </div>
       </nav>
     </header>
   );
@@ -1014,12 +1059,16 @@ async function loadComparisonDetails(selectedIds, cachedDetails) {
 
 function normalizeRoute(pathname) {
   if (pathname === "/") {
-    return "/network";
+    return SCENE_SELECTION_ROUTE;
   }
 
-  return ROUTES.some((item) => item.path === pathname)
+  return ROUTES.some((item) => item.path === pathname) || pathname === SCENE_CREATION_ROUTE
     ? pathname
-    : "/network";
+    : SCENE_SELECTION_ROUTE;
+}
+
+function isWorkSceneRequiredRoute(pathname) {
+  return pathname !== SCENE_SELECTION_ROUTE && pathname !== SCENE_CREATION_ROUTE;
 }
 
 function enrichScene(scene) {

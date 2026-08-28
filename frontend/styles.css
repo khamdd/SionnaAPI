@@ -103,6 +103,53 @@ button.hidden,
   color: #b42318;
 }
 
+.user-menu {
+  position: relative;
+  padding-bottom: 6px;
+  margin-bottom: -6px;
+}
+
+.app-navbar .user-menu-trigger {
+  min-width: 96px;
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.user-menu-panel {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 30;
+  display: none;
+  min-width: 150px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.14);
+  padding: 5px;
+}
+
+.user-menu:hover .user-menu-panel,
+.user-menu:focus-within .user-menu-panel {
+  display: grid;
+  gap: 4px;
+}
+
+.app-navbar .user-menu-panel button {
+  width: 100%;
+  justify-content: flex-start;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.app-navbar .user-menu-panel button:hover:not(:disabled),
+.app-navbar .user-menu-panel button:focus-visible {
+  background: var(--surface-2);
+}
+
 .login-page {
   display: grid;
   min-height: 100vh;
@@ -271,6 +318,13 @@ button.hidden,
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
+}
+
+.page-title-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .page-title p {

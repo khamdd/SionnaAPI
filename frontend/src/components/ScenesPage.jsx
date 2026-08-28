@@ -8,6 +8,7 @@ export default function ScenesPage({
   activeSceneId,
   isLoading,
   notice,
+  onCreateScene,
   onRefresh,
   onSceneActivated,
   onSetNotice,
@@ -55,12 +56,17 @@ export default function ScenesPage({
     <main className="route-page">
       <div className="page-title with-action">
         <div>
-          <h1>Scenes</h1>
-          <p>Manage imported scenes. Munich is always available as the default scene.</p>
+          <h1>Select Work Scene</h1>
+          <p>Choose the 3D scene used by Network Coverage, RSRP, SINR, throughput, and history workflows.</p>
         </div>
-        <button className="ghost-button" type="button" disabled={isLoading} onClick={onRefresh}>
-          Refresh
-        </button>
+        <div className="page-title-actions">
+          <button className="primary-button" type="button" disabled={isLoading} onClick={onCreateScene}>
+            Create new scene
+          </button>
+          <button className="ghost-button" type="button" disabled={isLoading} onClick={onRefresh}>
+            Refresh
+          </button>
+        </div>
       </div>
 
       {notice?.message && (
@@ -90,7 +96,7 @@ export default function ScenesPage({
               <div className="scene-card-body">
                 <div>
                   <h2>{scene.name}</h2>
-                  <p>{isActive ? "Active scene" : scene.is_default ? "Default scene" : "Imported scene"}</p>
+                  <p>{isActive ? "Current work scene" : scene.is_default ? "Default scene" : "Imported scene"}</p>
                 </div>
                 <dl>
                   <dt>Status</dt><dd>{scene.status}</dd>
@@ -105,7 +111,7 @@ export default function ScenesPage({
                     disabled={isActive || isLoading}
                     onClick={() => loadScene(scene)}
                   >
-                    Load
+                    Use scene
                   </button>
                   <button
                     className="history-delete"
