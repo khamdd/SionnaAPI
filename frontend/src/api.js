@@ -110,8 +110,16 @@ export function loginUser(payload) {
   });
 }
 
-export function listSimulationRuns(limit = 25) {
-  return requestJson(`/api/v1/simulation-runs?limit=${limit}`);
+export function listSimulationRuns(limit = 25, sceneId = "") {
+  const params = new URLSearchParams({
+    limit: String(limit),
+  });
+
+  if (sceneId) {
+    params.set("scene_id", sceneId);
+  }
+
+  return requestJson(`/api/v1/simulation-runs?${params.toString()}`);
 }
 
 export function getSimulationRun(runId) {

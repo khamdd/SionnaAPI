@@ -38,7 +38,8 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   Heavy grid/user results are summarized in PostgreSQL and written as JSON files
   under `static/simulation-results/`.
 - History UI supports viewing details, preview loading state, deleting one or
-  many saved runs, and comparing compatible successful runs.
+  many saved runs, and comparing compatible successful runs. The history list is
+  scoped to the currently selected work scene.
 - Scene management supports listing, previewing, activating, and deleting
   imported scenes. There is no built-in default scene.
 - Scene choosing now lives at `/choose-scene` as a full-page offline Vietnam map

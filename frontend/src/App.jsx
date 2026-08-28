@@ -51,6 +51,7 @@ function clone(value) {
 const SCENE_SELECTION_ROUTE = "/scenes";
 const SCENE_CREATION_ROUTE = "/choose-scene";
 const SIMULATION_ENTRY_ROUTE = "/network";
+const HISTORY_PAGE_LIMIT = 200;
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -136,12 +137,30 @@ export default function App() {
   }, []);
 
   const loadHistory = useCallback(async () => {
+    const sceneId = activeScene?.id;
+    const sceneName = activeScene?.name || "selected scene";
+
+    if (!sceneId) {
+      setLatestHistory([]);
+      setSelectedHistoryId(null);
+      setSelectedHistoryDeleteIds(new Set());
+      setSelectedComparisonIds(new Set());
+      setComparisonDetails(new Map());
+      setComparisonType(null);
+      setComparisonSceneId(null);
+      setComparisonSceneName(null);
+      setModalContent(null);
+      setHistoryStatus("Select a work scene to view history.");
+      setHistoryError(true);
+      return;
+    }
+
     setHistoryProgressLabel("Loading history...");
-    setHistoryStatus("Loading history...");
+    setHistoryStatus(`Loading history for ${sceneName}...`);
     setHistoryError(false);
 
     try {
-      const result = await listSimulationRuns(25);
+      const result = await listSimulationRuns(HISTORY_PAGE_LIMIT, sceneId);
 
       if (!result.database_configured) {
         setLatestHistory([]);
@@ -158,12 +177,12 @@ export default function App() {
         throw new Error(result.error);
       }
 
-      const items = result.items || [];
+      const items = (result.items || []).filter((item) => item.scene_id === sceneId);
       setLatestHistory(items);
       setSelectedHistoryDeleteIds((current) => new Set(
         [...current].filter((id) => items.some((item) => item.id === id)),
       ));
-      setHistoryStatus(items.length ? `${items.length} saved simulations` : "No saved simulations yet.");
+      setHistoryStatus(items.length ? `${items.length} saved simulations for ${sceneName}` : `No saved simulations for ${sceneName}.`);
       setSelectedComparisonIds((current) => (
         pruneComparisonSelection(current, items, comparisonType, comparisonSceneId)
       ));
@@ -174,7 +193,7 @@ export default function App() {
     } finally {
       setHistoryProgressLabel("");
     }
-  }, [comparisonSceneId, comparisonType]);
+  }, [activeScene?.id, activeScene?.name, comparisonSceneId, comparisonType]);
 
   const loadScenes = useCallback(async (options = {}) => {
     const syncActiveScene = options.syncActiveScene ?? hasWorkScene;
@@ -251,6 +270,20 @@ export default function App() {
     setRunStatus("Ready");
     setRunError(false);
   }, [activeScene?.id, sceneAntennaOverrides]);
+
+  useEffect(() => {
+    setLatestHistory([]);
+    setSelectedHistoryId(null);
+    setSelectedHistoryDeleteIds(new Set());
+    setSelectedComparisonIds(new Set());
+    setComparisonDetails(new Map());
+    setComparisonType(null);
+    setComparisonSceneId(null);
+    setComparisonSceneName(null);
+    setModalContent(null);
+    setHistoryStatus(activeScene ? `History is scoped to ${activeScene.name}.` : "Select a work scene to view history.");
+    setHistoryError(!activeScene);
+  }, [activeScene?.id]);
 
   useEffect(() => {
     if (comparisonType && selectedComparisonIds.size === 0) {
@@ -757,6 +790,7 @@ export default function App() {
       )}
       {visibleRoute === "/history" && (
         <HistoryRoutePage
+          activeScene={activeScene}
           comparisonType={comparisonType}
           historyError={historyError}
           historyStatus={historyStatus}
@@ -956,6 +990,7 @@ function NetworkCoveragePage({
 }
 
 function HistoryRoutePage({
+  activeScene,
   comparisonSceneId,
   comparisonSceneName,
   comparisonType,
@@ -981,7 +1016,7 @@ function HistoryRoutePage({
       <div className="page-title with-action">
         <div>
           <h1>Simulation History</h1>
-          <p>Review saved simulation runs, compare matching successful runs, or delete old records.</p>
+          <p>Showing saved simulation runs for {activeScene?.name || "the selected scene"} only.</p>
         </div>
         <button className="ghost-button" type="button" disabled={isLoading} onClick={onRefresh}>
           Refresh

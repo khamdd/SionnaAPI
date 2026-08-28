@@ -444,8 +444,8 @@ def simulation_job_detail(job_id: str):
 
 
 @router.get("/simulation-runs")
-def simulation_runs(limit: int = 25):
-    return list_simulation_runs(limit=limit)
+def simulation_runs(limit: int = 25, scene_id: str | None = None):
+    return list_simulation_runs(limit=limit, scene_id=scene_id)
 
 
 @router.get("/simulation-runs/{run_id}/result")

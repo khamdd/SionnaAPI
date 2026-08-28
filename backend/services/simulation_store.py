@@ -79,7 +79,7 @@ def store_simulation_result(
         return None
 
 
-def list_simulation_runs(limit=25):
+def list_simulation_runs(limit=25, scene_id=None):
     if not is_database_configured():
         return {
             "database_configured": False,
@@ -88,8 +88,12 @@ def list_simulation_runs(limit=25):
 
     try:
         with db_session() as session:
+            query = select(SimulationRun)
+            if scene_id:
+                query = query.where(SimulationRun.scene_id == scene_id)
+
             rows = session.scalars(
-                select(SimulationRun)
+                query
                 .order_by(SimulationRun.created_at.desc())
                 .limit(limit)
             )
