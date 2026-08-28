@@ -170,8 +170,11 @@ def execute_simulation(simulation_type, req, scene, base_url):
 
 
 def get_worker_scene(scene_info):
-    scene_id = scene_info.get("id") or "munich"
+    scene_id = scene_info.get("id")
     scene_path = scene_info.get("scene_path")
+    if not scene_id or not scene_path:
+        raise ValueError("No active scene is selected.")
+
     cache_key = (scene_id, scene_path)
 
     if cache_key not in _scene_cache:
@@ -182,11 +185,12 @@ def get_worker_scene(scene_info):
 
 
 def load_scene(scene_path):
-    import sionna
     from sionna.rt import load_scene as sionna_load_scene
 
-    scene_source = scene_path or sionna.rt.scene.munich
-    return sionna_load_scene(scene_source, merge_shapes=True)
+    if not scene_path:
+        raise ValueError("No active scene is selected.")
+
+    return sionna_load_scene(scene_path, merge_shapes=True)
 
 
 def is_failure_result(result):

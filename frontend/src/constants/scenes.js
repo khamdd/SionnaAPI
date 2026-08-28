@@ -1,15 +1,3 @@
-export const DEFAULT_ACTIVE_SCENE = {
-  id: "munich",
-  name: "Munich",
-  is_default: true,
-  bounds: {
-    south: 48.1344,
-    west: 11.5715,
-    north: 48.1404,
-    east: 11.5795,
-  },
-};
-
 export const SCENE_CHOOSER_DEFAULT_CENTER = [21.0278, 105.8342];
 export const SCENE_CHOOSER_DEFAULT_ZOOM = 15;
 export const MAX_SCENE_AREA_KM2 = 5;

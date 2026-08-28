@@ -22,9 +22,7 @@ from backend.constants.radio import (
     OVERLAP_NORMAL_COUNT,
 )
 from backend.constants.scenes import (
-    DEFAULT_SCENE_BOUNDS,
-    DEFAULT_SCENE_ID,
-    DEFAULT_SCENE_NAME,
+    LEGACY_MUNICH_SCENE_ID,
     MAX_IMPORTED_SCENES,
     MAX_SCENE_AREA_KM2,
     MAX_SCENE_SIDE_M,

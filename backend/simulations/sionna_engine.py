@@ -1,6 +1,5 @@
 import threading
 
-from backend.constants import DEFAULT_SCENE_ID, DEFAULT_SCENE_NAME
 from backend.services.scene_service import (
     get_active_scene,
 )
@@ -9,8 +8,8 @@ from backend.services.scene_service import (
 class SionnaEngine:
     def __init__(self):
         self._scene = None
-        self._scene_id = DEFAULT_SCENE_ID
-        self._scene_name = DEFAULT_SCENE_NAME
+        self._scene_id = None
+        self._scene_name = None
         self._scene_path = None
         self._scene_bounds = None
         self._scene_metrics = None
@@ -62,8 +61,21 @@ class SionnaEngine:
             self._scene_metrics = next_scene_metrics
             self._active_scene_synced = True
 
+    def clear_active_scene(self):
+        with self.lock:
+            self._scene = None
+            self._scene_id = None
+            self._scene_name = None
+            self._scene_path = None
+            self._scene_bounds = None
+            self._scene_metrics = None
+            self._active_scene_synced = True
+
     def _sync_active_scene(self):
         active_scene = get_active_scene()
+        if str(active_scene.get("status", "")).lower().startswith("failure"):
+            raise RuntimeError(active_scene.get("error") or "No active scene is selected.")
+
         self._scene_id = active_scene["id"]
         self._scene_name = active_scene["name"]
         self._scene_path = active_scene.get("scene_path")
@@ -72,12 +84,12 @@ class SionnaEngine:
         self._active_scene_synced = True
 
     def _load_scene(self):
-        import sionna
         from sionna.rt import load_scene
 
-        scene_source = self._scene_path or sionna.rt.scene.munich
+        if not self._scene_path:
+            raise RuntimeError("No active scene is selected.")
 
-        return load_scene(scene_source, merge_shapes=True)
+        return load_scene(self._scene_path, merge_shapes=True)
 
 
 engine = SionnaEngine()

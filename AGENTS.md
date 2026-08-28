@@ -39,15 +39,16 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   under `static/simulation-results/`.
 - History UI supports viewing details, preview loading state, deleting one or
   many saved runs, and comparing compatible successful runs.
-- Scene management supports listing, previewing, activating, deleting imported
-  scenes, and keeping the default Munich scene.
+- Scene management supports listing, previewing, activating, and deleting
+  imported scenes. There is no built-in default scene.
 - Scene choosing now lives at `/choose-scene` as a full-page offline Vietnam map
   with a major-city dropdown, scene-name entry, area drawing, preview, and
   keep/load actions.
 - The frontend flow is scene-first: after login and from `/`, users land on
-  `/scenes`, choose Munich/imported scenes there, or use Create new scene to open
+  `/scenes`, choose an imported scene there, or use Create new scene to open
   `/choose-scene`. Activating or creating a scene moves users into Network
-  Coverage with that scene as the shared simulation context.
+  Coverage with that scene as the shared simulation context. If no scenes exist,
+  the selector shows "No scene found."
 - Simulation/history routes are gated until the user explicitly chooses or
   creates a work scene in the current session. The top navbar does not expose
   Scenes as a normal tab; users return there from the username dropdown's Change
@@ -56,10 +57,9 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 - The Change scene action asks for confirmation, then clears the frontend work
   scene state before returning to `/scenes`.
 - Imported scenes can be deleted from the scene selector even if the persisted
-  registry still marks them active from an older session; deletion resets the
-  backend active scene back to Munich. The frontend scene selector also retries
-  deletion by activating Munich first if an older backend responds that the scene
-  is active.
+  registry still marks them active from an older session; deletion clears the
+  backend active scene. Legacy Munich/default scene entries are removed when the
+  scene registry is loaded.
 - Imported scene previews are limited by count and size, expire while still in
   preview status, and are cleaned up if not kept.
 - Imported scene bounds allow up to 5 km² and up to 5000 m width/height.

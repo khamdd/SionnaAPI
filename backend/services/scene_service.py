@@ -7,8 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from backend.constants import (
-    DEFAULT_SCENE_ID,
-    DEFAULT_SCENE_NAME,
+    LEGACY_MUNICH_SCENE_ID,
     MAX_IMPORTED_SCENES,
     MAX_SCENE_AREA_KM2,
     MAX_SCENE_SIDE_M,
@@ -36,11 +35,11 @@ def list_scenes():
             for scene in registry["scenes"]
         ]
 
-        active_scene_id = registry.get("active_scene_id") or DEFAULT_SCENE_ID
+        active_scene_id = registry.get("active_scene_id")
 
         return {
             "active_scene_id": active_scene_id,
-            "active_scene": find_scene(registry, active_scene_id),
+            "active_scene": serialize_scene(find_scene(registry, active_scene_id)),
             "max_imported_scenes": MAX_IMPORTED_SCENES,
             "imported_scene_count": count_imported_scenes(registry),
             "scenes": scenes,
@@ -51,11 +50,15 @@ def get_active_scene():
     with _lock:
         registry = load_registry()
         cleanup_expired_preview_scenes(registry)
-        active_scene_id = registry.get("active_scene_id") or DEFAULT_SCENE_ID
+        active_scene_id = registry.get("active_scene_id")
         scene = find_scene(registry, active_scene_id)
 
         if scene is None:
-            scene = default_scene()
+            return {
+                "status": "failure",
+                "status_code": 404,
+                "error": "No active scene is selected.",
+            }
 
         return serialize_scene(scene)
 
@@ -161,7 +164,7 @@ def delete_scene(scene_id):
     with _lock:
         registry = load_registry()
         cleanup_expired_preview_scenes(registry)
-        active_scene_id = registry.get("active_scene_id") or DEFAULT_SCENE_ID
+        active_scene_id = registry.get("active_scene_id")
         scene = find_scene(registry, scene_id)
 
         if scene is None:
@@ -169,13 +172,6 @@ def delete_scene(scene_id):
                 "status": "failure",
                 "status_code": 404,
                 "error": "Scene not found.",
-            }
-
-        if scene.get("is_default"):
-            return {
-                "status": "failure",
-                "status_code": 400,
-                "error": "The default Munich scene cannot be deleted.",
             }
 
         database_result = mark_scene_reference_deleted(scene_id)
@@ -189,11 +185,11 @@ def delete_scene(scene_id):
         registry["scenes"] = [
             item
             for item in registry["scenes"]
-                if item.get("id") != scene_id
+            if item.get("id") != scene_id
         ]
         active_scene_reset = scene_id == active_scene_id
         if active_scene_reset:
-            registry["active_scene_id"] = DEFAULT_SCENE_ID
+            registry["active_scene_id"] = None
         save_registry(registry)
         delete_scene_files(scene_id)
 
@@ -237,11 +233,11 @@ def load_registry():
         registry = json.loads(SCENE_REGISTRY_PATH.read_text(encoding="utf-8"))
     else:
         registry = {
-            "active_scene_id": DEFAULT_SCENE_ID,
+            "active_scene_id": None,
             "scenes": [],
         }
 
-    ensure_default_scene(registry)
+    normalize_scene_registry(registry)
     return registry
 
 
@@ -253,28 +249,17 @@ def save_registry(registry):
     )
 
 
-def ensure_default_scene(registry):
+def normalize_scene_registry(registry):
     scenes = registry.setdefault("scenes", [])
+    registry["scenes"] = [
+        scene
+        for scene in scenes
+        if scene.get("id") != LEGACY_MUNICH_SCENE_ID and not scene.get("is_default")
+    ]
 
-    if find_scene(registry, DEFAULT_SCENE_ID) is None:
-        scenes.insert(0, default_scene())
-
-    if not registry.get("active_scene_id"):
-        registry["active_scene_id"] = DEFAULT_SCENE_ID
-
-
-def default_scene():
-    return {
-        "id": DEFAULT_SCENE_ID,
-        "name": DEFAULT_SCENE_NAME,
-        "status": "ready",
-        "is_default": True,
-        "bounds": None,
-        "metrics": None,
-        "scene_path": None,
-        "preview_url": None,
-        "created_at": None,
-    }
+    active_scene_id = registry.get("active_scene_id")
+    if active_scene_id == LEGACY_MUNICH_SCENE_ID or find_scene(registry, active_scene_id) is None:
+        registry["active_scene_id"] = None
 
 
 def find_scene(registry, scene_id):
@@ -297,7 +282,7 @@ def cleanup_expired_preview_scenes(registry):
     scenes = registry.get("scenes", [])
     kept_scenes = []
     expired_scene_ids = []
-    active_scene_id = registry.get("active_scene_id") or DEFAULT_SCENE_ID
+    active_scene_id = registry.get("active_scene_id")
     now = utc_now()
 
     for scene in scenes:

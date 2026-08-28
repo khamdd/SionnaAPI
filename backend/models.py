@@ -106,7 +106,6 @@ class SimulationRun(Base):
     )
     scene_id: Mapped[str] = mapped_column(
         ForeignKey("scenes.id", ondelete="RESTRICT"),
-        default="munich",
     )
 
     antennas: Mapped[list["SimulationRunAntenna"]] = relationship(

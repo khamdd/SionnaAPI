@@ -1,14 +1,7 @@
 import os 
 from pathlib import Path
 
-DEFAULT_SCENE_ID = "munich"
-DEFAULT_SCENE_NAME = "Munich"
-DEFAULT_SCENE_BOUNDS = {
-    "south": 48.1344,
-    "west": 11.5715,
-    "north": 48.1404,
-    "east": 11.5795,
-}
+LEGACY_MUNICH_SCENE_ID = "munich"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 OFFLINE_BUILDINGS_DIR = Path(

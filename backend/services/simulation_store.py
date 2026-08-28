@@ -10,9 +10,6 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
 
 from backend.constants import (
-    DEFAULT_SCENE_BOUNDS,
-    DEFAULT_SCENE_ID,
-    DEFAULT_SCENE_NAME,
     SCENE_REGISTRY_PATH,
     STATIC_DIR,
 )
@@ -338,10 +335,11 @@ def ensure_scene_reference(session, scene_info=None):
     if not inspect(session.bind).has_table(Scene.__tablename__):
         return
 
-    scene_id = scene_info.get("id", DEFAULT_SCENE_ID)
-    scene_name = scene_info.get("name") or (
-        DEFAULT_SCENE_NAME if scene_id == DEFAULT_SCENE_ID else scene_id
-    )
+    scene_id = scene_info.get("id")
+    if not scene_id:
+        raise ValueError("Simulation results require an active scene.")
+
+    scene_name = scene_info.get("name") or scene_id
 
     statement = insert(Scene).values(id=scene_id, name=scene_name)
     session.execute(
@@ -403,7 +401,7 @@ def insert_simulation_run(
         simulation_type=simulation_type,
         status=status,
         transmitter_pattern=req.transmitter_pattern,
-        scene_id=scene_info.get("id", DEFAULT_SCENE_ID),
+        scene_id=require_scene_id(scene_info),
         max_depth=solver.max_depth,
         samples_per_tx=solver.samples_per_tx,
         cell_size_m=solver.cell_size,
@@ -772,8 +770,8 @@ def sanitize_json_value(value):
 
 def resolve_scene_info(scene_id):
     fallback = {
-        "name": DEFAULT_SCENE_NAME if scene_id == DEFAULT_SCENE_ID else scene_id,
-        "bounds": DEFAULT_SCENE_BOUNDS if scene_id == DEFAULT_SCENE_ID else None,
+        "name": scene_id,
+        "bounds": None,
     }
 
     if not scene_id or not SCENE_REGISTRY_PATH.exists():
@@ -792,3 +790,11 @@ def resolve_scene_info(scene_id):
             }
 
     return fallback
+
+
+def require_scene_id(scene_info):
+    scene_id = (scene_info or {}).get("id")
+    if not scene_id:
+        raise ValueError("Simulation results require an active scene.")
+
+    return scene_id

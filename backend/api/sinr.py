@@ -337,12 +337,38 @@ def get_engine_scene_info():
     get_active_scene_info = getattr(engine, "get_active_scene_info", None)
 
     if get_active_scene_info is None:
-        return {
-            "id": "munich",
-            "name": "Munich",
-        }
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "status": "failure",
+                "status_code": 400,
+                "error": "No active scene is selected.",
+            },
+        )
 
-    return get_active_scene_info()
+    try:
+        scene_info = get_active_scene_info()
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "status": "failure",
+                "status_code": 400,
+                "error": str(exc),
+            },
+        ) from exc
+
+    if not scene_info.get("id") or not scene_info.get("scene_path"):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "status": "failure",
+                "status_code": 400,
+                "error": "No active scene is selected.",
+            },
+        )
+
+    return scene_info
 
 
 @router.post("/coverage-map")
@@ -515,7 +541,7 @@ def scenes():
 
 @router.get("/scenes/active")
 def active_scene():
-    return get_active_scene()
+    return return_or_raise(get_active_scene())
 
 
 @router.post("/scenes/preview")
@@ -621,7 +647,8 @@ def delete_scene_route(scene_id: str):
     )
 
     if result.get("active_scene_reset"):
-        with engine.lock:
-            engine.set_active_scene(get_active_scene())
+        clear_active_scene = getattr(engine, "clear_active_scene", None)
+        if clear_active_scene is not None:
+            clear_active_scene()
 
     return return_or_raise(result)

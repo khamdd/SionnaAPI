@@ -19,12 +19,24 @@ class FakeEngine:
     def get_scene(self):
         return self.scene
 
+    def get_active_scene_info(self):
+        return {
+            "id": "test-scene",
+            "name": "Test scene",
+            "scene_path": "static/scenes/test-scene/runtime_scene/osm_scene.xml",
+            "metrics": {
+                "width_m": 300.0,
+                "height_m": 300.0,
+            },
+        }
+
 
 class FakeMetricEngine(FakeEngine):
     def get_active_scene_info(self):
         return {
             "id": "hcm",
             "name": "Ho Chi Minh",
+            "scene_path": "static/scenes/hcm/runtime_scene/osm_scene.xml",
             "metrics": {
                 "width_m": 814.2,
                 "height_m": 626.5,
@@ -307,7 +319,7 @@ def test_simulation_success_logs_started_and_completed(monkeypatch):
     ]
     assert events[1][1] == "INFO"
     assert events[1][2]["simulation_type"] == "sinr"
-    assert events[1][2]["scene_id"] == "munich"
+    assert events[1][2]["scene_id"] == "test-scene"
     assert events[1][2]["status"] == "success"
     assert "duration_ms" in events[1][2]
     assert "request" not in events[1][2]
@@ -391,7 +403,7 @@ def test_simulation_request_queues_job_when_database_is_configured(monkeypatch):
         "simulation_type": "sinr",
     }
     assert created_jobs[0]["simulation_type"] == "sinr"
-    assert created_jobs[0]["scene_info"]["id"] == "munich"
+    assert created_jobs[0]["scene_info"]["id"] == "test-scene"
 
 
 def test_simulation_job_detail_returns_404_for_missing_job(monkeypatch):

@@ -9,7 +9,6 @@ import {
 } from "./api";
 import {
   DEFAULT_ANTENNAS,
-  DEFAULT_ACTIVE_SCENE,
   DEFAULT_SOLVER,
   ROUTES,
   TRANSMITTER_PATTERN,
@@ -184,17 +183,15 @@ export default function App() {
     try {
       const result = await listScenes();
       const nextScenes = (result.scenes || []).map(enrichScene);
-      const nextActiveScene = enrichScene(
-        result.active_scene || {
-          id: result.active_scene_id || DEFAULT_ACTIVE_SCENE.id,
-          name: DEFAULT_ACTIVE_SCENE.name,
-        },
-      );
+      const nextActiveScene = result.active_scene ? enrichScene(result.active_scene) : null;
 
       setScenes(nextScenes);
       if (syncActiveScene) {
         setActiveScene(nextActiveScene);
-        setLatestSolver(solverForScene(nextActiveScene));
+        setLatestSolver(nextActiveScene ? solverForScene(nextActiveScene) : clone(DEFAULT_SOLVER));
+        if (!nextActiveScene) {
+          setHasWorkScene(false);
+        }
       }
       return {
         ...result,
@@ -237,9 +234,6 @@ export default function App() {
     }
 
     loadScenes().catch((error) => {
-      if (hasWorkScene) {
-        setActiveScene(clone(DEFAULT_ACTIVE_SCENE));
-      }
       setSceneNotice(`Failed to load scenes: ${error.message}`, true);
     });
   }, [authStatus, hasWorkScene, loadScenes]);
@@ -1093,18 +1087,6 @@ function isWorkSceneRequiredRoute(pathname) {
 }
 
 function enrichScene(scene) {
-  if (!scene) {
-    return clone(DEFAULT_ACTIVE_SCENE);
-  }
-
-  if (scene.id === DEFAULT_ACTIVE_SCENE.id && !scene.bounds) {
-    return {
-      ...DEFAULT_ACTIVE_SCENE,
-      ...scene,
-      bounds: DEFAULT_ACTIVE_SCENE.bounds,
-    };
-  }
-
   return scene;
 }
 

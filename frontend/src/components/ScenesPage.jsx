@@ -1,5 +1,5 @@
 import { activateScene, deleteScene } from "../api";
-import { DEFAULT_ACTIVE_SCENE, SCENE_CARD_PREVIEW_PADDING } from "../constants";
+import { SCENE_CARD_PREVIEW_PADDING } from "../constants";
 import { formatDateTime, formatMaybeNumber } from "../utils/format";
 import { TrashIcon } from "./Icons";
 import SceneMapPreview from "./SceneMapPreview";
@@ -44,7 +44,7 @@ export default function ScenesPage({
     onSetNotice("Deleting scene...");
 
     try {
-      await deleteSceneFromSelector(scene.id);
+      await deleteScene(scene.id);
       await onRefresh();
       onSetNotice(`Deleted ${scene.name}.`);
     } catch (error) {
@@ -74,9 +74,13 @@ export default function ScenesPage({
       )}
 
       <section className="scene-list">
+        {scenes.length === 0 && (
+          <div className="scene-empty-state">
+            No scene found
+          </div>
+        )}
         {scenes.map((scene) => {
           const isActive = scene.id === activeSceneId;
-          const canDelete = !scene.is_default;
           const metrics = scene.metrics || {};
 
           return (
@@ -90,13 +94,13 @@ export default function ScenesPage({
                     padding={SCENE_CARD_PREVIEW_PADDING}
                   />
                 ) : (
-                  <div className="munich-preview">Munich</div>
+                  <div className="scene-preview-placeholder">No preview</div>
                 )}
               </div>
               <div className="scene-card-body">
                 <div>
                   <h2>{scene.name}</h2>
-                  <p>{isActive ? "Current work scene" : scene.is_default ? "Default scene" : "Imported scene"}</p>
+                  <p>{isActive ? "Current work scene" : "Imported scene"}</p>
                 </div>
                 <dl>
                   <dt>Status</dt><dd>{scene.status}</dd>
@@ -116,8 +120,8 @@ export default function ScenesPage({
                   <button
                     className="history-delete"
                     type="button"
-                    disabled={!canDelete || isLoading}
-                    title={canDelete ? "Delete scene" : "The default Munich scene cannot be deleted"}
+                    disabled={isLoading}
+                    title="Delete scene"
                     onClick={() => removeScene(scene)}
                   >
                     <TrashIcon />
@@ -130,17 +134,4 @@ export default function ScenesPage({
       </section>
     </main>
   );
-}
-
-async function deleteSceneFromSelector(sceneId) {
-  try {
-    return await deleteScene(sceneId);
-  } catch (error) {
-    if (!/active scene cannot be deleted/i.test(error.message || "")) {
-      throw error;
-    }
-
-    await activateScene(DEFAULT_ACTIVE_SCENE.id);
-    return deleteScene(sceneId);
-  }
 }

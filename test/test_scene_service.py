@@ -17,6 +17,31 @@ def make_request():
     )
 
 
+def test_empty_registry_has_no_default_scene(tmp_path, monkeypatch):
+    scene_root = tmp_path / "scenes"
+    monkeypatch.setattr(scene_service, "SCENE_ROOT", scene_root)
+    monkeypatch.setattr(scene_service, "SCENE_REGISTRY_PATH", scene_root / "scenes.json")
+
+    result = scene_service.list_scenes()
+
+    assert result["active_scene_id"] is None
+    assert result["active_scene"] is None
+    assert result["scenes"] == []
+    assert result["imported_scene_count"] == 0
+
+
+def test_get_active_scene_fails_when_no_scene_is_selected(tmp_path, monkeypatch):
+    scene_root = tmp_path / "scenes"
+    monkeypatch.setattr(scene_service, "SCENE_ROOT", scene_root)
+    monkeypatch.setattr(scene_service, "SCENE_REGISTRY_PATH", scene_root / "scenes.json")
+
+    result = scene_service.get_active_scene()
+
+    assert result["status"] == "failure"
+    assert result["status_code"] == 404
+    assert result["error"] == "No active scene is selected."
+
+
 def test_create_scene_preview_registers_generated_osm_scene(tmp_path, monkeypatch):
     scene_root = tmp_path / "scenes"
     monkeypatch.setattr(scene_service, "SCENE_ROOT", scene_root)
@@ -71,7 +96,7 @@ def test_expired_preview_scenes_are_removed_from_registry_and_disk(tmp_path, mon
     registry_path.write_text(
         json.dumps(
             {
-                "active_scene_id": "munich",
+                "active_scene_id": None,
                 "scenes": [
                     {
                         "id": "expired-preview",
@@ -108,6 +133,42 @@ def test_expired_preview_scenes_are_removed_from_registry_and_disk(tmp_path, mon
     assert fresh_path.exists()
 
 
+def test_legacy_munich_scene_is_removed_from_registry(tmp_path, monkeypatch):
+    scene_root = tmp_path / "scenes"
+    registry_path = scene_root / "scenes.json"
+    scene_root.mkdir(parents=True)
+    registry_path.write_text(
+        json.dumps(
+            {
+                "active_scene_id": "munich",
+                "scenes": [
+                    {
+                        "id": "munich",
+                        "name": "Munich",
+                        "status": "ready",
+                        "is_default": True,
+                    },
+                    {
+                        "id": "scene-1",
+                        "name": "Imported scene",
+                        "status": "ready",
+                        "is_default": False,
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(scene_service, "SCENE_ROOT", scene_root)
+    monkeypatch.setattr(scene_service, "SCENE_REGISTRY_PATH", registry_path)
+
+    result = scene_service.list_scenes()
+
+    assert result["active_scene_id"] is None
+    assert [scene["id"] for scene in result["scenes"]] == ["scene-1"]
+
+
 def test_preview_scenes_count_toward_import_limit(tmp_path, monkeypatch):
     scene_root = tmp_path / "scenes"
     registry_path = scene_root / "scenes.json"
@@ -116,7 +177,7 @@ def test_preview_scenes_count_toward_import_limit(tmp_path, monkeypatch):
     registry_path.write_text(
         json.dumps(
             {
-                "active_scene_id": "munich",
+                "active_scene_id": None,
                 "scenes": [
                     {
                         "id": f"preview-{index}",
@@ -162,7 +223,7 @@ def test_delete_scene_marks_database_reference_deleted(tmp_path, monkeypatch):
     registry_path.write_text(
         json.dumps(
             {
-                "active_scene_id": "munich",
+                "active_scene_id": None,
                 "scenes": [
                     {
                         "id": "scene-to-delete",
@@ -202,7 +263,7 @@ def test_delete_scene_marks_database_reference_deleted(tmp_path, monkeypatch):
     assert all(scene["id"] != "scene-to-delete" for scene in saved_registry["scenes"])
 
 
-def test_delete_imported_registry_active_scene_resets_active_to_default(tmp_path, monkeypatch):
+def test_delete_imported_registry_active_scene_clears_active_scene(tmp_path, monkeypatch):
     scene_root = tmp_path / "scenes"
     scene_path = scene_root / "scene-to-delete"
     scene_path.mkdir(parents=True)
@@ -241,7 +302,7 @@ def test_delete_imported_registry_active_scene_resets_active_to_default(tmp_path
     assert result["active_scene_reset"] is True
     assert not scene_path.exists()
     saved_registry = json.loads(registry_path.read_text(encoding="utf-8"))
-    assert saved_registry["active_scene_id"] == "munich"
+    assert saved_registry["active_scene_id"] is None
     assert all(scene["id"] != "scene-to-delete" for scene in saved_registry["scenes"])
 
 
@@ -253,7 +314,7 @@ def test_delete_scene_stops_when_database_status_update_fails(tmp_path, monkeypa
     registry_path.write_text(
         json.dumps(
             {
-                "active_scene_id": "munich",
+                "active_scene_id": None,
                 "scenes": [
                     {
                         "id": "scene-to-delete",
