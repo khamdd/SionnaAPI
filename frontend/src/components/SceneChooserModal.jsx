@@ -152,14 +152,14 @@ export default function SceneChooserPage({
     }
 
     if (!antennaDisplayBounds) {
-      setAntennaImportStatus(`Imported ${importedAntennas.length} antenna(s), but the map is not ready to place them yet.`);
+      setAntennaImportStatus(`Imported ${importedAntennas.length} fixed scene antenna(s), but the map is not ready to place them yet.`);
       setAntennaImportError(true);
       return undefined;
     }
 
     const displayMetrics = calculateMetrics(antennaDisplayBounds);
 
-    setAntennaImportStatus(`Imported ${importedAntennas.length} antenna(s).`);
+    setAntennaImportStatus(`Imported ${importedAntennas.length} fixed scene antenna(s).`);
     setAntennaImportError(false);
 
     antennaMarkersRef.current = importedAntennas.map((antenna) => {
@@ -315,7 +315,7 @@ export default function SceneChooserPage({
       }
 
       setImportedAntennas(antennas);
-      setAntennaImportStatus(`Imported ${antennas.length} antenna(s) and displayed them on the map.`);
+      setAntennaImportStatus(`Imported ${antennas.length} fixed scene antenna(s) and displayed them on the map.`);
       setAntennaImportError(false);
     } catch (caught) {
       setImportedAntennas([]);
@@ -527,10 +527,10 @@ export default function SceneChooserPage({
               className="ghost-button"
               type="button"
               disabled={isBusy || !isMapReady}
-              title={isMapReady ? "Import antennas" : "Wait for the map to finish loading"}
+              title={isMapReady ? "Import fixed scene antennas that mimic real-world antenna locations" : "Wait for the map to finish loading"}
               onClick={() => fileInputRef.current?.click()}
             >
-              Import antennas
+              Import fixed antennas
             </button>
             <input
               ref={fileInputRef}
@@ -540,6 +540,9 @@ export default function SceneChooserPage({
               onChange={importAntennaFile}
             />
           </div>
+          <p className="scene-antenna-help">
+            Fixed antennas mimic real-world antenna locations and stay attached to this scene map. Simulation pages can copy them later, but importing here does not run or configure a simulation.
+          </p>
           {antennaImportStatus && (
             <p className={`scene-import-status ${antennaImportError ? "error-text" : ""}`}>
               {antennaImportStatus}

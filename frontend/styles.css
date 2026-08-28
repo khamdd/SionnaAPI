@@ -1926,6 +1926,14 @@ textarea:disabled {
   min-width: 0;
 }
 
+.scene-antenna-help {
+  margin: -4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
 .scene-import-status {
   color: var(--muted);
   font-size: 12px;
