@@ -6,6 +6,7 @@ from backend.constants import DEFAULT_TRANSMITTER_PATTERN
 from backend.schemas.requests import (
     CoverageRequest,
     NetworkCoverageRequest,
+    SceneBoundsRequest,
     SINRRequest,
     SolverConfig,
     ThroughputRequest,
@@ -80,6 +81,40 @@ def test_network_coverage_request_accepts_up_to_ten_antennas():
     assert len(request.antennas) == 10
     assert request.transmitter_pattern == DEFAULT_TRANSMITTER_PATTERN
     assert request.solver.cell_size == 2.0
+
+
+def test_scene_bounds_request_accepts_more_than_ten_fixed_antennas():
+    antennas = [
+        {
+            "id": f"A{i}",
+            "longitude": 105.8 + (i * 0.0001),
+            "latitude": 21.0 + (i * 0.0001),
+            "height_m": 30.0,
+            "tilt": {
+                "min": 2.0,
+                "current": 8.0,
+                "max": 18.0,
+            },
+            "azimuth": 45.0,
+            "tx_power": {
+                "min": 20.0,
+                "current": 30.0,
+                "max": 40.0,
+            },
+        }
+        for i in range(12)
+    ]
+
+    request = SceneBoundsRequest(
+        name="Large antenna inventory",
+        fixed_antennas=antennas,
+        south=21.0,
+        west=105.8,
+        north=21.01,
+        east=105.81,
+    )
+
+    assert len(request.fixed_antennas) == 12
 
 
 def test_network_coverage_request_rejects_invalid_azimuth():

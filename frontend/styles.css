@@ -649,6 +649,14 @@ button.hidden,
   background: #fff5f5;
 }
 
+.input-hint {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  margin-top: 4px;
+}
+
 .form-help {
   color: var(--muted);
   font-size: 12px;
@@ -1334,6 +1342,71 @@ textarea:disabled {
   padding: 12px;
 }
 
+.antenna-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.antenna-summary strong {
+  color: var(--text);
+}
+
+.antenna-add-form {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  margin-bottom: 10px;
+  padding: 10px;
+}
+
+.antenna-add-form summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.antenna-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.antenna-form-grid .form-field {
+  gap: 4px;
+}
+
+.antenna-form-grid .form-field span {
+  font-size: 11px;
+}
+
+.antenna-form-grid .form-field input {
+  min-height: 34px;
+  padding: 7px 8px;
+}
+
+.antenna-add-form .antenna-form-grid {
+  grid-template-columns: 1fr;
+}
+
+.antenna-add-form .form-field {
+  grid-template-columns: 1fr;
+  gap: 5px;
+}
+
+.antenna-add-form .form-field span {
+  font-size: 12px;
+}
+
+.antenna-add-form .form-field input {
+  min-height: 40px;
+  padding: 9px 10px;
+}
+
 .panel-tabs {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1366,6 +1439,10 @@ textarea:disabled {
   background: var(--surface);
   margin-bottom: 10px;
   padding: 12px;
+}
+
+.antenna-card.type2 {
+  border-color: rgba(37, 99, 235, 0.35);
 }
 
 .antenna-card h3 {
@@ -1412,6 +1489,16 @@ textarea:disabled {
   text-align: right;
   font-weight: 700;
   font-size: 12px;
+}
+
+.compact-field {
+  margin-top: 10px;
+}
+
+.antenna-remove {
+  justify-content: center;
+  margin-top: 10px;
+  width: 100%;
 }
 
 .history-view {
@@ -2604,6 +2691,10 @@ textarea:disabled {
 
   .antenna-list {
     height: 420px;
+  }
+
+  .antenna-form-grid {
+    grid-template-columns: 1fr;
   }
 }
 

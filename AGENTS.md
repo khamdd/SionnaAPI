@@ -97,6 +97,16 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   persist with the static scene metadata and reload when the scene is selected.
   The frontend also keeps a localStorage backup keyed by scene ID so fixed
   antennas can be restored if a stale backend ignores the scene metadata field.
+  Network Coverage now treats those imported antennas as type 1 fixed antennas:
+  their base real-world data is immutable, but tilt, power, and azimuth can be
+  overridden for the current simulation draft. Users can add type 2
+  simulation-only antennas from a form with the same fields as the XLSX template;
+  type 2 base data is set from that add form, can be deleted per antenna, and is
+  stored separately from per-simulation antenna settings in scene-scoped
+  localStorage so accidental reloads preserve the draft. Resetting
+  antennas or changing the work scene clears that Network Coverage draft. Scene
+  import does not cap the number of type 1 antennas, but Network Coverage still
+  enforces a maximum of 10 antennas per simulation request.
 
 ## Important Files
 
@@ -161,6 +171,7 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 - `MAX_GRID_CELLS` protects the backend by enlarging cell size for large scenes.
 - Delete operations must remove database rows and generated artifact files where
   applicable.
+- Every user-facing delete action must ask for confirmation before deleting.
 - Do not commit `.env`, `.env.docker`, generated `static/` content, database
   volumes, or local runtime artifacts.
 

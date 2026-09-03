@@ -1,7 +1,6 @@
 import { ANTENNA_TEMPLATE_COLUMNS } from "./antennaTemplate";
 
 const ANTENNA_SHEET_NAME = "Antennas";
-const MAX_IMPORTED_ANTENNAS = 10;
 const ZIP_LOCAL_FILE_HEADER = 0x04034b50;
 const ZIP_CENTRAL_DIRECTORY_HEADER = 0x02014b50;
 const ZIP_END_OF_CENTRAL_DIRECTORY = 0x06054b50;
@@ -72,10 +71,6 @@ function validateAntennaRows(rows) {
 
   if (dataRows.length === 0) {
     throw new Error("Add at least one antenna row.");
-  }
-
-  if (dataRows.length > MAX_IMPORTED_ANTENNAS) {
-    throw new Error(`Import up to ${MAX_IMPORTED_ANTENNAS} antennas.`);
   }
 
   const seenIds = new Set();

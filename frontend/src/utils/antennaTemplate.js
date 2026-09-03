@@ -21,7 +21,7 @@ const ANTENNA_TEMPLATE_INSTRUCTIONS = [
   ["Field", "Rule"],
   [
     "antenna_id",
-    "Required unique text value, for example A1. Use 1 to 10 antennas.",
+    "Required unique text value, for example A1.",
   ],
   ["longitude, latitude", "Required real-world WGS84 coordinates in Vietnam."],
   ["height_m", "Required antenna height in meters."],
@@ -127,6 +127,9 @@ function workbookRelationshipsXml() {
 
 function stylesXml() {
   return xmlDeclaration(`<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <numFmts count="1">
+    <numFmt numFmtId="164" formatCode="0.0000"/>
+  </numFmts>
   <fonts count="2">
     <font><sz val="11"/><name val="Calibri"/></font>
     <font><b/><sz val="11"/><name val="Calibri"/></font>
@@ -138,10 +141,11 @@ function stylesXml() {
   </fills>
   <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="3">
+  <cellXfs count="4">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
     <xf numFmtId="2" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+    <xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
   </cellXfs>
 </styleSheet>`);
 }
@@ -158,7 +162,7 @@ function worksheetXml(sheetName, rows, { columnWidth, columnWidths } = {}) {
     ${worksheetColumns(columnCount, columnWidth, columnWidths)}
   </cols>
   <sheetData>
-    ${rows.map((items, rowIndex) => worksheetRow(items, rowIndex + 1)).join("\n    ")}
+    ${rows.map((items, rowIndex) => worksheetRow(items, rowIndex + 1, sheetName)).join("\n    ")}
   </sheetData>
   <pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>
 </worksheet>`,
@@ -175,21 +179,36 @@ function worksheetColumns(columnCount, columnWidth = 14, columnWidths = []) {
   }).join("\n    ");
 }
 
-function worksheetRow(items, rowNumber) {
+function worksheetRow(items, rowNumber, sheetName) {
   return `<row r="${rowNumber}">${items
-    .map((item, columnIndex) => worksheetCell(item, columnIndex + 1, rowNumber))
+    .map((item, columnIndex) => worksheetCell(
+      item,
+      columnIndex + 1,
+      rowNumber,
+      sheetName,
+    ))
     .join("")}</row>`;
 }
 
-function worksheetCell(value, columnNumber, rowNumber) {
+function worksheetCell(value, columnNumber, rowNumber, sheetName) {
   const reference = cellReference(columnNumber, rowNumber);
 
   if (typeof value === "number" && Number.isFinite(value)) {
-    return `<c r="${reference}" s="2"><v>${value}</v></c>`;
+    const style = isCoordinateCell(sheetName, columnNumber, rowNumber)
+      ? 3
+      : 2;
+
+    return `<c r="${reference}" s="${style}"><v>${value}</v></c>`;
   }
 
   const style = rowNumber === 1 ? ' s="1"' : "";
   return `<c r="${reference}" t="inlineStr"${style}><is><t>${escapeXml(value)}</t></is></c>`;
+}
+
+function isCoordinateCell(sheetName, columnNumber, rowNumber) {
+  return sheetName === "Antennas"
+    && rowNumber > 1
+    && (columnNumber === 2 || columnNumber === 3);
 }
 
 function cellReference(columnNumber, rowNumber) {
