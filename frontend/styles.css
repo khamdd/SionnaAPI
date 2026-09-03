@@ -634,7 +634,8 @@ button.hidden,
   font-size: 12px;
 }
 
-.form-field input {
+.form-field input,
+.form-field select {
   width: 100%;
   min-height: 36px;
   border: 1px solid var(--line);
@@ -644,7 +645,8 @@ button.hidden,
   padding: 0 9px;
 }
 
-.form-field input[aria-invalid="true"] {
+.form-field input[aria-invalid="true"],
+.form-field select[aria-invalid="true"] {
   border-color: var(--danger);
   background: #fff5f5;
 }

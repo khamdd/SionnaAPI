@@ -22,17 +22,28 @@ import {
   formatText,
 } from "../utils/format";
 import {
+  lngLatInsideBounds,
+  lngLatToScenePosition,
   solverBounds,
   solverForScene,
   validatePositionInsideSolver,
 } from "../utils/scene";
 import Scene3DPreview, { hasCachedSceneModel } from "./Scene3DPreview";
 
-export function CoverageApiPage({ activeScene, onProgressChange, onQueueOpen, onSceneLoadingChange, onSimulationQueued }) {
+const COVERAGE_TYPE2_TRANSMITTER_ID = "__coverage_type2_transmitter__";
+
+export function CoverageApiPage({ activeScene, antennas = EMPTY_ARRAY, onProgressChange, onQueueOpen, onSceneLoadingChange, onSimulationQueued }) {
+  const fixedAntennas = Array.isArray(antennas) ? antennas : EMPTY_ARRAY;
   const [form, setForm] = useState(() => ({
     tilt: 8,
-    transmitter_position: [-45, -40, 30],
     tx_power: 30,
+    transmitter: {
+      id: "TX",
+      longitude: "",
+      latitude: "",
+      height_m: 30,
+    },
+    selected_antenna_id: "",
     solver: DEFAULT_SOLVER,
     camera: DEFAULT_CAMERA,
   }));
@@ -44,13 +55,75 @@ export function CoverageApiPage({ activeScene, onProgressChange, onQueueOpen, on
   );
   const sceneStatus = useScenePreviewStatus(activeScene, onSceneLoadingChange);
   const sceneSolver = solverForScene(activeScene, form.solver);
-  const positionValidation = validateScenePositions(sceneSolver, [
-    {
-      key: "transmitter_position",
-      label: "Transmitter position",
-      value: form.transmitter_position,
-    },
-  ]);
+  const transmitter = coverageTransmitter(form, fixedAntennas);
+  const transmitterPosition = lngLatToScenePosition(
+    transmitter,
+    activeScene?.bounds,
+  );
+  const transmitterError = validateCoverageTransmitter(
+    transmitter,
+    fixedAntennas,
+    activeScene,
+  );
+  const positionValidation = transmitterError
+    ? { errors: { transmitter_position: transmitterError }, isValid: false }
+    : validateScenePositions(sceneSolver, [
+      {
+        key: "transmitter_position",
+        label: "Transmitter position",
+        value: transmitterPosition,
+      },
+    ]);
+  const selectedTransmitterAntennas = transmitterPosition
+    ? [{
+      id: transmitter.id || "TX",
+      position: transmitterPosition,
+      longitude: transmitter.longitude,
+      latitude: transmitter.latitude,
+      height_m: transmitter.height_m,
+      azimuth: transmitter.azimuth ?? 0,
+    }]
+    : EMPTY_ARRAY;
+
+  useEffect(() => {
+    setForm((current) => {
+      if (
+        fixedAntennas.length === 1
+        && current.selected_antenna_id !== fixedAntennas[0].id
+        && current.selected_antenna_id !== COVERAGE_TYPE2_TRANSMITTER_ID
+      ) {
+        const antenna = fixedAntennas[0];
+
+        return {
+          ...current,
+          selected_antenna_id: antenna.id,
+          tilt: antenna.tilt?.current ?? current.tilt,
+          tx_power: antenna.tx_power?.current ?? current.tx_power,
+        };
+      }
+
+      if (
+        fixedAntennas.length > 1
+        && current.selected_antenna_id
+        && current.selected_antenna_id !== COVERAGE_TYPE2_TRANSMITTER_ID
+        && !fixedAntennas.some((antenna) => antenna.id === current.selected_antenna_id)
+      ) {
+        return {
+          ...current,
+          selected_antenna_id: "",
+        };
+      }
+
+      if (fixedAntennas.length === 0 && current.selected_antenna_id) {
+        return {
+          ...current,
+          selected_antenna_id: "",
+        };
+      }
+
+      return current;
+    });
+  }, [activeScene?.id, fixedAntennas]);
 
   async function submit(event) {
     event.preventDefault();
@@ -59,13 +132,20 @@ export function CoverageApiPage({ activeScene, onProgressChange, onQueueOpen, on
     }
 
     const payload = {
-      ...form,
+      tilt: form.tilt,
+      transmitter_position: transmitterPosition,
+      tx_power: form.tx_power,
+      camera: form.camera,
       solver: sceneSolver,
       transmitter_pattern: TRANSMITTER_PATTERN,
     };
+    const displayPayload = {
+      ...payload,
+      transmitter,
+    };
     await setResultState(async () => ({
       ...(await runCoverageMap(payload)),
-      request: payload,
+      request: displayPayload,
     }));
   }
 
@@ -76,6 +156,7 @@ export function CoverageApiPage({ activeScene, onProgressChange, onQueueOpen, on
       renderPreview={() => (
         <ApiScenePreview
           activeScene={activeScene}
+          antennas={selectedTransmitterAntennas}
           isSceneReady={sceneStatus.isSceneReady}
           onSceneLoadingChange={sceneStatus.handleSceneLoadingChange}
         />
@@ -93,14 +174,30 @@ export function CoverageApiPage({ activeScene, onProgressChange, onQueueOpen, on
       <form className="api-form" onSubmit={submit}>
         <fieldset className="api-form-lock" disabled={resultState.loading || !sceneStatus.isSceneReady}>
           <FormSection title="Transmitter">
-            <NumberField label="Tilt" unit="deg" value={form.tilt} onChange={(value) => updateForm(setForm, "tilt", value)} />
-            <NumberField label="Power" unit="dBm" value={form.tx_power} onChange={(value) => updateForm(setForm, "tx_power", value)} />
-            <PositionField
+            <CoverageTransmitterFields
+              activeScene={activeScene}
+              antennas={fixedAntennas}
               error={positionValidation.errors.transmitter_position}
-              label="Position"
-              solver={sceneSolver}
-              value={form.transmitter_position}
-              onChange={(value) => updateForm(setForm, "transmitter_position", value)}
+              form={form}
+              onChange={setForm}
+            />
+            <NumberField
+              hint={rangeHint(transmitter.tilt, "degrees")}
+              label="Tilt"
+              max={transmitter.tilt?.max}
+              min={transmitter.tilt?.min}
+              unit="deg"
+              value={form.tilt}
+              onChange={(value) => updateForm(setForm, "tilt", value)}
+            />
+            <NumberField
+              hint={rangeHint(transmitter.tx_power, "dBm")}
+              label="Power"
+              max={transmitter.tx_power?.max}
+              min={transmitter.tx_power?.min}
+              unit="dBm"
+              value={form.tx_power}
+              onChange={(value) => updateForm(setForm, "tx_power", value)}
             />
           </FormSection>
           <SolverFields solver={sceneSolver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
@@ -650,6 +747,130 @@ function ApiPageShell({ children, description, onQueueOpen, renderPreview, rende
   );
 }
 
+function CoverageTransmitterFields({
+  activeScene,
+  antennas,
+  error,
+  form,
+  onChange,
+}) {
+  if (antennas.length === 0) {
+    return (
+      <>
+        <p className="form-help">No fixed antennas are inside this scene. Add one type 2 transmitter for this Coverage API run.</p>
+        <TextField
+          label="Antenna ID"
+          value={form.transmitter.id}
+          onChange={(value) => updateManualTransmitter(onChange, form, "id", value)}
+        />
+        <NumberField
+          hint={coordinateHint("longitude", activeScene?.bounds)}
+          label="Longitude"
+          max={activeScene?.bounds?.east}
+          min={activeScene?.bounds?.west}
+          value={form.transmitter.longitude}
+          onChange={(value) => updateManualTransmitter(onChange, form, "longitude", value)}
+        />
+        <NumberField
+          hint={coordinateHint("latitude", activeScene?.bounds)}
+          label="Latitude"
+          max={activeScene?.bounds?.north}
+          min={activeScene?.bounds?.south}
+          value={form.transmitter.latitude}
+          onChange={(value) => updateManualTransmitter(onChange, form, "latitude", value)}
+        />
+        <NumberField
+          hint="Must be greater than 0."
+          label="Height"
+          min={0.1}
+          unit="m"
+          value={form.transmitter.height_m}
+          onChange={(value) => updateManualTransmitter(onChange, form, "height_m", value)}
+        />
+        {error && <small className="field-error">{error}</small>}
+      </>
+    );
+  }
+
+  const selected = antennas.find((antenna) => antenna.id === form.selected_antenna_id);
+  const isType2Selected = form.selected_antenna_id === COVERAGE_TYPE2_TRANSMITTER_ID;
+
+  return (
+    <>
+      <label className="form-field">
+        <span>Transmitter</span>
+        <select
+          aria-invalid={Boolean(error)}
+          required
+          value={form.selected_antenna_id}
+          onChange={(event) => selectCoverageTransmitter(onChange, form, antennas, event.target.value)}
+        >
+          {antennas.length > 1 && <option value="">Select transmitter</option>}
+          {antennas.map((antenna) => (
+            <option key={antenna.id} value={antenna.id}>
+              {antenna.id}
+            </option>
+          ))}
+          <option value={COVERAGE_TYPE2_TRANSMITTER_ID}>Add custom transmitter</option>
+        </select>
+      </label>
+      {isType2Selected && (
+        <>
+          <TextField
+            label="Antenna ID"
+            value={form.transmitter.id}
+            onChange={(value) => updateManualTransmitter(onChange, form, "id", value)}
+          />
+          <NumberField
+            hint={coordinateHint("longitude", activeScene?.bounds)}
+            label="Longitude"
+            max={activeScene?.bounds?.east}
+            min={activeScene?.bounds?.west}
+            value={form.transmitter.longitude}
+            onChange={(value) => updateManualTransmitter(onChange, form, "longitude", value)}
+          />
+          <NumberField
+            hint={coordinateHint("latitude", activeScene?.bounds)}
+            label="Latitude"
+            max={activeScene?.bounds?.north}
+            min={activeScene?.bounds?.south}
+            value={form.transmitter.latitude}
+            onChange={(value) => updateManualTransmitter(onChange, form, "latitude", value)}
+          />
+          <NumberField
+            hint="Must be greater than 0."
+            label="Height"
+            min={0.1}
+            unit="m"
+            value={form.transmitter.height_m}
+            onChange={(value) => updateManualTransmitter(onChange, form, "height_m", value)}
+          />
+        </>
+      )}
+      {selected && (
+        <p className="form-help">
+          {selected.id}: {formatCoordinate(selected.longitude)}, {formatCoordinate(selected.latitude)}, {formatMaybeNumber(selected.height_m)} m.
+        </p>
+      )}
+      {error && <small className="field-error">{error}</small>}
+    </>
+  );
+}
+
+function TextField({ label, onChange, value }) {
+  return (
+    <label className="form-field">
+      <span>{label}</span>
+      <input
+        type="text"
+        value={value}
+        required
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
+  );
+}
+
 function QueueNotice({ onQueueOpen, result }) {
   const sceneName = result.scene_name || result.scene?.name || result.scene?.id;
 
@@ -670,12 +891,13 @@ function QueueNotice({ onQueueOpen, result }) {
   );
 }
 
-function ApiScenePreview({ activeScene, isSceneReady, onSceneLoadingChange }) {
+function ApiScenePreview({ activeScene, antennas = EMPTY_ARRAY, isSceneReady, onSceneLoadingChange }) {
   return (
     <div className="result-summary">
       <div className="api-result-scene-wrap">
         {activeScene?.bounds ? (
           <Scene3DPreview
+            antennas={antennas}
             bounds={activeScene.bounds}
             className="api-result-scene-3d"
             onLoadingChange={onSceneLoadingChange}
@@ -738,28 +960,31 @@ function FormSection({ children, title }) {
 function SolverFields({ solver, onChange }) {
   return (
     <FormSection title="Solver">
-      <NumberField label="Max depth" value={solver.max_depth} min={0} max={10} step={1} onChange={(value) => updateObject(onChange, solver, "max_depth", value)} />
-      <NumberField label="Samples per TX" value={solver.samples_per_tx} min={1} max={10000000} step={1} onChange={(value) => updateObject(onChange, solver, "samples_per_tx", value)} />
-      <NumberField label="Cell size" unit="m" value={solver.cell_size} min={0.1} max={50} step="any" onChange={(value) => updateObject(onChange, solver, "cell_size", value)} />
+      <NumberField hint="0 to 10." label="Max depth" value={solver.max_depth} min={0} max={10} step={1} onChange={(value) => updateObject(onChange, solver, "max_depth", value)} />
+      <NumberField hint="1 to 10,000,000." label="Samples per TX" value={solver.samples_per_tx} min={1} max={10000000} step={1} onChange={(value) => updateObject(onChange, solver, "samples_per_tx", value)} />
+      <NumberField hint="0.1 to 50 m." label="Cell size" unit="m" value={solver.cell_size} min={0.1} max={50} step="any" onChange={(value) => updateObject(onChange, solver, "cell_size", value)} />
     </FormSection>
   );
 }
 
-function NumberField({ label, max, min, onChange, step = "any", unit = "", value }) {
+function NumberField({ hint = "", label, max, min, onChange, step = "any", unit = "", value }) {
   return (
     <label className="form-field">
       <span>{label}</span>
-      <div className="input-with-unit">
-        <input
-          type="number"
-          value={value}
-          min={min}
-          max={max}
-          step={step}
-          required
-          onChange={(event) => onChange(parseNumericInput(event.target.value))}
-        />
-        {unit && <small>{unit}</small>}
+      <div>
+        <div className="input-with-unit">
+          <input
+            type="number"
+            value={value}
+            min={min}
+            max={max}
+            step={step}
+            required
+            onChange={(event) => onChange(parseNumericInput(event.target.value))}
+          />
+          {unit && <small>{unit}</small>}
+        </div>
+        {hint && <small className="input-hint">{hint}</small>}
       </div>
     </label>
   );
@@ -811,6 +1036,8 @@ function CoverageResult({ activeScene, onSceneLoadingChange, result }) {
       />
       <h3>Transmitter</h3>
       <dl className="detail-grid">
+        <dt>Antenna</dt><dd>{formatText(request.transmitter?.id || "Manual transmitter")}</dd>
+        <dt>Coordinates</dt><dd>{formatTransmitterCoordinates(request.transmitter)}</dd>
         <dt>Position</dt><dd>{formatPositionValue(request.transmitter_position)}</dd>
         <dt>Tilt</dt><dd>{formatMaybeNumber(request.tilt)} deg</dd>
         <dt>Power</dt><dd>{formatMaybeNumber(request.tx_power)} dBm</dd>
@@ -1040,11 +1267,22 @@ function coverageResultAntennas(result, request) {
 
   return [
     {
-      id: "TX",
+      id: request.transmitter?.id || "TX",
       position: request.transmitter_position,
-      azimuth: 0,
+      longitude: request.transmitter?.longitude,
+      latitude: request.transmitter?.latitude,
+      height_m: request.transmitter?.height_m,
+      azimuth: request.transmitter?.azimuth ?? 0,
     },
   ];
+}
+
+function formatTransmitterCoordinates(transmitter) {
+  if (!transmitter) {
+    return "--";
+  }
+
+  return `${formatCoordinate(transmitter.longitude)}, ${formatCoordinate(transmitter.latitude)}`;
 }
 
 function linkResultAntennas(result, request) {
@@ -1079,6 +1317,121 @@ function linkResultAntennas(result, request) {
   }
 
   return antennas;
+}
+
+function coverageTransmitter(form, antennas) {
+  if (
+    antennas.length === 0
+    || form.selected_antenna_id === COVERAGE_TYPE2_TRANSMITTER_ID
+  ) {
+    return form.transmitter;
+  }
+
+  return antennas.find((antenna) => antenna.id === form.selected_antenna_id) || {};
+}
+
+function validateCoverageTransmitter(transmitter, antennas, activeScene) {
+  if (antennas.length > 0 && !transmitter.id) {
+    return "Select one fixed antenna or add a type 2 transmitter.";
+  }
+
+  if (!transmitter || Object.keys(transmitter).length === 0) {
+    return "Add one transmitter before running Coverage API.";
+  }
+
+  const id = String(transmitter.id || "").trim();
+  const longitude = Number(transmitter.longitude);
+  const latitude = Number(transmitter.latitude);
+  const height = Number(transmitter.height_m);
+
+  if (!id) {
+    return "Antenna ID is required.";
+  }
+
+  const isSelectedFixedAntenna = antennas.includes(transmitter);
+
+  if (
+    !isSelectedFixedAntenna
+    && antennas.some((antenna) => antenna.id.toLowerCase() === id.toLowerCase())
+  ) {
+    return `Antenna ID ${id} is already used by a fixed antenna.`;
+  }
+
+  if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
+    return "Enter numeric longitude and latitude.";
+  }
+
+  if (!lngLatInsideBounds({ longitude, latitude }, activeScene?.bounds)) {
+    return "Transmitter longitude and latitude must stay inside the selected scene.";
+  }
+
+  if (!Number.isFinite(height) || height <= 0) {
+    return "Transmitter height must be greater than 0.";
+  }
+
+  return "";
+}
+
+function updateManualTransmitter(onChange, form, field, value) {
+  onChange({
+    ...form,
+    transmitter: {
+      ...form.transmitter,
+      [field]: value,
+    },
+  });
+}
+
+function selectCoverageTransmitter(onChange, form, antennas, antennaId) {
+  const antenna = antennas.find((item) => item.id === antennaId);
+
+  if (antennaId === COVERAGE_TYPE2_TRANSMITTER_ID) {
+    onChange({
+      ...form,
+      selected_antenna_id: antennaId,
+    });
+    return;
+  }
+
+  onChange({
+    ...form,
+    selected_antenna_id: antennaId,
+    tilt: antenna?.tilt?.current ?? form.tilt,
+    tx_power: antenna?.tx_power?.current ?? form.tx_power,
+  });
+}
+
+function coordinateHint(axis, bounds) {
+  if (!bounds) {
+    return axis === "longitude"
+      ? "-180.0000 to 180.0000."
+      : "-90.0000 to 90.0000.";
+  }
+
+  return axis === "longitude"
+    ? `${formatCoordinate(bounds.west)} to ${formatCoordinate(bounds.east)} for the selected scene.`
+    : `${formatCoordinate(bounds.south)} to ${formatCoordinate(bounds.north)} for the selected scene.`;
+}
+
+function rangeHint(range, unit) {
+  const min = Number(range?.min);
+  const max = Number(range?.max);
+
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    return "";
+  }
+
+  return `${formatMaybeNumber(min)} to ${formatMaybeNumber(max)} ${unit}.`;
+}
+
+function formatCoordinate(value) {
+  const numericValue = Number(value);
+
+  if (!Number.isFinite(numericValue)) {
+    return "--";
+  }
+
+  return numericValue.toFixed(4);
 }
 
 function ApiCoverageCellDialog({ cell, onClose }) {

@@ -1144,6 +1144,7 @@ export default function App() {
       {visibleRoute === "/coverage" && (
         <CoverageApiPage
           activeScene={activeScene}
+          antennas={fixedSceneAntennas}
           onQueueOpen={() => navigate("/queue")}
           onSimulationQueued={showQueuedPrompt}
           onProgressChange={handleApiProgressChange}

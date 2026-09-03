@@ -107,6 +107,14 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   antennas or changing the work scene clears that Network Coverage draft. Scene
   import does not cap the number of type 1 antennas, but Network Coverage still
   enforces a maximum of 10 antennas per simulation request.
+- Coverage API uses exactly one transmitter. If the selected scene has no fixed
+  antennas, users enter one type 2 transmitter with antenna ID, longitude,
+  latitude, and height. If fixed antennas exist, users can choose one fixed
+  antenna or choose the type 2 transmitter option; one fixed antenna is selected
+  automatically only as the default. If multiple fixed antennas exist, users must
+  choose a fixed antenna or type 2 transmitter before running. The backend still
+  receives the converted scene `transmitter_position`; fixed antenna real-world
+  coordinates remain read-only in the UI.
 
 ## Important Files
 
