@@ -906,18 +906,6 @@ function Navbar({
   );
 }
 
-function readStoredUser() {
-  try {
-    if (!localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)) {
-      return null;
-    }
-
-    return JSON.parse(localStorage.getItem(USER_STORAGE_KEY));
-  } catch {
-    return null;
-  }
-}
-
 function GlobalProgress({ active, label }) {
   return (
     <div
@@ -1150,8 +1138,14 @@ function readSceneFixedAntennas(sceneId) {
 
   try {
     const saved = JSON.parse(localStorage.getItem(SCENE_FIXED_ANTENNAS_STORAGE_KEY) || "{}");
-    const antennas = saved[sceneId];
-    return Array.isArray(antennas) ? antennas : null;
+    const antennas = normalizeStoredFixedAntennas(saved[sceneId]);
+
+    if (!antennas) {
+      delete saved[sceneId];
+      localStorage.setItem(SCENE_FIXED_ANTENNAS_STORAGE_KEY, JSON.stringify(saved));
+    }
+
+    return antennas;
   } catch {
     return null;
   }
@@ -1164,11 +1158,46 @@ function saveSceneFixedAntennas(sceneId, antennas) {
 
   try {
     const saved = JSON.parse(localStorage.getItem(SCENE_FIXED_ANTENNAS_STORAGE_KEY) || "{}");
-    saved[sceneId] = antennas;
+    const normalized = normalizeStoredFixedAntennas(antennas);
+
+    if (!normalized) {
+      return;
+    }
+
+    saved[sceneId] = normalized;
     localStorage.setItem(SCENE_FIXED_ANTENNAS_STORAGE_KEY, JSON.stringify(saved));
   } catch {
     // Local cache is best-effort; backend scene metadata is the primary store.
   }
+}
+
+function normalizeStoredFixedAntennas(antennas) {
+  if (!Array.isArray(antennas) || antennas.length === 0) {
+    return null;
+  }
+
+  const normalized = antennas
+    .map((antenna) => {
+      const longitude = Number(antenna?.longitude);
+      const latitude = Number(antenna?.latitude);
+      const height = Number(antenna?.height_m);
+
+      if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
+        return null;
+      }
+
+      const { position, ...rest } = antenna;
+
+      return {
+        ...rest,
+        longitude,
+        latitude,
+        height_m: Number.isFinite(height) ? height : 0,
+      };
+    })
+    .filter(Boolean);
+
+  return normalized.length ? normalized : null;
 }
 
 function toggleSetValue(current, value) {

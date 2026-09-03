@@ -56,7 +56,9 @@ export const RSRP_QUALITY_BANDS = [
 
 function antenna(
   id,
-  position,
+  longitude,
+  latitude,
+  heightM,
   tiltMin,
   tiltCurrent,
   tiltMax,
@@ -67,7 +69,9 @@ function antenna(
 ) {
   return {
     id,
-    position,
+    longitude,
+    latitude,
+    height_m: heightM,
     tilt: {
       min: tiltMin,
       current: tiltCurrent,
@@ -83,14 +87,7 @@ function antenna(
 }
 
 export const DEFAULT_ANTENNAS = [
-  antenna("A1", [-120, -105, 30], 2, 8, 16, 45, 20, 30, 40),
-  antenna("A2", [-45, -120, 28], 2, 10, 18, 20, 20, 30, 40),
-  antenna("A3", [35, -112, 29], 2, 9, 16, 335, 20, 30, 40),
-  antenna("A4", [118, -85, 31], 2, 11, 20, 305, 20, 30, 40),
-  antenna("A5", [-132, -5, 27], 2, 7, 15, 92, 20, 30, 40),
-  antenna("A6", [-48, -8, 30], 2, 12, 22, 75, 20, 30, 40),
-  antenna("A7", [42, 4, 29], 2, 10, 18, 250, 20, 30, 40),
-  antenna("A8", [128, 18, 30], 2, 8, 17, 275, 20, 30, 40),
-  antenna("A9", [-78, 108, 28], 2, 13, 24, 135, 20, 30, 40),
-  antenna("A10", [72, 116, 31], 2, 9, 19, 215, 20, 30, 40),
+  antenna("A1", 105.8329, 21.0287, 30, 2, 8, 16, 45, 20, 30, 40),
+  antenna("A2", 105.8340, 21.0279, 28, 2, 10, 18, 20, 20, 30, 40),
+  antenna("A3", 105.8352, 21.0274, 29, 2, 9, 16, 335, 20, 30, 40),
 ];

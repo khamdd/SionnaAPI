@@ -21,6 +21,7 @@ from backend.models import (
     SimulationRun,
     SimulationRunAntenna,
 )
+from backend.services.coordinate_service import lng_lat_to_scene_position
 
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,7 @@ def store_simulation_result(
                     session,
                     run_id,
                     req,
+                    scene_info,
                 )
 
             insert_artifact_if_present(
@@ -436,15 +438,26 @@ def insert_network_antenna_snapshots(
     session,
     run_id,
     req,
+    scene_info=None,
 ):
+    bounds = (scene_info or {}).get("bounds")
+
     for antenna in req.antennas:
+        scene_position = antenna_scene_position(antenna, bounds)
+
         session.add(
             SimulationRunAntenna(
                 simulation_run_id=run_id,
                 antenna_id=None,
                 antenna_code=antenna.id,
+                gps_location=func.ST_SetSRID(
+                    func.ST_MakePoint(antenna.longitude, antenna.latitude),
+                    4326,
+                )
+                if antenna.longitude is not None and antenna.latitude is not None
+                else None,
                 scene_position=func.ST_SetSRID(
-                    func.ST_MakePoint(*antenna.position),
+                    func.ST_MakePoint(*scene_position),
                     0,
                 ),
                 azimuth_deg=antenna.azimuth,
@@ -456,6 +469,22 @@ def insert_network_antenna_snapshots(
                 tx_power_max_dbm=antenna.tx_power.max,
             )
         )
+
+
+def antenna_scene_position(antenna, bounds):
+    position = getattr(antenna, "position", None)
+    if position is not None:
+        return position
+
+    if bounds and antenna.longitude is not None and antenna.latitude is not None:
+        return lng_lat_to_scene_position(
+            antenna.longitude,
+            antenna.latitude,
+            antenna.height_m,
+            bounds,
+        )
+
+    return (0.0, 0.0, float(antenna.height_m or 0.0))
 
 
 def insert_artifact_if_present(

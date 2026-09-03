@@ -16,11 +16,10 @@ import {
   SCENE_CHOOSER_DEFAULT_CENTER,
   SCENE_CHOOSER_DEFAULT_ZOOM,
 } from "../constants";
-import {
-  importAntennasFromWorkbook,
-} from "../utils/antennaImport";
+import { importAntennasFromWorkbook } from "../utils/antennaImport";
 import { downloadAntennaTemplate } from "../utils/antennaTemplate";
 import { formatMaybeNumber } from "../utils/format";
+import { lngLatInsideBounds } from "../utils/scene";
 
 export default function SceneChooserPage({
   onCancel,
@@ -45,7 +44,9 @@ export default function SceneChooserPage({
   const [bounds, setBounds] = useState(null);
   const [previewBounds, setPreviewBounds] = useState(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
-  const [status, setStatus] = useState("Move and zoom the map, then click Select area to draw a scene rectangle.");
+  const [status, setStatus] = useState(
+    "Move and zoom the map, then click Select area to draw a scene rectangle.",
+  );
   const [sceneNameError, setSceneNameError] = useState("");
   const [error, setError] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
@@ -87,24 +88,35 @@ export default function SceneChooserPage({
       attributionControl: false,
     });
 
-    map.addControl(new NavigationControl({ visualizePitch: true }), "top-right");
+    map.addControl(
+      new NavigationControl({ visualizePitch: true }),
+      "top-right",
+    );
 
     map.on("load", () => {
       ensureSelectionLayers(map);
       setIsMapReady(true);
-      setStatus("Offline map loaded. Move and zoom the map, then click Select area to draw a scene rectangle.");
+      setStatus(
+        "Offline map loaded. Move and zoom the map, then click Select area to draw a scene rectangle.",
+      );
       setError(false);
 
-      const buildingRegionManager = createBuildingRegionManager(map, dataBaseUrl);
+      const buildingRegionManager = createBuildingRegionManager(
+        map,
+        dataBaseUrl,
+      );
       buildingRegionManagerRef.current = buildingRegionManager;
       buildingRegionManager.load().catch((caught) => {
-        setStatus(`Offline map loaded, but buildings could not be loaded: ${caught.message}`);
+        setStatus(
+          `Offline map loaded, but buildings could not be loaded: ${caught.message}`,
+        );
         setError(true);
       });
     });
 
     map.on("error", (event) => {
-      const message = event?.error?.message || "offline map tiles could not be loaded";
+      const message =
+        event?.error?.message || "offline map tiles could not be loaded";
       setIsMapReady(false);
       setStatus(`Map failed to load: ${message}`);
       setError(true);
@@ -152,14 +164,16 @@ export default function SceneChooserPage({
     }
 
     if (!antennaDisplayBounds) {
-      setAntennaImportStatus(`Imported ${importedAntennas.length} fixed scene antenna(s), but the map is not ready to place them yet.`);
+      setAntennaImportStatus(
+        `Imported ${importedAntennas.length} fixed scene antenna(s), but the map is not ready to place them yet.`,
+      );
       setAntennaImportError(true);
       return undefined;
     }
 
-    const displayMetrics = calculateMetrics(antennaDisplayBounds);
-
-    setAntennaImportStatus(`Imported ${importedAntennas.length} fixed scene antenna(s).`);
+    setAntennaImportStatus(
+      `Imported ${importedAntennas.length} fixed scene antenna(s).`,
+    );
     setAntennaImportError(false);
 
     antennaMarkersRef.current = importedAntennas.map((antenna) => {
@@ -168,7 +182,7 @@ export default function SceneChooserPage({
         element,
         anchor: "bottom",
       })
-        .setLngLat(scenePositionToLngLat(antenna.position, antennaDisplayBounds, displayMetrics))
+        .setLngLat([antenna.longitude, antenna.latitude])
         .addTo(map);
 
       return marker;
@@ -193,7 +207,9 @@ export default function SceneChooserPage({
     }
 
     map.dragPan.disable();
-    setStatus("Selection mode enabled. Drag on the map to draw a small scene area.");
+    setStatus(
+      "Selection mode enabled. Drag on the map to draw a small scene area.",
+    );
 
     function handleMouseDown(event) {
       if (event.originalEvent.button !== 0) {
@@ -211,7 +227,10 @@ export default function SceneChooserPage({
         return;
       }
 
-      updateSelectionBounds(map, boundsFromLngLats(drawStartRef.current, event.lngLat));
+      updateSelectionBounds(
+        map,
+        boundsFromLngLats(drawStartRef.current, event.lngLat),
+      );
     }
 
     function handleMouseUp(event) {
@@ -269,7 +288,9 @@ export default function SceneChooserPage({
 
   function selectCity(event) {
     const placeId = event.target.value;
-    const place = OFFLINE_VIETNAM_PLACES.find((item) => item.place_id === placeId);
+    const place = OFFLINE_VIETNAM_PLACES.find(
+      (item) => item.place_id === placeId,
+    );
 
     setSelectedCityId(placeId);
 
@@ -302,9 +323,10 @@ export default function SceneChooserPage({
 
     try {
       const antennas = await importAntennasFromWorkbook(file);
-      const nextAntennaPlacementBounds = previewBounds
-        || bounds
-        || createAntennaImportBounds(antennas, mapRef.current);
+      const nextAntennaPlacementBounds =
+        previewBounds ||
+        bounds ||
+        createAntennaImportBounds(antennas);
 
       if (nextAntennaPlacementBounds) {
         setAntennaPlacementBounds(nextAntennaPlacementBounds);
@@ -315,7 +337,9 @@ export default function SceneChooserPage({
       }
 
       setImportedAntennas(antennas);
-      setAntennaImportStatus(`Imported ${antennas.length} fixed scene antenna(s) and displayed them on the map.`);
+      setAntennaImportStatus(
+        `Imported ${antennas.length} fixed scene antenna(s) and displayed them on the map.`,
+      );
       setAntennaImportError(false);
     } catch (caught) {
       setImportedAntennas([]);
@@ -461,7 +485,9 @@ export default function SceneChooserPage({
     removeRectangle();
     setError(false);
     setIsSelectingArea(true);
-    setStatus("Selection mode enabled. Drag on the map to draw a small scene area.");
+    setStatus(
+      "Selection mode enabled. Drag on the map to draw a small scene area.",
+    );
   }
 
   function cancelSelection() {
@@ -499,7 +525,10 @@ export default function SceneChooserPage({
       />
 
       {isControlPanelVisible ? (
-        <section className="scene-control-panel" aria-label="Scene selection controls">
+        <section
+          className="scene-control-panel"
+          aria-label="Scene selection controls"
+        >
           <button
             className="scene-controls-toggle scene-panel-toggle"
             type="button"
@@ -515,20 +544,34 @@ export default function SceneChooserPage({
               <p className={error ? "error-text" : ""}>{status}</p>
             </div>
             <div className="scene-header-actions">
-              <button className="ghost-button" type="button" disabled={isBusy} onClick={onCancel}>
+              <button
+                className="ghost-button"
+                type="button"
+                disabled={isBusy}
+                onClick={onCancel}
+              >
                 Back
               </button>
             </div>
           </div>
           <div className="scene-template-actions">
-            <button className="ghost-button" type="button" disabled={isBusy} onClick={() => downloadAntennaTemplate()}>
+            <button
+              className="ghost-button"
+              type="button"
+              disabled={isBusy}
+              onClick={() => downloadAntennaTemplate()}
+            >
               Download template
             </button>
             <button
               className="ghost-button"
               type="button"
               disabled={isBusy || !isMapReady}
-              title={isMapReady ? "Import fixed scene antennas that mimic real-world antenna locations" : "Wait for the map to finish loading"}
+              title={
+                isMapReady
+                  ? "Import fixed scene antennas that mimic real-world antenna locations"
+                  : "Wait for the map to finish loading"
+              }
               onClick={() => fileInputRef.current?.click()}
             >
               Import fixed antennas
@@ -542,10 +585,14 @@ export default function SceneChooserPage({
             />
           </div>
           <p className="scene-antenna-help">
-            Fixed antennas mimic real-world antenna locations and stay attached to this scene map. Simulation pages can copy them later, but importing here does not run or configure a simulation.
+            Fixed antennas mimic real-world antenna locations and stay attached
+            to this scene map. Simulation pages can copy them later, but
+            importing here does not run or configure a simulation.
           </p>
           {antennaImportStatus && (
-            <p className={`scene-import-status ${antennaImportError ? "error-text" : ""}`}>
+            <p
+              className={`scene-import-status ${antennaImportError ? "error-text" : ""}`}
+            >
               {antennaImportStatus}
             </p>
           )}
@@ -554,7 +601,11 @@ export default function SceneChooserPage({
             <div className="scene-page-form">
               <label className="scene-city-field">
                 <span>Location</span>
-                <select value={selectedCityId} disabled={isBusy || !isMapReady} onChange={selectCity}>
+                <select
+                  value={selectedCityId}
+                  disabled={isBusy || !isMapReady}
+                  onChange={selectCity}
+                >
                   {OFFLINE_VIETNAM_PLACES.map((place) => (
                     <option key={place.place_id} value={place.place_id}>
                       {place.name}
@@ -581,11 +632,15 @@ export default function SceneChooserPage({
                     }
                   }}
                 />
-                {sceneNameError && <small className="field-error">{sceneNameError}</small>}
+                {sceneNameError && (
+                  <small className="field-error">{sceneNameError}</small>
+                )}
               </label>
               <div className="scene-action-stack">
                 <button
-                  className={isSelectingArea ? "primary-button" : "ghost-button"}
+                  className={
+                    isSelectingArea ? "primary-button" : "ghost-button"
+                  }
                   type="button"
                   disabled={isBusy || !isMapReady}
                   onClick={startSelection}
@@ -606,18 +661,43 @@ export default function SceneChooserPage({
           {isPreviewing && (
             <div className="scene-preview scene-preview-panel">
               <dl className="scene-preview-meta">
-                <dt>Scene</dt><dd>{sceneName.trim()}</dd>
-                <dt>Area</dt><dd>{metrics?.areaKm2 ? formatMaybeNumber(metrics.areaKm2) : "--"} km2</dd>
-                <dt>Size</dt><dd>{metrics ? `${formatMaybeNumber(metrics.widthM)} x ${formatMaybeNumber(metrics.heightM)} m` : "--"}</dd>
+                <dt>Scene</dt>
+                <dd>{sceneName.trim()}</dd>
+                <dt>Area</dt>
+                <dd>
+                  {metrics?.areaKm2 ? formatMaybeNumber(metrics.areaKm2) : "--"}{" "}
+                  km2
+                </dd>
+                <dt>Size</dt>
+                <dd>
+                  {metrics
+                    ? `${formatMaybeNumber(metrics.widthM)} x ${formatMaybeNumber(metrics.heightM)} m`
+                    : "--"}
+                </dd>
               </dl>
               <div className="scene-preview-actions">
-                <button className="ghost-button" type="button" disabled={isBusy} onClick={selectNewArea}>
+                <button
+                  className="ghost-button"
+                  type="button"
+                  disabled={isBusy}
+                  onClick={selectNewArea}
+                >
                   Select new area
                 </button>
-                <button className="ghost-button" type="button" disabled={isBusy} onClick={cancelSelection}>
+                <button
+                  className="ghost-button"
+                  type="button"
+                  disabled={isBusy}
+                  onClick={cancelSelection}
+                >
                   Cancel
                 </button>
-                <button className="primary-button" type="button" disabled={isBusy} onClick={keepScene}>
+                <button
+                  className="primary-button"
+                  type="button"
+                  disabled={isBusy}
+                  onClick={keepScene}
+                >
                   Keep and load scene
                 </button>
               </div>
@@ -639,9 +719,19 @@ export default function SceneChooserPage({
       {!isPreviewing && (
         <div className="scene-selection-footer">
           <div>
-            <strong>{metrics ? `${formatMaybeNumber(metrics.widthM)} m x ${formatMaybeNumber(metrics.heightM)} m` : "No area selected"}</strong>
-            <span>{metrics ? `${formatMaybeNumber(metrics.areaKm2)} km2 selected` : `Maximum ${MAX_SCENE_AREA_KM2} km2 per scene`}</span>
-            {isTooLarge && <span className="error-text">Selected area is too large.</span>}
+            <strong>
+              {metrics
+                ? `${formatMaybeNumber(metrics.widthM)} m x ${formatMaybeNumber(metrics.heightM)} m`
+                : "No area selected"}
+            </strong>
+            <span>
+              {metrics
+                ? `${formatMaybeNumber(metrics.areaKm2)} km2 selected`
+                : `Maximum ${MAX_SCENE_AREA_KM2} km2 per scene`}
+            </span>
+            {isTooLarge && (
+              <span className="error-text">Selected area is too large.</span>
+            )}
           </div>
         </div>
       )}
@@ -650,7 +740,10 @@ export default function SceneChooserPage({
 }
 
 function offlineMapDataBaseUrl() {
-  return new URL("data/", window.location.origin + import.meta.env.BASE_URL).toString();
+  return new URL(
+    "data/",
+    window.location.origin + import.meta.env.BASE_URL,
+  ).toString();
 }
 
 function createOfflineSceneMapStyle(dataBaseUrl) {
@@ -765,7 +858,9 @@ function createBuildingRegionManager(map, dataBaseUrl) {
       return;
     }
 
-    const requiredRegions = buildingRegions.filter((region) => regionIntersectsMap(map, region));
+    const requiredRegions = buildingRegions.filter((region) =>
+      regionIntersectsMap(map, region),
+    );
     const requiredIds = new Set(requiredRegions.map((region) => region.id));
 
     for (const region of requiredRegions) {
@@ -860,13 +955,13 @@ function createBuildingRegionManager(map, dataBaseUrl) {
 
 function isValidBuildingRegion(region) {
   return (
-    region
-    && typeof region.id === "string"
-    && typeof region.file === "string"
-    && Number.isFinite(Number(region.west))
-    && Number.isFinite(Number(region.east))
-    && Number.isFinite(Number(region.south))
-    && Number.isFinite(Number(region.north))
+    region &&
+    typeof region.id === "string" &&
+    typeof region.file === "string" &&
+    Number.isFinite(Number(region.west)) &&
+    Number.isFinite(Number(region.east)) &&
+    Number.isFinite(Number(region.south)) &&
+    Number.isFinite(Number(region.north))
   );
 }
 
@@ -874,10 +969,10 @@ function regionIntersectsMap(map, region) {
   const bounds = map.getBounds();
 
   return (
-    Number(region.east) > bounds.getWest()
-    && Number(region.west) < bounds.getEast()
-    && Number(region.north) > bounds.getSouth()
-    && Number(region.south) < bounds.getNorth()
+    Number(region.east) > bounds.getWest() &&
+    Number(region.west) < bounds.getEast() &&
+    Number(region.north) > bounds.getSouth() &&
+    Number(region.south) < bounds.getNorth()
   );
 }
 
@@ -932,13 +1027,15 @@ function updateSelectionBounds(map, bounds) {
         properties: {},
         geometry: {
           type: "Polygon",
-          coordinates: [[
-            [bounds.west, bounds.south],
-            [bounds.east, bounds.south],
-            [bounds.east, bounds.north],
-            [bounds.west, bounds.north],
-            [bounds.west, bounds.south],
-          ]],
+          coordinates: [
+            [
+              [bounds.west, bounds.south],
+              [bounds.east, bounds.south],
+              [bounds.east, bounds.north],
+              [bounds.west, bounds.north],
+              [bounds.west, bounds.south],
+            ],
+          ],
         },
       },
     ],
@@ -956,48 +1053,14 @@ function scenePositionToLngLat(position, bounds, metrics) {
   ];
 }
 
-function antennasForSelectedBounds(antennas, placementBounds, selectedBounds) {
-  if (!Array.isArray(antennas) || antennas.length === 0 || !placementBounds || !selectedBounds) {
+function antennasForSelectedBounds(antennas, _placementBounds, selectedBounds) {
+  if (!Array.isArray(antennas) || antennas.length === 0 || !selectedBounds) {
     return [];
   }
 
-  const placementMetrics = calculateMetrics(placementBounds);
-  const selectedMetrics = calculateMetrics(selectedBounds);
-
-  return antennas
-    .map((antenna) => {
-      const lngLat = scenePositionToLngLat(antenna.position, placementBounds, placementMetrics);
-
-      if (!lngLatInsideBounds(lngLat, selectedBounds)) {
-        return null;
-      }
-
-      return {
-        ...antenna,
-        position: [
-          roundMeters(lngLatToSceneX(lngLat[0], selectedBounds, selectedMetrics)),
-          roundMeters(lngLatToSceneY(lngLat[1], selectedBounds, selectedMetrics)),
-          antenna.position[2],
-        ],
-      };
-    })
-    .filter(Boolean);
-}
-
-function lngLatInsideBounds([lng, lat], bounds) {
-  return lng >= bounds.west && lng <= bounds.east && lat >= bounds.south && lat <= bounds.north;
-}
-
-function lngLatToSceneX(lng, bounds, metrics) {
-  return ((lng - bounds.west) / (bounds.east - bounds.west)) * metrics.widthM - metrics.widthM / 2;
-}
-
-function lngLatToSceneY(lat, bounds, metrics) {
-  return ((lat - bounds.south) / (bounds.north - bounds.south)) * metrics.heightM - metrics.heightM / 2;
-}
-
-function roundMeters(value) {
-  return Number(value.toFixed(2));
+  return antennas.filter((antenna) =>
+    lngLatInsideBounds(antenna, selectedBounds),
+  );
 }
 
 function createAntennaMarkerElement(antenna) {
@@ -1006,7 +1069,7 @@ function createAntennaMarkerElement(antenna) {
   const dot = document.createElement("i");
 
   element.className = "scene-antenna-marker";
-  element.title = `${antenna.id}: ${antenna.position.join(", ")} m`;
+  element.title = `${antenna.id}: ${antenna.longitude}, ${antenna.latitude}, ${antenna.height_m} m`;
   element.style.setProperty("--azimuth", `${antenna.azimuth || 0}deg`);
   label.textContent = antenna.id;
   element.append(dot, label);
@@ -1014,26 +1077,26 @@ function createAntennaMarkerElement(antenna) {
   return element;
 }
 
-function createAntennaImportBounds(antennas, map) {
-  if (!map || !Array.isArray(antennas) || antennas.length === 0) {
+function createAntennaImportBounds(antennas) {
+  if (!Array.isArray(antennas) || antennas.length === 0) {
     return null;
   }
 
-  const center = map.getCenter();
-  const maxAbsX = Math.max(...antennas.map((antenna) => Math.abs(Number(antenna.position[0]) || 0)));
-  const maxAbsY = Math.max(...antennas.map((antenna) => Math.abs(Number(antenna.position[1]) || 0)));
-  const widthM = Math.max(maxAbsX * 2 + 80, 250);
-  const heightM = Math.max(maxAbsY * 2 + 80, 250);
-  const metersPerDegreeLat = 111320;
-  const metersPerDegreeLon = metersPerDegreeLat * Math.max(Math.cos(center.lat * (Math.PI / 180)), 0.01);
-  const halfLatDelta = (heightM / metersPerDegreeLat) / 2;
-  const halfLonDelta = (widthM / metersPerDegreeLon) / 2;
+  const longitudes = antennas.map((antenna) => antenna.longitude);
+  const latitudes = antennas.map((antenna) => antenna.latitude);
+
+  const west = Math.min(...longitudes);
+  const east = Math.max(...longitudes);
+  const south = Math.min(...latitudes);
+  const north = Math.max(...latitudes);
+
+  const padding = 0.002;
 
   return {
-    south: center.lat - halfLatDelta,
-    west: center.lng - halfLonDelta,
-    north: center.lat + halfLatDelta,
-    east: center.lng + halfLonDelta,
+    south: south - padding,
+    west: west - padding,
+    north: north + padding,
+    east: east + padding,
   };
 }
 
@@ -1159,7 +1222,8 @@ const OFFLINE_VIETNAM_PLACES = [
 function calculateMetrics(bounds) {
   const midLat = ((bounds.south + bounds.north) / 2) * (Math.PI / 180);
   const metersPerDegreeLat = 111320;
-  const metersPerDegreeLon = metersPerDegreeLat * Math.max(Math.cos(midLat), 0.01);
+  const metersPerDegreeLon =
+    metersPerDegreeLat * Math.max(Math.cos(midLat), 0.01);
   const widthM = Math.abs(bounds.east - bounds.west) * metersPerDegreeLon;
   const heightM = Math.abs(bounds.north - bounds.south) * metersPerDegreeLat;
 

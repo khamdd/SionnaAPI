@@ -1,11 +1,12 @@
 import { DEFAULT_ANTENNAS } from "../constants/radio.js";
 
-const XLSX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const XLSX_MIME_TYPE =
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 export const ANTENNA_TEMPLATE_COLUMNS = [
   "antenna_id",
-  "x_m",
-  "y_m",
+  "longitude",
+  "latitude",
   "height_m",
   "azimuth_deg",
   "tilt_min_deg",
@@ -18,12 +19,21 @@ export const ANTENNA_TEMPLATE_COLUMNS = [
 
 const ANTENNA_TEMPLATE_INSTRUCTIONS = [
   ["Field", "Rule"],
-  ["antenna_id", "Required unique text value, for example A1. Use 1 to 10 antennas."],
-  ["x_m, y_m", "Required scene-relative position in meters."],
+  [
+    "antenna_id",
+    "Required unique text value, for example A1. Use 1 to 10 antennas.",
+  ],
+  ["longitude, latitude", "Required real-world WGS84 coordinates in Vietnam."],
   ["height_m", "Required antenna height in meters."],
   ["azimuth_deg", "Required number from 0 to 360."],
-  ["tilt_current_deg", "Required number between tilt_min_deg and tilt_max_deg."],
-  ["tx_power_current_dbm", "Required number between tx_power_min_dbm and tx_power_max_dbm."],
+  [
+    "tilt_current_deg",
+    "Required number between tilt_min_deg and tilt_max_deg.",
+  ],
+  [
+    "tx_power_current_dbm",
+    "Required number between tx_power_min_dbm and tx_power_max_dbm.",
+  ],
 ];
 
 export function downloadAntennaTemplate(antennas = DEFAULT_ANTENNAS) {
@@ -47,27 +57,29 @@ export function buildAntennaTemplateWorkbook(antennas) {
     ["xl/workbook.xml", workbookXml()],
     ["xl/_rels/workbook.xml.rels", workbookRelationshipsXml()],
     ["xl/styles.xml", stylesXml()],
-    ["xl/worksheets/sheet1.xml", worksheetXml(
-      "Antennas",
-      [ANTENNA_TEMPLATE_COLUMNS, ...antennas.map(antennaToRow)],
-      { columnWidth: 18 },
-    )],
-    ["xl/worksheets/sheet2.xml", worksheetXml(
-      "Instructions",
-      ANTENNA_TEMPLATE_INSTRUCTIONS,
-      { columnWidths: [24, 70] },
-    )],
+    [
+      "xl/worksheets/sheet1.xml",
+      worksheetXml(
+        "Antennas",
+        [ANTENNA_TEMPLATE_COLUMNS, ...antennas.map(antennaToRow)],
+        { columnWidth: 18 },
+      ),
+    ],
+    [
+      "xl/worksheets/sheet2.xml",
+      worksheetXml("Instructions", ANTENNA_TEMPLATE_INSTRUCTIONS, {
+        columnWidths: [24, 70],
+      }),
+    ],
   ]);
 }
 
 function antennaToRow(antenna) {
-  const [x, y, height] = antenna.position;
-
   return [
     antenna.id,
-    x,
-    y,
-    height,
+    antenna.longitude ?? "",
+    antenna.latitude ?? "",
+    antenna.height_m ?? "",
     antenna.azimuth,
     antenna.tilt.min,
     antenna.tilt.current,
@@ -137,7 +149,8 @@ function stylesXml() {
 function worksheetXml(sheetName, rows, { columnWidth, columnWidths } = {}) {
   const columnCount = Math.max(...rows.map((items) => items.length));
 
-  return xmlDeclaration(`<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  return xmlDeclaration(
+    `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <dimension ref="A1:${cellReference(columnCount, rows.length)}"/>
   <sheetViews><sheetView workbookViewId="0"/></sheetViews>
   <sheetFormatPr defaultRowHeight="15"/>
@@ -148,7 +161,9 @@ function worksheetXml(sheetName, rows, { columnWidth, columnWidths } = {}) {
     ${rows.map((items, rowIndex) => worksheetRow(items, rowIndex + 1)).join("\n    ")}
   </sheetData>
   <pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>
-</worksheet>`, sheetName);
+</worksheet>`,
+    sheetName,
+  );
 }
 
 function worksheetColumns(columnCount, columnWidth = 14, columnWidths = []) {
@@ -161,9 +176,9 @@ function worksheetColumns(columnCount, columnWidth = 14, columnWidths = []) {
 }
 
 function worksheetRow(items, rowNumber) {
-  return `<row r="${rowNumber}">${items.map((item, columnIndex) => (
-    worksheetCell(item, columnIndex + 1, rowNumber)
-  )).join("")}</row>`;
+  return `<row r="${rowNumber}">${items
+    .map((item, columnIndex) => worksheetCell(item, columnIndex + 1, rowNumber))
+    .join("")}</row>`;
 }
 
 function worksheetCell(value, columnNumber, rowNumber) {
@@ -207,11 +222,16 @@ function createZip(files) {
     const localHeader = localFileHeader(nameBytes, dataBytes, checksum);
 
     localParts.push(localHeader, dataBytes);
-    centralParts.push(centralDirectoryHeader(nameBytes, dataBytes, checksum, offset));
+    centralParts.push(
+      centralDirectoryHeader(nameBytes, dataBytes, checksum, offset),
+    );
     offset += localHeader.length + dataBytes.length;
   }
 
-  const centralDirectorySize = centralParts.reduce((sum, part) => sum + part.length, 0);
+  const centralDirectorySize = centralParts.reduce(
+    (sum, part) => sum + part.length,
+    0,
+  );
   const end = endOfCentralDirectory(files.length, centralDirectorySize, offset);
 
   return concatUint8Arrays([...localParts, ...centralParts, end]);
@@ -263,7 +283,11 @@ function centralDirectoryHeader(nameBytes, dataBytes, checksum, localOffset) {
   return header;
 }
 
-function endOfCentralDirectory(fileCount, centralDirectorySize, centralDirectoryOffset) {
+function endOfCentralDirectory(
+  fileCount,
+  centralDirectorySize,
+  centralDirectoryOffset,
+) {
   const header = new Uint8Array(22);
   const view = new DataView(header.buffer);
 
@@ -280,7 +304,9 @@ function endOfCentralDirectory(fileCount, centralDirectorySize, centralDirectory
 }
 
 function concatUint8Arrays(parts) {
-  const output = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
+  const output = new Uint8Array(
+    parts.reduce((sum, part) => sum + part.length, 0),
+  );
   let offset = 0;
 
   for (const part of parts) {

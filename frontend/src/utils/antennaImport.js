@@ -17,8 +17,14 @@ export async function importAntennasFromWorkbook(file) {
 
   const entries = await unzipWorkbookEntries(await file.arrayBuffer());
   const workbook = parseXml(requiredEntry(entries, "xl/workbook.xml"));
-  const relationships = parseWorkbookRelationships(requiredEntry(entries, "xl/_rels/workbook.xml.rels"));
-  const sheetPath = findWorksheetPath(workbook, relationships, ANTENNA_SHEET_NAME);
+  const relationships = parseWorkbookRelationships(
+    requiredEntry(entries, "xl/_rels/workbook.xml.rels"),
+  );
+  const sheetPath = findWorksheetPath(
+    workbook,
+    relationships,
+    ANTENNA_SHEET_NAME,
+  );
 
   if (!sheetPath) {
     throw new Error(`Workbook must include an "${ANTENNA_SHEET_NAME}" sheet.`);
@@ -27,7 +33,10 @@ export async function importAntennasFromWorkbook(file) {
   const sharedStrings = entries.has("xl/sharedStrings.xml")
     ? parseSharedStrings(entries.get("xl/sharedStrings.xml"))
     : [];
-  const rows = parseWorksheetRows(requiredEntry(entries, sheetPath), sharedStrings);
+  const rows = parseWorksheetRows(
+    requiredEntry(entries, sheetPath),
+    sharedStrings,
+  );
   const antennas = validateAntennaRows(rows);
 
   return antennas;
@@ -40,15 +49,25 @@ function validateAntennaRows(rows) {
     throw new Error("Antennas sheet is empty.");
   }
 
-  const headerIndexes = new Map(headerRow.map((value, index) => [normalizeHeader(value), index]));
-  const missingColumns = ANTENNA_TEMPLATE_COLUMNS.filter((column) => !headerIndexes.has(column));
+  const headerIndexes = new Map(
+    headerRow.map((value, index) => [normalizeHeader(value), index]),
+  );
+  const missingColumns = ANTENNA_TEMPLATE_COLUMNS.filter(
+    (column) => !headerIndexes.has(column),
+  );
 
   if (missingColumns.length > 0) {
-    throw new Error(`Missing required column(s): ${missingColumns.join(", ")}.`);
+    throw new Error(
+      `Missing required column(s): ${missingColumns.join(", ")}.`,
+    );
   }
 
-  const dataRows = rows.slice(rows.indexOf(headerRow) + 1)
-    .map((row, index) => ({ row, rowNumber: rows.indexOf(headerRow) + index + 2 }))
+  const dataRows = rows
+    .slice(rows.indexOf(headerRow) + 1)
+    .map((row, index) => ({
+      row,
+      rowNumber: rows.indexOf(headerRow) + index + 2,
+    }))
     .filter(({ row }) => row.some((value) => value !== ""));
 
   if (dataRows.length === 0) {
@@ -74,27 +93,61 @@ function validateAntennaRows(rows) {
 
     seenIds.add(id.toLowerCase());
 
-    const x = requiredNumber(value("x_m"), rowNumber, "x_m");
-    const y = requiredNumber(value("y_m"), rowNumber, "y_m");
+    const longitude = requiredNumber(
+      value("longitude"),
+      rowNumber,
+      "longitude",
+    );
+    const latitude = requiredNumber(value("latitude"), rowNumber, "latitude");
     const height = requiredNumber(value("height_m"), rowNumber, "height_m");
-    const azimuth = requiredNumber(value("azimuth_deg"), rowNumber, "azimuth_deg");
+    const azimuth = requiredNumber(
+      value("azimuth_deg"),
+      rowNumber,
+      "azimuth_deg",
+    );
     const tilt = {
       min: requiredNumber(value("tilt_min_deg"), rowNumber, "tilt_min_deg"),
-      current: requiredNumber(value("tilt_current_deg"), rowNumber, "tilt_current_deg"),
+      current: requiredNumber(
+        value("tilt_current_deg"),
+        rowNumber,
+        "tilt_current_deg",
+      ),
       max: requiredNumber(value("tilt_max_deg"), rowNumber, "tilt_max_deg"),
     };
     const txPower = {
-      min: requiredNumber(value("tx_power_min_dbm"), rowNumber, "tx_power_min_dbm"),
-      current: requiredNumber(value("tx_power_current_dbm"), rowNumber, "tx_power_current_dbm"),
-      max: requiredNumber(value("tx_power_max_dbm"), rowNumber, "tx_power_max_dbm"),
+      min: requiredNumber(
+        value("tx_power_min_dbm"),
+        rowNumber,
+        "tx_power_min_dbm",
+      ),
+      current: requiredNumber(
+        value("tx_power_current_dbm"),
+        rowNumber,
+        "tx_power_current_dbm",
+      ),
+      max: requiredNumber(
+        value("tx_power_max_dbm"),
+        rowNumber,
+        "tx_power_max_dbm",
+      ),
     };
+
+    if (longitude < 102 || longitude > 110) {
+      throw new Error(`Row ${rowNumber}: longitude must be inside Vietnam.`);
+    }
+
+    if (latitude < 8 || latitude > 24) {
+      throw new Error(`Row ${rowNumber}: latitude must be inside Vietnam.`);
+    }
 
     if (height <= 0) {
       throw new Error(`Row ${rowNumber}: height_m must be greater than 0.`);
     }
 
     if (azimuth < 0 || azimuth > 360) {
-      throw new Error(`Row ${rowNumber}: azimuth_deg must be between 0 and 360.`);
+      throw new Error(
+        `Row ${rowNumber}: azimuth_deg must be between 0 and 360.`,
+      );
     }
 
     validateRange(tilt, rowNumber, "tilt");
@@ -102,7 +155,9 @@ function validateAntennaRows(rows) {
 
     return {
       id,
-      position: [x, y, height],
+      longitude,
+      latitude,
+      height_m: height,
       azimuth,
       tilt,
       tx_power: txPower,
@@ -114,16 +169,21 @@ function validateAntennaRows(rows) {
 
 function validateRange(range, rowNumber, label) {
   if (range.min > range.max) {
-    throw new Error(`Row ${rowNumber}: ${label}_min must be less than or equal to ${label}_max.`);
+    throw new Error(
+      `Row ${rowNumber}: ${label}_min must be less than or equal to ${label}_max.`,
+    );
   }
 
   if (range.current < range.min || range.current > range.max) {
-    throw new Error(`Row ${rowNumber}: ${label}_current must be between ${label}_min and ${label}_max.`);
+    throw new Error(
+      `Row ${rowNumber}: ${label}_current must be between ${label}_min and ${label}_max.`,
+    );
   }
 }
 
 function requiredNumber(value, rowNumber, column) {
-  const parsed = typeof value === "number" ? value : Number(String(value).trim());
+  const parsed =
+    typeof value === "number" ? value : Number(String(value).trim());
 
   if (!Number.isFinite(parsed)) {
     throw new Error(`Row ${rowNumber}: ${column} must be a number.`);
@@ -152,8 +212,16 @@ async function unzipWorkbookEntries(arrayBuffer) {
     const extraLength = view.getUint16(offset + 30, true);
     const commentLength = view.getUint16(offset + 32, true);
     const localHeaderOffset = view.getUint32(offset + 42, true);
-    const path = decodeBytes(bytes.slice(offset + 46, offset + 46 + fileNameLength));
-    const data = await readZipEntry(bytes, view, localHeaderOffset, compressedSize, compressionMethod);
+    const path = decodeBytes(
+      bytes.slice(offset + 46, offset + 46 + fileNameLength),
+    );
+    const data = await readZipEntry(
+      bytes,
+      view,
+      localHeaderOffset,
+      compressedSize,
+      compressionMethod,
+    );
 
     entries.set(path.replace(/\\/g, "/"), decodeBytes(data));
     offset += 46 + fileNameLength + extraLength + commentLength;
@@ -162,7 +230,13 @@ async function unzipWorkbookEntries(arrayBuffer) {
   return entries;
 }
 
-async function readZipEntry(bytes, view, localHeaderOffset, compressedSize, compressionMethod) {
+async function readZipEntry(
+  bytes,
+  view,
+  localHeaderOffset,
+  compressedSize,
+  compressionMethod,
+) {
   if (view.getUint32(localHeaderOffset, true) !== ZIP_LOCAL_FILE_HEADER) {
     throw new Error("Invalid .xlsx local file header.");
   }
@@ -188,7 +262,9 @@ async function inflateRaw(bytes) {
     throw new Error("This browser cannot read compressed .xlsx files.");
   }
 
-  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  const stream = new Blob([bytes])
+    .stream()
+    .pipeThrough(new DecompressionStream("deflate-raw"));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
@@ -203,8 +279,9 @@ function findEndOfCentralDirectory(view) {
 }
 
 function findWorksheetPath(workbook, relationships, sheetName) {
-  const sheet = [...workbook.getElementsByTagName("sheet")]
-    .find((item) => item.getAttribute("name") === sheetName);
+  const sheet = [...workbook.getElementsByTagName("sheet")].find(
+    (item) => item.getAttribute("name") === sheetName,
+  );
   const relationshipId = sheet?.getAttribute("r:id");
   const target = relationships.get(relationshipId);
 
@@ -220,7 +297,10 @@ function parseWorkbookRelationships(xml) {
   const relationships = new Map();
 
   for (const relationship of document.getElementsByTagName("Relationship")) {
-    relationships.set(relationship.getAttribute("Id"), relationship.getAttribute("Target"));
+    relationships.set(
+      relationship.getAttribute("Id"),
+      relationship.getAttribute("Target"),
+    );
   }
 
   return relationships;
@@ -239,7 +319,10 @@ function parseWorksheetRows(xml, sharedStrings) {
     const cells = [];
 
     for (const cell of row.getElementsByTagName("c")) {
-      cells[columnIndexFromReference(cell.getAttribute("r"))] = parseCellValue(cell, sharedStrings);
+      cells[columnIndexFromReference(cell.getAttribute("r"))] = parseCellValue(
+        cell,
+        sharedStrings,
+      );
     }
 
     return cells.map((value) => value ?? "");
@@ -279,9 +362,12 @@ function cellText(node) {
 function columnIndexFromReference(reference) {
   const letters = String(reference || "").match(/[A-Z]+/i)?.[0] || "A";
 
-  return [...letters.toUpperCase()].reduce((sum, letter) => (
-    sum * 26 + letter.charCodeAt(0) - 64
-  ), 0) - 1;
+  return (
+    [...letters.toUpperCase()].reduce(
+      (sum, letter) => sum * 26 + letter.charCodeAt(0) - 64,
+      0,
+    ) - 1
+  );
 }
 
 function normalizeWorkbookTarget(target) {

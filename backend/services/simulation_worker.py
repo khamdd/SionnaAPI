@@ -14,6 +14,7 @@ from backend.services.coverage_service import (
     calculate_coverage_map_service,
     calculate_network_coverage_service,
 )
+from backend.services.coordinate_service import with_runtime_antenna_positions
 from backend.services.rsrp_service import calculate_rsrp_service
 from backend.services.simulation_job_store import (
     claim_next_simulation_job,
@@ -92,10 +93,11 @@ def run_simulation_job(job):
 
     try:
         req = build_request(simulation_type, request_json)
+        runtime_req = with_runtime_antenna_positions(req, scene_info)
         scene = get_worker_scene(scene_info)
         result = execute_simulation(
             simulation_type,
-            req,
+            runtime_req,
             scene,
             job.get("base_url"),
         )

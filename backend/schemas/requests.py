@@ -92,19 +92,12 @@ class AntennaConfig(BaseModel):
 
     id: str
 
-    position: Tuple[
-        float,
-        float,
-        float
-    ]
+    longitude: float | None = Field(default=None, ge=-180.0, le=180.0)
+    latitude: float | None = Field(default=None, ge=-90.0, le=90.0)
+    height_m: float | None = Field(default=None, gt=0.0)
 
     tilt: RangeValue
-
-    azimuth: float = Field(
-        ge=0.0,
-        le=360.0,
-    )
-
+    azimuth: float = Field(ge=0.0, le=360.0)
     tx_power: RangeValue
 
 

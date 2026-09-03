@@ -8,6 +8,7 @@ import {
   SELECTED_CELL_OUTLINE,
 } from "../constants";
 import { getOfflineBuildings } from "../api";
+import { lngLatToScenePosition } from "../utils/scene";
 
 const SCENE_MODEL_CACHE_LIMIT = 3;
 const sceneModelCache = new Map();
@@ -112,7 +113,9 @@ export default function Scene3DPreview({
         }
 
         setModel(buildModel(bounds, []));
-        setStatus("OSM building lookup failed. Try refreshing or selecting a smaller area.");
+        setStatus(
+          "OSM building lookup failed. Try refreshing or selecting a smaller area.",
+        );
         reportLoading(false);
       }
     }
@@ -136,6 +139,7 @@ export default function Scene3DPreview({
     return renderThreeScene(
       host,
       model,
+      bounds,
       viewMode,
       antennas,
       solver,
@@ -149,7 +153,20 @@ export default function Scene3DPreview({
       onCoverageCellSelect,
       onRsrpUserSelect,
     );
-  }, [antennas, coverageDisplayMode, coverageGrid, coverageImageUrl, model, onCoverageCellSelect, onRsrpUserSelect, rsrpUsers, signalLinks, solver, viewMode]);
+  }, [
+    antennas,
+    bounds,
+    coverageDisplayMode,
+    coverageGrid,
+    coverageImageUrl,
+    model,
+    onCoverageCellSelect,
+    onRsrpUserSelect,
+    rsrpUsers,
+    signalLinks,
+    solver,
+    viewMode,
+  ]);
 
   return (
     <div className={["scene-3d-preview", className].filter(Boolean).join(" ")}>
@@ -226,7 +243,11 @@ async function fetchBuildings(bounds, signal) {
 function parseOfflineBuildingElement(element, index) {
   const geometry = element.geometry || [];
 
-  return buildBuildingRecord(element.id || `offline-${index}`, element.tags, geometry);
+  return buildBuildingRecord(
+    element.id || `offline-${index}`,
+    element.tags,
+    geometry,
+  );
 }
 
 async function fetchBuildingsWithRetry(bounds, signal, retries = 1) {
@@ -272,15 +293,26 @@ function waitForRetry(delayMs, signal) {
 
 function parseOsmElement(item, index) {
   if (Array.isArray(item.geometry) && item.geometry.length >= 3) {
-    return [buildBuildingRecord(item.id || `osm-${index}`, item.tags, item.geometry)];
+    return [
+      buildBuildingRecord(item.id || `osm-${index}`, item.tags, item.geometry),
+    ];
   }
 
   if (Array.isArray(item.members)) {
     return item.members
-      .filter((member) => member.role === "outer" && Array.isArray(member.geometry) && member.geometry.length >= 3)
-      .map((member, memberIndex) => (
-        buildBuildingRecord(`${item.id || index}-${memberIndex}`, item.tags, member.geometry)
-      ));
+      .filter(
+        (member) =>
+          member.role === "outer" &&
+          Array.isArray(member.geometry) &&
+          member.geometry.length >= 3,
+      )
+      .map((member, memberIndex) =>
+        buildBuildingRecord(
+          `${item.id || index}-${memberIndex}`,
+          item.tags,
+          member.geometry,
+        ),
+      );
   }
 
   return [];
@@ -315,7 +347,13 @@ function inferBuildingHeight(tags = {}) {
   const levels = parseFloat(tags["building:levels"] || tags.levels);
   if (Number.isFinite(levels) && levels > 0) {
     return {
-      height: clamp((levels * 3.1) + (Number.isFinite(roofHeight) ? roofHeight : 0) + (Number.isFinite(minHeight) ? minHeight : 0), 2.5, 160),
+      height: clamp(
+        levels * 3.1 +
+          (Number.isFinite(roofHeight) ? roofHeight : 0) +
+          (Number.isFinite(minHeight) ? minHeight : 0),
+        2.5,
+        160,
+      ),
       source: "levels",
     };
   }
@@ -341,7 +379,11 @@ function estimateHeightFromType(tags = {}) {
     return 10;
   }
 
-  if (["house", "detached", "semidetached_house", "terrace", "garage"].includes(type)) {
+  if (
+    ["house", "detached", "semidetached_house", "terrace", "garage"].includes(
+      type,
+    )
+  ) {
     return 7;
   }
 
@@ -375,9 +417,13 @@ function buildModel(bounds, buildings) {
   const centerLat = (bounds.south + bounds.north) / 2;
   const centerLon = (bounds.west + bounds.east) / 2;
   const metersPerDegreeLat = 111320;
-  const metersPerDegreeLon = metersPerDegreeLat * Math.max(Math.cos(centerLat * Math.PI / 180), 0.01);
+  const metersPerDegreeLon =
+    metersPerDegreeLat * Math.max(Math.cos((centerLat * Math.PI) / 180), 0.01);
   const widthM = Math.max((bounds.east - bounds.west) * metersPerDegreeLon, 1);
-  const heightM = Math.max((bounds.north - bounds.south) * metersPerDegreeLat, 1);
+  const heightM = Math.max(
+    (bounds.north - bounds.south) * metersPerDegreeLat,
+    1,
+  );
   const maxSide = Math.max(widthM, heightM);
   const scale = 460 / maxSide;
 
@@ -409,6 +455,7 @@ function buildModel(bounds, buildings) {
 function renderThreeScene(
   host,
   model,
+  bounds,
   viewMode,
   antennas,
   solver,
@@ -430,9 +477,10 @@ function renderThreeScene(
   scene.background = new THREE.Color(0xedf2f7);
 
   const maxSide = Math.max(model.width, model.depth);
-  const camera = viewMode === "top"
-    ? createTopCamera(width, height, maxSide)
-    : new THREE.PerspectiveCamera(42, width / height, 0.1, 4000);
+  const camera =
+    viewMode === "top"
+      ? createTopCamera(width, height, maxSide)
+      : new THREE.PerspectiveCamera(42, width / height, 0.1, 4000);
 
   if (viewMode === "top") {
     camera.position.set(maxSide * 0.24, maxSide * 1.38, maxSide * 0.28);
@@ -488,10 +536,9 @@ function renderThreeScene(
   scene.add(edge);
 
   addRoadLines(scene, model);
-  const coverageMesh = (
-    addCoverageGrid(scene, model, coverageGrid, solver, coverageDisplayMode)
-    || addCoverageImage(scene, model, coverageImageUrl)
-  );
+  const coverageMesh =
+    addCoverageGrid(scene, model, coverageGrid, solver, coverageDisplayMode) ||
+    addCoverageImage(scene, model, coverageImageUrl);
   const selectedCellGroup = new THREE.Group();
   const hoveredCellGroup = new THREE.Group();
   scene.add(selectedCellGroup);
@@ -506,7 +553,7 @@ function renderThreeScene(
     }
   });
 
-  addAntennas(scene, model, antennas, solver);
+  addAntennas(scene, model, antennas, solver, bounds);
   addSignalLinks(scene, model, signalLinks, solver);
   const rsrpUserObjects = addRsrpUsers(scene, model, rsrpUsers, solver);
   const selectedRsrpUserGroup = new THREE.Group();
@@ -538,7 +585,13 @@ function renderThreeScene(
       return;
     }
 
-    updateCellOutlineGroup(hoveredCellGroup, model, cell, solver, HOVER_CELL_OUTLINE);
+    updateCellOutlineGroup(
+      hoveredCellGroup,
+      model,
+      cell,
+      solver,
+      HOVER_CELL_OUTLINE,
+    );
     lastHoveredCell = cell;
     renderer.domElement.style.cursor = cell ? "pointer" : "";
   }
@@ -564,17 +617,19 @@ function renderThreeScene(
       return;
     }
 
-    setHoveredCell(pickCoverageCellFromEvent(
-      event,
-      renderer,
-      camera,
-      raycaster,
-      pointer,
-      coverageMesh,
-      model,
-      coverageGrid,
-      solver,
-    ));
+    setHoveredCell(
+      pickCoverageCellFromEvent(
+        event,
+        renderer,
+        camera,
+        raycaster,
+        pointer,
+        coverageMesh,
+        model,
+        coverageGrid,
+        solver,
+      ),
+    );
   }
 
   function handlePointerLeave() {
@@ -639,12 +694,26 @@ function renderThreeScene(
   let animationId = 0;
   function animate() {
     controls.update();
-    syncSelectedCellOutline(selectedCellGroup, model, selectedCoverageCellRef, solver, lastSelectedCell, (cell) => {
-      lastSelectedCell = cell;
-    });
-    syncSelectedRsrpUserOutline(selectedRsrpUserGroup, model, selectedRsrpUserRef, solver, lastSelectedRsrpUser, (user) => {
-      lastSelectedRsrpUser = user;
-    });
+    syncSelectedCellOutline(
+      selectedCellGroup,
+      model,
+      selectedCoverageCellRef,
+      solver,
+      lastSelectedCell,
+      (cell) => {
+        lastSelectedCell = cell;
+      },
+    );
+    syncSelectedRsrpUserOutline(
+      selectedRsrpUserGroup,
+      model,
+      selectedRsrpUserRef,
+      solver,
+      lastSelectedRsrpUser,
+      (user) => {
+        lastSelectedRsrpUser = user;
+      },
+    );
     renderer.render(scene, camera);
     animationId = window.requestAnimationFrame(animate);
   }
@@ -675,7 +744,14 @@ function renderThreeScene(
   };
 }
 
-function syncSelectedCellOutline(group, model, selectedCoverageCellRef, solver, lastSelectedCell, setLastSelectedCell) {
+function syncSelectedCellOutline(
+  group,
+  model,
+  selectedCoverageCellRef,
+  solver,
+  lastSelectedCell,
+  setLastSelectedCell,
+) {
   const cell = selectedCoverageCellRef?.current || null;
 
   if (cell === lastSelectedCell) {
@@ -774,8 +850,14 @@ function addCellOutline(scene, model, cell, solver, style) {
   const sizeY = solver.size?.[1] || 300;
   const centerX = solver.center?.[0] || 0;
   const centerY = solver.center?.[1] || 0;
-  const cellWidth = Math.max(((solver.cell_size || 5) / sizeX) * model.width, 0.6);
-  const cellDepth = Math.max(((solver.cell_size || 5) / sizeY) * model.depth, 0.6);
+  const cellWidth = Math.max(
+    ((solver.cell_size || 5) / sizeX) * model.width,
+    0.6,
+  );
+  const cellDepth = Math.max(
+    ((solver.cell_size || 5) / sizeY) * model.depth,
+    0.6,
+  );
   const x = ((numericValue(cell.x) - centerX) / sizeX) * model.width;
   const z = -((numericValue(cell.y) - centerY) / sizeY) * model.depth;
 
@@ -842,7 +924,12 @@ function createCoverageTexture(grid, coverageDisplayMode) {
   const rows = Number(grid.rows);
   const cols = Number(grid.cols);
 
-  if (!Number.isInteger(rows) || !Number.isInteger(cols) || rows <= 0 || cols <= 0) {
+  if (
+    !Number.isInteger(rows) ||
+    !Number.isInteger(cols) ||
+    rows <= 0 ||
+    cols <= 0
+  ) {
     return null;
   }
 
@@ -885,10 +972,9 @@ function findCoverageCellAtPoint(point, model, grid, solver) {
   const col = Math.floor((worldX - xMin) / cellSize);
   const row = Math.floor((worldY - yMin) / cellSize);
 
-  return grid.cells.find((cell) => (
-    Number(cell.row) === row
-    && Number(cell.col) === col
-  ));
+  return grid.cells.find(
+    (cell) => Number(cell.row) === row && Number(cell.col) === col,
+  );
 }
 
 function pickCoverageCellFromEvent(
@@ -916,10 +1002,12 @@ function pickCoverageCellFromEvent(
     return null;
   }
 
-  return findCoverageCellAtPoint(hit.point, model, coverageGrid, solver) || null;
+  return (
+    findCoverageCellAtPoint(hit.point, model, coverageGrid, solver) || null
+  );
 }
 
-function addAntennas(scene, model, antennas, solver) {
+function addAntennas(scene, model, antennas, solver, bounds) {
   if (!Array.isArray(antennas) || !solver) {
     return;
   }
@@ -927,13 +1015,23 @@ function addAntennas(scene, model, antennas, solver) {
   const group = new THREE.Group();
 
   antennas.forEach((antenna, index) => {
-    const position = scenePointFromWorld(model, solver, antenna.position, 0);
+    const scenePosition = resolveSceneAntennaPosition(antenna, bounds);
+
+    if (!Array.isArray(scenePosition)) {
+      return;
+    }
+
+    const position = scenePointFromWorld(model, solver, scenePosition, 0);
 
     if (!position) {
       return;
     }
 
-    const mastHeight = clamp((antenna.position[2] || 25) * model.scale, 18, 74);
+    const mastHeight = clamp(
+      (antenna.height_m || scenePosition[2] || 25) * model.scale,
+      18,
+      74,
+    );
     const marker = createAntennaObject(antenna, index, mastHeight);
     marker.position.set(position.x, 0, position.z);
     group.add(marker);
@@ -942,12 +1040,40 @@ function addAntennas(scene, model, antennas, solver) {
   scene.add(group);
 }
 
+function resolveSceneAntennaPosition(antenna, bounds) {
+  if (
+    bounds &&
+    Number.isFinite(Number(antenna.longitude)) &&
+    Number.isFinite(Number(antenna.latitude))
+  ) {
+    return lngLatToScenePosition(
+      {
+        longitude: Number(antenna.longitude),
+        latitude: Number(antenna.latitude),
+        height_m: Number(antenna.height_m),
+      },
+      bounds,
+    );
+  }
+
+  return Array.isArray(antenna.position) ? antenna.position : null;
+}
+
 function createAntennaObject(antenna, index, mastHeight) {
   const group = new THREE.Group();
   const palette = antennaPalette(antenna.id);
-  const mastMaterial = new THREE.MeshStandardMaterial({ color: palette.mast, roughness: 0.55 });
-  const headMaterial = new THREE.MeshStandardMaterial({ color: palette.head, roughness: 0.4 });
-  const darkMaterial = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.6 });
+  const mastMaterial = new THREE.MeshStandardMaterial({
+    color: palette.mast,
+    roughness: 0.55,
+  });
+  const headMaterial = new THREE.MeshStandardMaterial({
+    color: palette.head,
+    roughness: 0.4,
+  });
+  const darkMaterial = new THREE.MeshStandardMaterial({
+    color: 0x111827,
+    roughness: 0.6,
+  });
 
   const mast = new THREE.Mesh(
     new THREE.CylinderGeometry(2, 2, mastHeight, 12),
@@ -979,10 +1105,7 @@ function createAntennaObject(antenna, index, mastHeight) {
   );
   group.add(arrow);
 
-  const cone = new THREE.Mesh(
-    new THREE.ConeGeometry(4, 10, 16),
-    mastMaterial,
-  );
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(4, 10, 16), mastMaterial);
   cone.position.set(dirX * arrowLength, mastHeight + 4, dirZ * arrowLength);
   cone.lookAt(
     dirX * (arrowLength + 1),
@@ -992,7 +1115,9 @@ function createAntennaObject(antenna, index, mastHeight) {
   cone.rotateX(Math.PI / 2);
   group.add(cone);
 
-  const label = new THREE.Sprite(createAntennaLabelMaterial(antenna.id || `A${index + 1}`, palette.label));
+  const label = new THREE.Sprite(
+    createAntennaLabelMaterial(antenna.id || `A${index + 1}`, palette.label),
+  );
   label.position.y = mastHeight + 18;
   label.scale.set(24, 24, 1);
   group.add(label);
@@ -1031,12 +1156,14 @@ function addSignalLinks(scene, model, signalLinks, solver) {
       Math.max(start.y, end.y) + arcHeight,
       (start.z + end.z) / 2,
     );
-    const curve = new THREE.CatmullRomCurve3([
-      start,
-      midpoint,
-      end,
-    ]);
-    const geometry = new THREE.TubeGeometry(curve, 36, palette.radius, 8, false);
+    const curve = new THREE.CatmullRomCurve3([start, midpoint, end]);
+    const geometry = new THREE.TubeGeometry(
+      curve,
+      36,
+      palette.radius,
+      8,
+      false,
+    );
     const material = new THREE.MeshBasicMaterial({
       color: palette.color,
       depthTest: false,
@@ -1049,7 +1176,9 @@ function addSignalLinks(scene, model, signalLinks, solver) {
     group.add(tube);
 
     if (link.label) {
-      const label = new THREE.Sprite(createTextSpriteMaterial(link.label, palette.color));
+      const label = new THREE.Sprite(
+        createTextSpriteMaterial(link.label, palette.color),
+      );
       label.position.copy(midpoint);
       label.position.y += 10;
       label.scale.set(68, 22, 1);
@@ -1187,7 +1316,14 @@ function pickRsrpUserFromEvent(
   return hit?.object?.userData?.rsrpUser || null;
 }
 
-function syncSelectedRsrpUserOutline(group, model, selectedRsrpUserRef, solver, lastSelectedRsrpUser, setLastSelectedRsrpUser) {
+function syncSelectedRsrpUserOutline(
+  group,
+  model,
+  selectedRsrpUserRef,
+  solver,
+  lastSelectedRsrpUser,
+  setLastSelectedRsrpUser,
+) {
   const user = selectedRsrpUserRef?.current || null;
 
   if (user === lastSelectedRsrpUser) {
@@ -1357,7 +1493,12 @@ function roundRect(context, x, y, width, height, radius) {
   context.lineTo(x + width - radius, y);
   context.quadraticCurveTo(x + width, y, x + width, y + radius);
   context.lineTo(x + width, y + height - radius);
-  context.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  context.quadraticCurveTo(
+    x + width,
+    y + height,
+    x + width - radius,
+    y + height,
+  );
   context.lineTo(x + radius, y + height);
   context.quadraticCurveTo(x, y + height, x, y + height - radius);
   context.lineTo(x, y + radius);
@@ -1508,13 +1649,26 @@ function numericValue(value) {
 function addRoadLines(scene, model) {
   const material = new THREE.LineBasicMaterial({ color: 0x93c5fd });
   const lines = [
-    [[-0.45, -0.2], [-0.1, -0.05], [0.45, -0.15]],
-    [[-0.36, 0.36], [0.0, 0.05], [0.42, 0.3]],
-    [[-0.48, 0.12], [0.48, 0.12]],
+    [
+      [-0.45, -0.2],
+      [-0.1, -0.05],
+      [0.45, -0.15],
+    ],
+    [
+      [-0.36, 0.36],
+      [0.0, 0.05],
+      [0.42, 0.3],
+    ],
+    [
+      [-0.48, 0.12],
+      [0.48, 0.12],
+    ],
   ];
 
   lines.forEach((line) => {
-    const points = line.map(([x, z]) => new THREE.Vector3(x * model.width, 1.2, z * model.depth));
+    const points = line.map(
+      ([x, z]) => new THREE.Vector3(x * model.width, 1.2, z * model.depth),
+    );
     const geometry = new THREE.BufferGeometry().setFromPoints(points);
     scene.add(new THREE.Line(geometry, material));
   });
@@ -1528,7 +1682,10 @@ function removeDuplicateClosingPoint(points) {
   const first = points[0];
   const last = points[points.length - 1];
 
-  if (Math.abs(first.x - last.x) < 0.001 && Math.abs(first.z - last.z) < 0.001) {
+  if (
+    Math.abs(first.x - last.x) < 0.001 &&
+    Math.abs(first.z - last.z) < 0.001
+  ) {
     return points.slice(0, -1);
   }
 
@@ -1580,8 +1737,12 @@ function generateFallbackBuildings(bounds) {
 }
 
 function buildHeightStatus(buildings) {
-  const exactCount = buildings.filter((building) => building.heightSource === "exact").length;
-  const levelCount = buildings.filter((building) => building.heightSource === "levels").length;
+  const exactCount = buildings.filter(
+    (building) => building.heightSource === "exact",
+  ).length;
+  const levelCount = buildings.filter(
+    (building) => building.heightSource === "levels",
+  ).length;
   const estimatedCount = buildings.length - exactCount - levelCount;
 
   return `${buildings.length} OSM buildings. ${exactCount} exact heights, ${levelCount} level-based heights, ${estimatedCount} estimated.`;

@@ -49,6 +49,7 @@ from backend.services.scene_service import (
     get_active_scene,
     list_scenes,
 )
+from backend.services.coordinate_service import with_runtime_antenna_positions
 from backend.services.event_logger import log_event
 
 from backend.simulations.sionna_engine import engine
@@ -81,14 +82,15 @@ def run_and_store(
     started_at = utc_now()
     scene_info = get_engine_scene_info()
     align_request_solver_to_scene(req, scene_info)
-    validate_request_positions_inside_solver(req)
+    runtime_req = prepare_runtime_request(req, scene_info)
+    validate_request_positions_inside_solver(runtime_req)
     log_simulation_event(
         "simulation_started",
         simulation_type,
         scene_info,
     )
     try:
-        result = simulation_fn()
+        result = simulation_fn(runtime_req)
     except Exception as exc:
         finished_at = utc_now()
         log_simulation_event(
@@ -150,7 +152,8 @@ def queue_or_run(
     if is_database_configured():
         scene_info = get_engine_scene_info()
         align_request_solver_to_scene(req, scene_info)
-        validate_request_positions_inside_solver(req)
+        runtime_req = prepare_runtime_request(req, scene_info)
+        validate_request_positions_inside_solver(runtime_req)
         job_id = create_simulation_job(
             simulation_type,
             req,
@@ -175,8 +178,22 @@ def queue_or_run(
         return run_and_store(
             simulation_type,
             req,
-            lambda: simulation_fn(scene),
+            lambda runtime_req: simulation_fn(runtime_req, scene),
         )
+
+
+def prepare_runtime_request(req, scene_info):
+    try:
+        return with_runtime_antenna_positions(req, scene_info)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "status": "failure",
+                "status_code": 400,
+                "error": str(exc),
+            },
+        ) from exc
 
 
 def align_request_solver_to_scene(req, scene_info):
@@ -259,7 +276,9 @@ def iter_position_fields(req):
 
     for antenna in getattr(req, "antennas", []) or []:
         antenna_id = getattr(antenna, "id", "unknown")
-        yield f"Antenna {antenna_id} position", antenna.position
+        position = getattr(antenna, "position", None)
+        if position is not None:
+            yield f"Antenna {antenna_id} position", position
 
 
 def position_bounds_error(label, position, x_min, x_max, y_min, y_max):
@@ -376,8 +395,8 @@ def coverage_map(req: CoverageRequest, request: Request):
     return queue_or_run(
         "coverage_map",
         req,
-        lambda scene: calculate_coverage_map_service(
-                req,
+        lambda runtime_req, scene: calculate_coverage_map_service(
+                runtime_req,
                 request.base_url,
                 scene,
         ),
@@ -390,8 +409,8 @@ def network_coverage(req: NetworkCoverageRequest, request: Request):
     return queue_or_run(
         "network_coverage",
         req,
-        lambda scene: calculate_network_coverage_service(
-                req,
+        lambda runtime_req, scene: calculate_network_coverage_service(
+                runtime_req,
                 request.base_url,
                 scene,
         ),
@@ -404,7 +423,7 @@ def rsrp_simulation(req: RSRPRequest):
     return queue_or_run(
         "rsrp_simulation",
         req,
-        lambda scene: calculate_rsrp_service(req, scene),
+        lambda runtime_req, scene: calculate_rsrp_service(runtime_req, scene),
     )
 
 
@@ -413,7 +432,7 @@ def calculate_sinr(req: SINRRequest):
     return queue_or_run(
         "sinr",
         req,
-        lambda scene: calculate_sinr_service(req, scene),
+        lambda runtime_req, scene: calculate_sinr_service(runtime_req, scene),
     )
 
 
@@ -422,7 +441,7 @@ def compare_throughput(req: ThroughputRequest):
     return queue_or_run(
         "throughput_comparison",
         req,
-        lambda scene: compare_throughput_service(req, scene),
+        lambda runtime_req, scene: compare_throughput_service(runtime_req, scene),
     )
 
 

@@ -140,3 +140,46 @@ function formatLimit(value) {
 function isPositiveFinite(value) {
   return Number.isFinite(value) && value > 0;
 }
+
+export function lngLatToScenePosition({ longitude, latitude, height_m }, bounds) {
+  const numericLongitude = Number(longitude);
+  const numericLatitude = Number(latitude);
+  const numericHeight = Number(height_m);
+
+  if (
+    !bounds ||
+    !Number.isFinite(numericLongitude) ||
+    !Number.isFinite(numericLatitude)
+  ) {
+    return null;
+  }
+
+  const centerLat = (bounds.south + bounds.north) / 2;
+  const centerLng = (bounds.west + bounds.east) / 2;
+  const metersPerDegreeLat = 111320;
+  const metersPerDegreeLng = metersPerDegreeLat * Math.max(
+    Math.cos((centerLat * Math.PI) / 180),
+    0.01,
+  );
+
+  return [
+    Number(((numericLongitude - centerLng) * metersPerDegreeLng).toFixed(2)),
+    Number(((numericLatitude - centerLat) * metersPerDegreeLat).toFixed(2)),
+    Number.isFinite(numericHeight) ? numericHeight : 0,
+  ];
+}
+
+export function lngLatInsideBounds({ longitude, latitude }, bounds) {
+  const numericLongitude = Number(longitude);
+  const numericLatitude = Number(latitude);
+
+  return (
+    bounds &&
+    Number.isFinite(numericLongitude) &&
+    Number.isFinite(numericLatitude) &&
+    numericLongitude >= bounds.west &&
+    numericLongitude <= bounds.east &&
+    numericLatitude >= bounds.south &&
+    numericLatitude <= bounds.north
+  );
+}

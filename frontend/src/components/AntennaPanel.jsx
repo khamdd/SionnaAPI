@@ -1,4 +1,4 @@
-import { formatPosition } from "../utils/format";
+import { formatMaybeNumber, formatPosition } from "../utils/format";
 
 export default function AntennaPanel({ antennas, disabled = false, onChange }) {
   return (
@@ -7,11 +7,11 @@ export default function AntennaPanel({ antennas, disabled = false, onChange }) {
         <article className="antenna-card" key={item.id}>
           <h3>
             <span>{item.id}</span>
-            <small>{formatPosition(item.position)}</small>
+            <small>{formatAntennaLocation(item)}</small>
           </h3>
           <div className="antenna-meta">
             <span>Azimuth {item.azimuth} deg</span>
-            <span>Height {item.position[2]} m</span>
+            <span>Height {formatMaybeNumber(item.height_m ?? item.position?.[2])} m</span>
           </div>
           <div className="control-row">
             <label htmlFor={`tilt-${index}`}>Tilt</label>
@@ -45,4 +45,15 @@ export default function AntennaPanel({ antennas, disabled = false, onChange }) {
       ))}
     </div>
   );
+}
+
+function formatAntennaLocation(antenna) {
+  if (
+    Number.isFinite(Number(antenna.longitude)) &&
+    Number.isFinite(Number(antenna.latitude))
+  ) {
+    return `${formatMaybeNumber(antenna.longitude)}, ${formatMaybeNumber(antenna.latitude)}`;
+  }
+
+  return Array.isArray(antenna.position) ? formatPosition(antenna.position) : "--";
 }
