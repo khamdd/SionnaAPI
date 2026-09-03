@@ -41,6 +41,7 @@ export default function AntennaPanel({
   onAddType2,
   onChange,
   onRemoveType2,
+  simulationLabel = "Network Coverage",
 }) {
   const [draft, setDraft] = useState(() => ({
     ...DRAFT_DEFAULTS,
@@ -71,8 +72,8 @@ export default function AntennaPanel({
     return fieldHint(field, activeScene?.bounds);
   }
 
-  function submitType2(event) {
-    event.preventDefault();
+  function submitType2(event = null) {
+    event?.preventDefault();
     const result = validateType2Draft(draft, antennas, activeScene);
 
     if (result.error) {
@@ -101,10 +102,10 @@ export default function AntennaPanel({
       </div>
       {overLimit && (
         <p className="history-status error-text">
-          Network Coverage supports up to {maxAntennas} antennas. This scene has {antennas.length} selected antennas.
+          {simulationLabel} supports up to {maxAntennas} antennas. This scene has {antennas.length} selected antennas.
         </p>
       )}
-      <form className="antenna-add-form" onSubmit={submitType2}>
+      <div className="antenna-add-form">
         <details open={antennas.length === 0}>
           <summary>Add type 2 antenna</summary>
           <div className="antenna-form-grid">
@@ -186,13 +187,18 @@ export default function AntennaPanel({
             />
           </div>
           {addError && <p className="field-error">{addError}</p>}
-          <button className="primary-button" type="submit" disabled={!canAdd}>
+          <button
+            className="primary-button"
+            type="button"
+            disabled={!canAdd}
+            onClick={submitType2}
+          >
             Add antenna
           </button>
         </details>
-      </form>
+      </div>
       {antennas.length === 0 && (
-        <p className="history-status">No antennas are selected for Network Coverage.</p>
+        <p className="history-status">No antennas are selected for {simulationLabel}.</p>
       )}
       {antennas.map((item) => (
         <AntennaCard
@@ -264,7 +270,6 @@ function AntennaCard({
               step="any"
               value={antenna.azimuth}
               disabled={disabled}
-              required
               onChange={(event) => onChange(antenna.id, "azimuth", parseNumericInput(event.target.value))}
             />
             <small>deg</small>
@@ -294,7 +299,6 @@ function TextField({ disabled, label, onChange, value }) {
         type="text"
         value={value}
         disabled={disabled}
-        required
         onChange={(event) => onChange(event.target.value)}
       />
     </label>
@@ -310,7 +314,6 @@ function NumberField({ disabled, hint = "", label, onChange, value }) {
           type="number"
           value={value}
           disabled={disabled}
-          required
           step="any"
           onChange={(event) => onChange(parseNumericInput(event.target.value))}
         />

@@ -10,6 +10,7 @@ import {
   formatText,
   formatDateTime,
 } from "../utils/format";
+import { RsrpUserDialog } from "./ApiPages";
 import Scene3DPreview from "./Scene3DPreview";
 
 export default function HistoryDetail({ item, onPreviewLoadingChange }) {
@@ -438,6 +439,7 @@ function HistoryLinkPreview({ item, onPreviewLoadingChange }) {
 }
 
 function RsrpHistory({ item, onPreviewLoadingChange }) {
+  const [selectedUser, setSelectedUser] = useState(null);
   const fullResult = useFullResultArtifact(item);
   const savedResponse = item.response_json || {};
   const response = fullResult || savedResponse;
@@ -449,8 +451,8 @@ function RsrpHistory({ item, onPreviewLoadingChange }) {
       : request.antennas || []
   );
 
-  const users = Array.isArray(fullResult?.users)
-    ? fullResult.users
+  const users = Array.isArray(response.users)
+    ? response.users
     : [];
 
   const solver = (
@@ -471,12 +473,20 @@ function RsrpHistory({ item, onPreviewLoadingChange }) {
             bounds={item.scene_bounds}
             className="history-scene-3d"
             onLoadingChange={onPreviewLoadingChange}
+            onRsrpUserSelect={setSelectedUser}
             rsrpUsers={users}
             sceneName={item.scene_name}
+            selectedRsrpUser={selectedUser}
             showOverlay={false}
             solver={solver}
             viewMode="top"
           />
+          {selectedUser && (
+            <RsrpUserDialog
+              user={selectedUser}
+              onClose={() => setSelectedUser(null)}
+            />
+          )}
         </div>
       ) : (
         <p className="history-status">

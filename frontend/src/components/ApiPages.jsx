@@ -28,6 +28,7 @@ import {
   solverForScene,
   validatePositionInsideSolver,
 } from "../utils/scene";
+import AntennaPanel from "./AntennaPanel";
 import Scene3DPreview, { hasCachedSceneModel } from "./Scene3DPreview";
 
 const COVERAGE_TYPE2_TRANSMITTER_ID = "__coverage_type2_transmitter__";
@@ -324,7 +325,19 @@ export function SinrApiPage({ activeScene, onProgressChange, onQueueOpen, onScen
   );
 }
 
-export function RsrpSimulationPage({ activeScene, antennas, onProgressChange, onQueueOpen, onSceneLoadingChange, onSimulationQueued }) {
+export function RsrpSimulationPage({
+  activeScene,
+  antennas,
+  maxAntennas = 10,
+  onAddType2Antenna,
+  onProgressChange,
+  onQueueOpen,
+  onRemoveType2Antenna,
+  onResetAntennas,
+  onSceneLoadingChange,
+  onSimulationQueued,
+  onUpdateAntenna,
+}) {
   const [selectedUser, setSelectedUser] = useState(null);
   const [form, setForm] = useState(() => ({
     user_count: suggestUserCount(DEFAULT_SOLVER),
@@ -348,8 +361,22 @@ export function RsrpSimulationPage({ activeScene, antennas, onProgressChange, on
     }
 
     setSelectedUser(null);
-    const payload = {
+    const antennaError = validateSimulationAntennas(
       antennas,
+      activeScene,
+      maxAntennas,
+      "RSRP Simulation",
+    );
+
+    if (antennaError) {
+      await setResultState(async () => {
+        throw new Error(antennaError);
+      });
+      return;
+    }
+
+    const payload = {
+      antennas: antennas.map(toAntennaRequest),
       transmitter_pattern: TRANSMITTER_PATTERN,
       ...form,
       solver: sceneSolver,
@@ -375,6 +402,33 @@ export function RsrpSimulationPage({ activeScene, antennas, onProgressChange, on
         <div className="api-panel">
           <form className="api-form" onSubmit={submit}>
             <fieldset className="api-form-lock" disabled={resultState.loading || !sceneStatus.isSceneReady}>
+              <FormSection title="Antennas">
+                <div className="embedded-antenna-panel">
+                  <div className="panel-header">
+                    <h3>RSRP antennas</h3>
+                    <div className="panel-actions">
+                      <button
+                        className="ghost-button"
+                        type="button"
+                        disabled={resultState.loading || !sceneStatus.isSceneReady}
+                        onClick={onResetAntennas}
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  </div>
+                  <AntennaPanel
+                    activeScene={activeScene}
+                    antennas={antennas}
+                    disabled={resultState.loading || !sceneStatus.isSceneReady}
+                    maxAntennas={maxAntennas}
+                    onAddType2={onAddType2Antenna}
+                    onChange={onUpdateAntenna}
+                    onRemoveType2={onRemoveType2Antenna}
+                    simulationLabel="RSRP Simulation"
+                  />
+                </div>
+              </FormSection>
               <FormSection title="Users">
                 <NumberField
                   label="User count"
@@ -422,7 +476,7 @@ export function RsrpSimulationPage({ activeScene, antennas, onProgressChange, on
               {activeScene?.bounds ? (
                 <>
                   <Scene3DPreview
-                    antennas={result ? result.antennas || antennas : EMPTY_ARRAY}
+                    antennas={result ? result.antennas || antennas : antennas}
                     bounds={activeScene.bounds}
                     className="api-result-scene-3d"
                     onLoadingChange={sceneStatus.handleSceneLoadingChange}
@@ -449,6 +503,11 @@ export function RsrpSimulationPage({ activeScene, antennas, onProgressChange, on
             {!resultState.error && !resultState.loading && !result && (
               <p className="history-status">
                 The active scene is ready. Run the simulation to generate and place user dots.
+              </p>
+            )}
+            {!resultState.error && !resultState.loading && isQueued && (
+              <p className="history-status">
+                User dots will appear after this queued job finishes. Open the completed result from Simulation Queue.
               </p>
             )}
             {!resultState.error && result && !isQueued && (
@@ -661,7 +720,7 @@ function RsrpSummary({ result }) {
   );
 }
 
-function RsrpUserDialog({ onClose, user }) {
+export function RsrpUserDialog({ onClose, user }) {
   return (
     <div className="coverage-cell-dialog rsrp-user-dialog" role="dialog" aria-label="RSRP user detail">
       <button
@@ -1283,6 +1342,100 @@ function formatTransmitterCoordinates(transmitter) {
   }
 
   return `${formatCoordinate(transmitter.longitude)}, ${formatCoordinate(transmitter.latitude)}`;
+}
+
+function validateSimulationAntennas(antennas, activeScene, maxAntennas, label) {
+  if (!Array.isArray(antennas) || antennas.length === 0) {
+    return `Add at least one antenna for ${label}.`;
+  }
+
+  if (antennas.length > maxAntennas) {
+    return `${label} supports up to ${maxAntennas} antennas. The selected scene currently has ${antennas.length}.`;
+  }
+
+  const seenIds = new Set();
+  for (const antenna of antennas) {
+    const request = toAntennaRequest(antenna);
+
+    if (!request) {
+      return `Antenna ${antenna?.id || ""} has incomplete configuration.`;
+    }
+
+    const idKey = request.id.toLowerCase();
+    if (seenIds.has(idKey)) {
+      return `Antenna ID ${request.id} is duplicated.`;
+    }
+    seenIds.add(idKey);
+
+    if (!lngLatInsideBounds(request, activeScene?.bounds)) {
+      return `Antenna ${request.id} must stay inside the selected scene.`;
+    }
+
+    if (request.height_m <= 0) {
+      return `Antenna ${request.id} height must be greater than 0.`;
+    }
+
+    if (request.azimuth < 0 || request.azimuth > 360) {
+      return `Antenna ${request.id} azimuth must be between 0 and 360.`;
+    }
+  }
+
+  return "";
+}
+
+function toAntennaRequest(antenna) {
+  const id = String(antenna?.id || "").trim();
+  const longitude = Number(antenna?.longitude);
+  const latitude = Number(antenna?.latitude);
+  const heightM = Number(antenna?.height_m);
+  const azimuth = Number(antenna?.azimuth);
+  const tilt = toRangeRequest(antenna?.tilt);
+  const txPower = toRangeRequest(antenna?.tx_power);
+
+  if (
+    !id
+    || !Number.isFinite(longitude)
+    || !Number.isFinite(latitude)
+    || !Number.isFinite(heightM)
+    || !Number.isFinite(azimuth)
+    || !tilt
+    || !txPower
+  ) {
+    return null;
+  }
+
+  return {
+    id,
+    longitude,
+    latitude,
+    height_m: heightM,
+    azimuth,
+    tilt,
+    tx_power: txPower,
+  };
+}
+
+function toRangeRequest(range) {
+  const min = Number(range?.min);
+  const current = Number(range?.current);
+  const max = Number(range?.max);
+
+  if (
+    !Number.isFinite(min)
+    || !Number.isFinite(current)
+    || !Number.isFinite(max)
+    || min > max
+    || current < min
+    || current > max
+  ) {
+    return null;
+  }
+
+  return {
+    min,
+    current,
+    max,
+  };
 }
 
 function linkResultAntennas(result, request) {

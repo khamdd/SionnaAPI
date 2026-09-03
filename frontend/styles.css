@@ -1344,6 +1344,20 @@ textarea:disabled {
   padding: 12px;
 }
 
+.embedded-antenna-panel .antenna-list {
+  height: auto;
+  max-height: 520px;
+  padding: 10px 0 0;
+}
+
+.embedded-antenna-panel .panel-header {
+  padding: 0;
+}
+
+.embedded-antenna-panel .panel-header h3 {
+  font-size: 14px;
+}
+
 .antenna-summary {
   display: flex;
   justify-content: space-between;

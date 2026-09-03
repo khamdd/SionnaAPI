@@ -19,6 +19,8 @@ import {
   AUTH_TOKEN_STORAGE_KEY,
   NETWORK_ANTENNA_SETTINGS_STORAGE_KEY,
   NETWORK_TYPE2_ANTENNAS_STORAGE_KEY,
+  RSRP_ANTENNA_SETTINGS_STORAGE_KEY,
+  RSRP_TYPE2_ANTENNAS_STORAGE_KEY,
   SCENE_FIXED_ANTENNAS_STORAGE_KEY,
   USER_STORAGE_KEY,
 } from "./constants";
@@ -63,6 +65,7 @@ const SIMULATION_ENTRY_ROUTE = "/network";
 const HISTORY_PAGE_LIMIT = 200;
 const JOB_PAGE_LIMIT = 200;
 const MAX_NETWORK_COVERAGE_ANTENNAS = 10;
+const MAX_RSRP_SIMULATION_ANTENNAS = 10;
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -72,6 +75,12 @@ export default function App() {
   ));
   const [networkAntennaSettingsByScene, setNetworkAntennaSettingsByScene] = useState(() => (
     readStoredSceneMap(NETWORK_ANTENNA_SETTINGS_STORAGE_KEY, normalizeStoredAntennaSettings)
+  ));
+  const [rsrpType2AntennasByScene, setRsrpType2AntennasByScene] = useState(() => (
+    readStoredSceneMap(RSRP_TYPE2_ANTENNAS_STORAGE_KEY, normalizeStoredType2Antennas)
+  ));
+  const [rsrpAntennaSettingsByScene, setRsrpAntennaSettingsByScene] = useState(() => (
+    readStoredSceneMap(RSRP_ANTENNA_SETTINGS_STORAGE_KEY, normalizeStoredAntennaSettings)
   ));
   const [latestGrid, setLatestGrid] = useState(null);
   const [latestSolver, setLatestSolver] = useState(() => clone(DEFAULT_SOLVER));
@@ -128,6 +137,20 @@ export default function App() {
       fixedSceneAntennas,
       networkType2AntennasByScene,
       networkAntennaSettingsByScene,
+    ],
+  );
+  const rsrpAntennas = useMemo(
+    () => networkCoverageAntennasForScene(
+      activeScene,
+      fixedSceneAntennas,
+      rsrpType2AntennasByScene,
+      rsrpAntennaSettingsByScene,
+    ),
+    [
+      activeScene,
+      fixedSceneAntennas,
+      rsrpType2AntennasByScene,
+      rsrpAntennaSettingsByScene,
     ],
   );
 
@@ -602,6 +625,122 @@ export default function App() {
     clearLatestNetworkResult();
   }
 
+  function updateRsrpAntenna(antennaId, field, value) {
+    if (!activeScene?.id || value === "") {
+      return;
+    }
+
+    const antenna = rsrpAntennas.find((item) => item.id === antennaId);
+    if (!antenna) {
+      return;
+    }
+
+    setRsrpAntennaSettingsByScene((current) => {
+      const next = new Map(current);
+      const sceneSettings = {
+        ...(next.get(activeScene.id) || {}),
+      };
+      const currentSetting = {
+        ...simulationSettingsForAntenna(antenna),
+        ...(sceneSettings[antennaId] || {}),
+      };
+
+      if (field === "tilt") {
+        currentSetting.tilt_current = value;
+      } else if (field === "tx_power") {
+        currentSetting.tx_power_current = value;
+      } else if (field === "azimuth") {
+        currentSetting.azimuth = value;
+      }
+
+      sceneSettings[antennaId] = currentSetting;
+      setSceneMapValue(next, activeScene.id, sceneSettings, normalizeStoredAntennaSettings);
+      persistSceneMap(RSRP_ANTENNA_SETTINGS_STORAGE_KEY, next);
+      return next;
+    });
+  }
+
+  function addRsrpType2Antenna(antenna) {
+    if (!activeScene?.id) {
+      return { error: "Select a scene before adding an antenna." };
+    }
+
+    if (rsrpAntennas.length >= MAX_RSRP_SIMULATION_ANTENNAS) {
+      return { error: `RSRP Simulation supports up to ${MAX_RSRP_SIMULATION_ANTENNAS} antennas.` };
+    }
+
+    const normalized = normalizeAntennaBase(antenna);
+    if (!normalized) {
+      return { error: "Antenna base config is incomplete." };
+    }
+
+    if (!lngLatInsideBounds(normalized, activeScene.bounds)) {
+      return { error: "Type 2 antenna coordinates must stay inside the selected scene." };
+    }
+
+    if (rsrpAntennas.some((item) => item.id.toLowerCase() === normalized.id.toLowerCase())) {
+      return { error: `antenna_id "${normalized.id}" is already used.` };
+    }
+
+    setRsrpType2AntennasByScene((current) => {
+      const next = new Map(current);
+      const sceneAntennas = [
+        ...(next.get(activeScene.id) || []),
+        normalized,
+      ];
+      setSceneMapValue(next, activeScene.id, sceneAntennas, normalizeStoredType2Antennas);
+      persistSceneMap(RSRP_TYPE2_ANTENNAS_STORAGE_KEY, next);
+      return next;
+    });
+    setRsrpAntennaSettingsByScene((current) => {
+      const next = new Map(current);
+      const sceneSettings = {
+        ...(next.get(activeScene.id) || {}),
+        [normalized.id]: simulationSettingsForAntenna(normalized),
+      };
+      setSceneMapValue(next, activeScene.id, sceneSettings, normalizeStoredAntennaSettings);
+      persistSceneMap(RSRP_ANTENNA_SETTINGS_STORAGE_KEY, next);
+      return next;
+    });
+    return { ok: true };
+  }
+
+  function removeRsrpType2Antenna(antennaId) {
+    if (!activeScene?.id) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete type 2 antenna "${antennaId}"?`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    setRsrpType2AntennasByScene((current) => {
+      const next = new Map(current);
+      const sceneAntennas = (next.get(activeScene.id) || []).filter((item) => (
+        item.id !== antennaId
+      ));
+      setSceneMapValue(next, activeScene.id, sceneAntennas, normalizeStoredType2Antennas);
+      persistSceneMap(RSRP_TYPE2_ANTENNAS_STORAGE_KEY, next);
+      return next;
+    });
+    setRsrpAntennaSettingsByScene((current) => {
+      const next = new Map(current);
+      const sceneSettings = {
+        ...(next.get(activeScene.id) || {}),
+      };
+      delete sceneSettings[antennaId];
+      setSceneMapValue(next, activeScene.id, sceneSettings, normalizeStoredAntennaSettings);
+      persistSceneMap(RSRP_ANTENNA_SETTINGS_STORAGE_KEY, next);
+      return next;
+    });
+  }
+
+  function resetRsrpAntennas() {
+    clearRsrpDraft(activeScene?.id);
+  }
+
   function resetAntennas() {
     clearNetworkCoverageDraft(activeScene?.id);
     clearLatestNetworkResult();
@@ -631,6 +770,25 @@ export default function App() {
       const next = new Map(current);
       next.delete(sceneId);
       persistSceneMap(NETWORK_ANTENNA_SETTINGS_STORAGE_KEY, next);
+      return next;
+    });
+  }
+
+  function clearRsrpDraft(sceneId) {
+    if (!sceneId) {
+      return;
+    }
+
+    setRsrpType2AntennasByScene((current) => {
+      const next = new Map(current);
+      next.delete(sceneId);
+      persistSceneMap(RSRP_TYPE2_ANTENNAS_STORAGE_KEY, next);
+      return next;
+    });
+    setRsrpAntennaSettingsByScene((current) => {
+      const next = new Map(current);
+      next.delete(sceneId);
+      persistSceneMap(RSRP_ANTENNA_SETTINGS_STORAGE_KEY, next);
       return next;
     });
   }
@@ -696,6 +854,7 @@ export default function App() {
     }
 
     clearNetworkCoverageDraft(activeScene?.id);
+    clearRsrpDraft(activeScene?.id);
     setHasWorkScene(false);
     setActiveScene(null);
     setLatestSolver(clone(DEFAULT_SOLVER));
@@ -1154,9 +1313,14 @@ export default function App() {
       {visibleRoute === "/rsrp" && (
         <RsrpSimulationPage
           activeScene={activeScene}
-          antennas={fixedSceneAntennas}
+          antennas={rsrpAntennas}
+          maxAntennas={MAX_RSRP_SIMULATION_ANTENNAS}
+          onAddType2Antenna={addRsrpType2Antenna}
           onQueueOpen={() => navigate("/queue")}
+          onRemoveType2Antenna={removeRsrpType2Antenna}
+          onResetAntennas={resetRsrpAntennas}
           onSimulationQueued={showQueuedPrompt}
+          onUpdateAntenna={updateRsrpAntenna}
           onProgressChange={handleApiProgressChange}
           onSceneLoadingChange={setIsSceneLoading}
         />

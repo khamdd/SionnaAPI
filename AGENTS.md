@@ -115,6 +115,12 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   choose a fixed antenna or type 2 transmitter before running. The backend still
   receives the converted scene `transmitter_position`; fixed antenna real-world
   coordinates remain read-only in the UI.
+- RSRP Simulation uses all configured transmit antennas for the run, with the
+  same type 1/type 2 split as Network Coverage. Fixed type 1 antenna base data
+  remains immutable, users can add/delete type 2 antennas from the XLSX-shaped
+  form, simulation tilt/power/azimuth settings are editable per antenna, and the
+  RSRP draft is stored in its own scene-scoped localStorage keys. RSRP enforces
+  the backend limit of 10 antennas per simulation request.
 
 ## Important Files
 
