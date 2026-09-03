@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  deleteSimulationJob,
   listScenes,
   deleteSimulationRun,
+  getSimulationJob,
+  getSimulationJobResult,
   getSimulationRun,
   listSimulationRuns,
+  listSimulationJobs,
   runNetworkCoverage,
   getCurrentUser,
+  saveSimulationJobResult,
 } from "./api";
 import {
   DEFAULT_SOLVER,
@@ -26,11 +31,12 @@ import ComparisonResult from "./components/ComparisonResult";
 import HistoryDetail from "./components/HistoryDetail";
 import HistoryModal, { HistoryModalBody } from "./components/HistoryModal";
 import HistoryPanel from "./components/HistoryPanel";
+import { TrashIcon } from "./components/Icons";
 import LoginPage from "./components/LoginPage";
 import MapPanel from "./components/MapPanel";
 import SceneChooserPage from "./components/SceneChooserModal";
 import ScenesPage from "./components/ScenesPage";
-import { formatDateTime, formatSimulationType } from "./utils/format";
+import { formatDateTime, formatSimulationType, formatText } from "./utils/format";
 import {
   isSuccessfulHistoryItem,
   pruneComparisonDetails,
@@ -52,6 +58,7 @@ const SCENE_SELECTION_ROUTE = "/scenes";
 const SCENE_CREATION_ROUTE = "/choose-scene";
 const SIMULATION_ENTRY_ROUTE = "/network";
 const HISTORY_PAGE_LIMIT = 200;
+const JOB_PAGE_LIMIT = 200;
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -65,6 +72,12 @@ export default function App() {
   const [isRunning, setIsRunning] = useState(false);
   const [historyStatus, setHistoryStatus] = useState("No history loaded.");
   const [historyError, setHistoryError] = useState(false);
+  const [jobStatus, setJobStatus] = useState("No queue loaded.");
+  const [jobError, setJobError] = useState(false);
+  const [jobProgressLabel, setJobProgressLabel] = useState("");
+  const [simulationJobs, setSimulationJobs] = useState([]);
+  const [selectedJobId, setSelectedJobId] = useState(null);
+  const [queuedPrompt, setQueuedPrompt] = useState(null);
   const [apiProgressLabel, setApiProgressLabel] = useState("");
   const [historyProgressLabel, setHistoryProgressLabel] = useState("");
   const [historyPreviewLoadCount, setHistoryPreviewLoadCount] = useState(0);
@@ -195,6 +208,40 @@ export default function App() {
     }
   }, [activeScene?.id, activeScene?.name, comparisonSceneId, comparisonType]);
 
+  const loadJobs = useCallback(async () => {
+    setJobProgressLabel("Loading queue...");
+    setJobStatus("Loading simulation queue...");
+    setJobError(false);
+
+    try {
+      const result = await listSimulationJobs(JOB_PAGE_LIMIT);
+
+      if (!result.database_configured) {
+        setSimulationJobs([]);
+        setSelectedJobId(null);
+        setJobStatus("Database is not configured. Set DATABASE_URL to use the simulation queue.");
+        setJobError(true);
+        return;
+      }
+
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      const items = result.items || [];
+      setSimulationJobs(items);
+      setSelectedJobId((current) => (
+        items.some((item) => item.id === current) ? current : null
+      ));
+      setJobStatus(items.length ? `${items.length} simulation jobs recorded.` : "No simulation jobs recorded.");
+    } catch (error) {
+      setJobStatus(`Queue failed: ${error.message}`);
+      setJobError(true);
+    } finally {
+      setJobProgressLabel("");
+    }
+  }, []);
+
   const loadScenes = useCallback(async (options = {}) => {
     const syncActiveScene = options.syncActiveScene ?? hasWorkScene;
     setIsSceneListLoading(true);
@@ -245,7 +292,31 @@ export default function App() {
     if (route === "/history") {
       loadHistory();
     }
-  }, [authStatus, hasWorkScene, route, loadHistory]);
+
+    if (route === "/queue") {
+      loadJobs();
+    }
+  }, [authStatus, hasWorkScene, route, loadHistory, loadJobs]);
+
+  useEffect(() => {
+    if (authStatus !== "authenticated" || route !== "/queue") {
+      return undefined;
+    }
+
+    const hasPendingJob = simulationJobs.some((job) => (
+      job.status === "queued" || job.status === "running"
+    ));
+
+    if (!hasPendingJob) {
+      return undefined;
+    }
+
+    const timerId = window.setInterval(() => {
+      loadJobs();
+    }, 5000);
+
+    return () => window.clearInterval(timerId);
+  }, [authStatus, loadJobs, route, simulationJobs]);
 
   useEffect(() => {
     if(authStatus !== "authenticated") {
@@ -307,19 +378,23 @@ export default function App() {
   }, [latestGrid]);
 
   useEffect(() => {
-    if (!modalContent) {
+    if (!modalContent && !queuedPrompt) {
       return undefined;
     }
 
     function handleKeyDown(event) {
       if (event.key === "Escape") {
-        closeModal();
+        if (modalContent) {
+          closeModal();
+        } else {
+          closeQueuedPrompt();
+        }
       }
     }
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [modalContent]);
+  }, [modalContent, queuedPrompt]);
 
   function navigate(path, options = {}) {
     if (!options.allowWithoutWorkScene && !hasWorkScene && isWorkSceneRequiredRoute(path)) {
@@ -347,6 +422,16 @@ export default function App() {
 
     try {
       const result = await runNetworkCoverage(buildNetworkCoveragePayload(antennas, activeScene));
+
+      if (result.status === "queued") {
+        showQueuedPrompt({
+          ...result,
+          scene_name: activeScene?.name,
+        });
+        setRunStatus("Simulation recorded in the queue.");
+        loadJobs().catch(() => {});
+        return;
+      }
 
       if (result.status !== "success") {
         throw new Error(result.error || "Simulation failed");
@@ -421,7 +506,7 @@ export default function App() {
   }
 
   async function chooseScene() {
-    if (isRunning || apiProgressLabel || historyProgressLabel || historyPreviewLoadCount > 0 || isSceneLoading || isSceneListLoading) {
+    if (isRunning || apiProgressLabel || jobProgressLabel || historyProgressLabel || historyPreviewLoadCount > 0 || isSceneLoading || isSceneListLoading) {
       return;
     }
 
@@ -487,6 +572,19 @@ export default function App() {
 
   function setSceneNotice(message, error = false) {
     setSceneNoticeState({ message, error });
+  }
+
+  function showQueuedPrompt(job) {
+    setQueuedPrompt(job);
+  }
+
+  function closeQueuedPrompt() {
+    setQueuedPrompt(null);
+  }
+
+  function openQueueFromPrompt() {
+    closeQueuedPrompt();
+    navigate("/queue");
   }
 
   async function showComparisonResult() {
@@ -673,9 +771,123 @@ export default function App() {
     }
   }
 
+  async function openJobDetail(jobId) {
+    if (jobProgressLabel || historyPreviewLoadCount > 0) {
+      return;
+    }
+
+    setSelectedJobId(jobId);
+    setJobProgressLabel("Loading job result...");
+    setModalContent(<p className="history-status">Loading job result...</p>);
+
+    try {
+      const jobResponse = await getSimulationJob(jobId);
+
+      if (!jobResponse.database_configured) {
+        setModalContent(<p className="history-status">Database is not configured.</p>);
+        return;
+      }
+
+      if (jobResponse.error) {
+        throw new Error(jobResponse.error);
+      }
+
+      const job = jobResponse.item;
+      if (!job) {
+        setModalContent(<p className="history-status">Simulation job not found.</p>);
+        return;
+      }
+
+      const fullResult = job.status === "succeeded"
+        ? await getSimulationJobResult(jobId)
+        : job.result;
+
+      setModalContent(
+        <HistoryModalBody title={`Queue result: ${formatSimulationType(job.simulation_type)}`}>
+          <JobResultDetail
+            job={job}
+            result={fullResult}
+            onDiscard={() => discardSimulationJob(job)}
+            onOpenHistory={job.result_run_id ? () => openHistoryDetail(job.result_run_id) : null}
+            onPreviewLoadingChange={handleHistoryPreviewLoadingChange}
+            onSave={() => saveSimulationJob(job)}
+          />
+        </HistoryModalBody>,
+      );
+    } catch (error) {
+      setModalContent(<p className="history-status error-text">Job detail failed: {error.message}</p>);
+    } finally {
+      setJobProgressLabel("");
+    }
+  }
+
+  async function saveSimulationJob(job) {
+    if (jobProgressLabel) {
+      return;
+    }
+
+    setJobProgressLabel("Saving result...");
+    setJobStatus("Saving result to history...");
+    setJobError(false);
+
+    try {
+      const result = await saveSimulationJobResult(job.id);
+      await loadJobs();
+
+      if (route === "/history") {
+        await loadHistory();
+      }
+
+      setJobStatus(result.already_saved ? "Result is already saved in Simulation History." : "Result saved in Simulation History.");
+      if (result.run_id) {
+        await openHistoryDetail(result.run_id);
+      } else {
+        closeModal();
+      }
+    } catch (error) {
+      setJobStatus(`Save failed: ${error.message}`);
+      setJobError(true);
+    } finally {
+      setJobProgressLabel("");
+    }
+  }
+
+  async function discardSimulationJob(job) {
+    if (jobProgressLabel || job.status === "running") {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      job.result_run_id
+        ? "Remove this job from the queue? The saved history result will remain."
+        : "Discard this simulation result? It will not be saved to Simulation History.",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setJobProgressLabel("Discarding job...");
+    setJobStatus("Discarding simulation job...");
+    setJobError(false);
+
+    try {
+      await deleteSimulationJob(job.id);
+      closeModal();
+      await loadJobs();
+      setJobStatus(job.result_run_id ? "Queue entry removed." : "Simulation result discarded.");
+    } catch (error) {
+      setJobStatus(`Discard failed: ${error.message}`);
+      setJobError(true);
+    } finally {
+      setJobProgressLabel("");
+    }
+  }
+
   function closeModal() {
     setModalContent(null);
     setSelectedHistoryId(null);
+    setSelectedJobId(null);
     setHistoryPreviewLoadCount(0);
   }
 
@@ -705,13 +917,15 @@ export default function App() {
   }
 
   const modalProgressLabel = modalContent
-    ? historyProgressLabel
+    ? jobProgressLabel
+      || historyProgressLabel
       || (historyPreviewLoadCount > 0 ? "Loading history preview..." : "")
     : "";
 
   const busyLabel = isRunning
     ? "Running simulation..."
     : apiProgressLabel
+      || jobProgressLabel
       || (!modalContent ? historyProgressLabel : "")
       || (!modalContent && historyPreviewLoadCount > 0 ? "Loading history preview..." : "")
       || (isSceneLoading ? "Loading scene..." : "")
@@ -767,6 +981,8 @@ export default function App() {
       {visibleRoute === "/coverage" && (
         <CoverageApiPage
           activeScene={activeScene}
+          onQueueOpen={() => navigate("/queue")}
+          onSimulationQueued={showQueuedPrompt}
           onProgressChange={handleApiProgressChange}
           onSceneLoadingChange={setIsSceneLoading}
         />
@@ -775,6 +991,8 @@ export default function App() {
         <RsrpSimulationPage
           activeScene={activeScene}
           antennas={antennas}
+          onQueueOpen={() => navigate("/queue")}
+          onSimulationQueued={showQueuedPrompt}
           onProgressChange={handleApiProgressChange}
           onSceneLoadingChange={setIsSceneLoading}
         />
@@ -782,6 +1000,8 @@ export default function App() {
       {visibleRoute === "/sinr" && (
         <SinrApiPage
           activeScene={activeScene}
+          onQueueOpen={() => navigate("/queue")}
+          onSimulationQueued={showQueuedPrompt}
           onProgressChange={handleApiProgressChange}
           onSceneLoadingChange={setIsSceneLoading}
         />
@@ -789,8 +1009,24 @@ export default function App() {
       {visibleRoute === "/throughput" && (
         <ThroughputApiPage
           activeScene={activeScene}
+          onQueueOpen={() => navigate("/queue")}
+          onSimulationQueued={showQueuedPrompt}
           onProgressChange={handleApiProgressChange}
           onSceneLoadingChange={setIsSceneLoading}
+        />
+      )}
+      {visibleRoute === "/queue" && (
+        <QueueRoutePage
+          jobError={jobError}
+          jobs={simulationJobs}
+          jobStatus={jobStatus}
+          isLoading={Boolean(jobProgressLabel)}
+          onDiscard={discardSimulationJob}
+          onOpen={openJobDetail}
+          onOpenHistory={openHistoryDetail}
+          onRefresh={loadJobs}
+          onSave={saveSimulationJob}
+          selectedJobId={selectedJobId}
         />
       )}
       {visibleRoute === "/history" && (
@@ -848,6 +1084,13 @@ export default function App() {
           {modalContent}
         </HistoryModal>
       )}
+      {queuedPrompt && (
+        <QueueSubmissionPrompt
+          job={queuedPrompt}
+          onClose={closeQueuedPrompt}
+          onOpenQueue={openQueueFromPrompt}
+        />
+      )}
     </div>
   );
 }
@@ -864,6 +1107,11 @@ function Navbar({
   const visibleRoutes = hasWorkScene
     ? ROUTES.filter((item) => item.path !== SCENE_SELECTION_ROUTE)
     : [];
+  const simulationRoutes = visibleRoutes.filter((item) => (
+    item.path !== "/queue" && item.path !== "/history"
+  ));
+  const queueRoutes = visibleRoutes.filter((item) => item.path === "/queue");
+  const historyRoutes = visibleRoutes.filter((item) => item.path === "/history");
 
   return (
     <header className="app-navbar">
@@ -871,19 +1119,58 @@ function Navbar({
         <strong>Sionna Planner</strong>
       </div>
       <nav aria-label="Primary navigation">
-        {visibleRoutes.map((item) => {
-          return (
-            <button
-              key={item.path}
-              className={route === item.path ? "active" : ""}
-              type="button"
-              disabled={isBusy}
-              onClick={() => onNavigate(item.path)}
-            >
-              {item.label}
-            </button>
-          );
-        })}
+        {simulationRoutes.length > 0 && (
+          <div className="nav-group simulation-nav" aria-label="Simulation tools">
+            <span>Simulations</span>
+            <div>
+              {simulationRoutes.map((item) => (
+                <button
+                  key={item.path}
+                  className={route === item.path ? "active" : ""}
+                  type="button"
+                  disabled={isBusy}
+                  onClick={() => onNavigate(item.path)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {queueRoutes.length > 0 && (
+          <div className="nav-group records-nav queue-nav" aria-label="Simulation queue">
+            <div>
+              {queueRoutes.map((item) => (
+                <button
+                  key={item.path}
+                  className={route === item.path ? "active" : ""}
+                  type="button"
+                  disabled={isBusy}
+                  onClick={() => onNavigate(item.path)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {historyRoutes.length > 0 && (
+          <div className="nav-group records-nav history-nav" aria-label="Saved simulation history">
+            <div>
+              {historyRoutes.map((item) => (
+                <button
+                  key={item.path}
+                  className={route === item.path ? "active" : ""}
+                  type="button"
+                  disabled={isBusy}
+                  onClick={() => onNavigate(item.path)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="user-menu">
           <button className="user-menu-trigger" type="button">
             {currentUser?.username || "User"}
@@ -918,6 +1205,37 @@ function GlobalProgress({ active, label }) {
         <i />
       </div>
     </div>
+  );
+}
+
+function QueueSubmissionPrompt({ job, onClose, onOpenQueue }) {
+  const sceneName = job.scene_name || job.scene?.name || job.scene?.id;
+
+  return (
+    <section className="prompt-backdrop" onClick={onClose}>
+      <div
+        className="queue-prompt"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Simulation queued"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <strong>Simulation recorded</strong>
+        <p>The simulation is recorded in the queue. You can open Simulation Queue to track its status and save the result after it finishes.</p>
+        <dl className="detail-grid">
+          <dt>Scene</dt><dd>{formatText(sceneName)}</dd>
+          <dt>Type</dt><dd>{formatSimulationType(job.simulation_type)}</dd>
+        </dl>
+        <div>
+          <button className="ghost-button" type="button" onClick={onClose}>
+            Stay here
+          </button>
+          <button className="primary-button" type="button" onClick={onOpenQueue}>
+            Open Simulation Queue
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -982,6 +1300,111 @@ function NetworkCoveragePage({
   );
 }
 
+function QueueRoutePage({
+  isLoading,
+  jobError,
+  jobs,
+  jobStatus,
+  onDiscard,
+  onOpen,
+  onOpenHistory,
+  onRefresh,
+  onSave,
+  selectedJobId,
+}) {
+  return (
+    <main className="route-page">
+      <div className="page-title with-action">
+        <div>
+          <h1>Simulation Queue</h1>
+          <p>Track submitted simulations, inspect completed results, then save only the results you want in history.</p>
+        </div>
+        <button className="ghost-button" type="button" disabled={isLoading} onClick={onRefresh}>
+          Refresh
+        </button>
+      </div>
+      <section className="history-page-panel queue-page-panel">
+        <div className="history-view">
+          <p className={`history-status ${jobError ? "error-text" : ""}`}>{jobStatus}</p>
+          <div className="history-list">
+            {jobs.map((job) => (
+              <QueueRow
+                key={job.id}
+                isLoading={isLoading}
+                isSelected={job.id === selectedJobId}
+                job={job}
+                onDiscard={onDiscard}
+                onOpen={onOpen}
+                onOpenHistory={onOpenHistory}
+                onSave={onSave}
+              />
+            ))}
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function QueueRow({
+  isLoading,
+  isSelected,
+  job,
+  onDiscard,
+  onOpen,
+  onOpenHistory,
+  onSave,
+}) {
+  const status = String(job.status || "").toLowerCase();
+  const isSucceeded = status === "succeeded";
+  const isRunning = status === "running";
+  const isQueued = status === "queued";
+  const isSaved = Boolean(job.result_run_id);
+  const canOpen = isSucceeded || status === "failed";
+  const canDiscard = !isRunning;
+
+  return (
+    <div className="queue-row">
+      <button
+        className={`history-item ${isSelected ? "active" : ""}`}
+        type="button"
+        disabled={isLoading || !canOpen}
+        onClick={() => onOpen(job.id)}
+      >
+        <strong>{formatSimulationType(job.simulation_type)} - {formatJobStatus(job)}</strong>
+        <span>{formatDateTime(job.queued_at)}</span>
+        <span>{formatText(job.scene?.name || job.scene?.id)}{isQueued || isRunning ? " | Waiting for worker" : ""}</span>
+      </button>
+      <button
+        className="history-compare"
+        type="button"
+        disabled={isLoading || !isSucceeded || isSaved}
+        onClick={() => onSave(job)}
+      >
+        {isSaved ? "Saved" : "Save"}
+      </button>
+      <button
+        className="ghost-button queue-open-history"
+        type="button"
+        disabled={isLoading || !isSaved}
+        onClick={() => onOpenHistory(job.result_run_id)}
+      >
+        History
+      </button>
+      <button
+        className="history-delete queue-discard"
+        type="button"
+        title={isSaved ? "Remove queue entry" : "Discard simulation result"}
+        aria-label={isSaved ? "Remove queue entry" : "Discard simulation result"}
+        disabled={isLoading || !canDiscard}
+        onClick={() => onDiscard(job)}
+      >
+        <TrashIcon />
+      </button>
+    </div>
+  );
+}
+
 function HistoryRoutePage({
   activeScene,
   comparisonSceneId,
@@ -1041,6 +1464,68 @@ function HistoryRoutePage({
   );
 }
 
+function JobResultDetail({
+  job,
+  onDiscard,
+  onOpenHistory,
+  onPreviewLoadingChange,
+  onSave,
+  result,
+}) {
+  const status = String(job.status || "").toLowerCase();
+  const isSucceeded = status === "succeeded";
+  const isSaved = Boolean(job.result_run_id);
+  const detailItem = simulationJobToHistoryItem(job, result);
+
+  return (
+    <div className="queue-result-detail">
+      <div className="queue-result-actions">
+        <dl className="detail-grid">
+          <dt>Queue status</dt><dd>{formatJobStatus(job)}</dd>
+          <dt>Queued</dt><dd>{formatDateTime(job.queued_at)}</dd>
+          <dt>Finished</dt><dd>{formatDateTime(job.finished_at)}</dd>
+        </dl>
+        <div>
+          <button
+            className="primary-button"
+            type="button"
+            disabled={!isSucceeded || isSaved}
+            onClick={onSave}
+          >
+            {isSaved ? "Saved to history" : "Save to history"}
+          </button>
+          {isSaved && onOpenHistory && (
+            <button className="ghost-button" type="button" onClick={onOpenHistory}>
+              Open history
+            </button>
+          )}
+          <button
+            className="ghost-button danger-button"
+            type="button"
+            disabled={status === "running"}
+            onClick={onDiscard}
+          >
+            {isSaved ? "Remove queue entry" : "Discard result"}
+          </button>
+        </div>
+      </div>
+      {isSucceeded && result ? (
+        <HistoryDetail
+          item={detailItem}
+          onPreviewLoadingChange={onPreviewLoadingChange}
+        />
+      ) : (
+        <>
+          <strong>{formatSimulationType(job.simulation_type)}</strong>
+          <p className="history-status error-text">
+            {job.error_message || result?.error || "This simulation has not produced a result yet."}
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
 function buildNetworkCoveragePayload(antennas, activeScene) {
   return {
     antennas,
@@ -1053,6 +1538,57 @@ function buildNetworkCoveragePayload(antennas, activeScene) {
     bandwidth_mhz: 100,
     mimo_layers: 4,
   };
+}
+
+function simulationJobToHistoryItem(job, result = null) {
+  const request = job.request || {};
+  const response = result || job.result || {};
+  const scene = job.scene || {};
+
+  return {
+    id: job.result_run_id || job.id,
+    simulation_type: job.simulation_type,
+    status: response.status || (job.status === "succeeded" ? "success" : job.status),
+    transmitter_pattern: request.transmitter_pattern || TRANSMITTER_PATTERN,
+    scene_id: scene.id,
+    scene_name: scene.name || scene.id,
+    scene_bounds: scene.bounds,
+    cell_size_m: request.solver?.cell_size,
+    bandwidth_mhz: request.bandwidth_mhz,
+    mimo_layers: request.mimo_layers,
+    coverage_map_image_url: response.coverage_map_image_url,
+    error_message: job.error_message || response.error,
+    started_at: job.started_at,
+    finished_at: job.finished_at,
+    created_at: job.queued_at,
+    solver: response.solver || request.solver,
+    request_json: request,
+    response_json: response,
+    antennas: antennaSnapshotsForJob(request),
+    artifacts: [],
+  };
+}
+
+function antennaSnapshotsForJob(request) {
+  if (!Array.isArray(request.antennas)) {
+    return [];
+  }
+
+  return request.antennas.map((antenna) => ({
+    antenna_code: antenna.id,
+    position: antenna.position,
+    azimuth_deg: antenna.azimuth,
+    tilt: antenna.tilt,
+    tx_power: antenna.tx_power,
+  }));
+}
+
+function formatJobStatus(job) {
+  if (job.result_run_id) {
+    return "Saved";
+  }
+
+  return formatText(job.status);
 }
 
 function antennasForActiveScene(scene, sceneAntennaOverrides) {

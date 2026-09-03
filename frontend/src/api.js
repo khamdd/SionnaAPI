@@ -50,44 +50,7 @@ async function runSimulationRequest(path, payload) {
     return response;
   }
 
-  return pollSimulationJob(response.job_id);
-}
-
-async function pollSimulationJob(jobId) {
-  const timeoutAt = Date.now() + 30 * 60 * 1000;
-
-  while (Date.now() < timeoutAt) {
-    await delay(1500);
-
-    const jobResponse = await requestJson(`/api/v1/simulation-jobs/${jobId}`);
-    const job = jobResponse.item || jobResponse;
-
-    if (job.status === "succeeded") {
-      if (!job.result_run_id) {
-        throw new Error("Simulation finished without a saved result.");
-      }
-
-      const result = await getSimulationRunResult(job.result_run_id);
-      return {
-        ...result,
-        job_id: job.id,
-        result_run_id: job.result_run_id,
-      };
-    }
-
-    if (job.status === "failed") {
-      const result = job.result || {};
-      throw new Error(job.error_message || result.error || "Simulation job failed.");
-    }
-  }
-
-  throw new Error("Simulation job timed out while waiting for the worker.");
-}
-
-function delay(ms) {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
+  return response;
 }
 
 export function registerUser(payload) {
@@ -128,6 +91,41 @@ export function getSimulationRun(runId) {
 
 export function getSimulationRunResult(runId) {
   return requestJson(`/api/v1/simulation-runs/${runId}/result`);
+}
+
+export function listSimulationJobs(limit = 100) {
+  const params = new URLSearchParams({
+    limit: String(limit),
+  });
+
+  return requestJson(`/api/v1/simulation-jobs?${params.toString()}`);
+}
+
+export function getSimulationJob(jobId) {
+  return requestJson(`/api/v1/simulation-jobs/${jobId}`);
+}
+
+export function getSimulationJobResult(jobId) {
+  return requestJson(`/api/v1/simulation-jobs/${jobId}/result`);
+}
+
+export function saveSimulationJobResult(jobId) {
+  return requestJson(`/api/v1/simulation-jobs/${jobId}/save`, {
+    method: "POST",
+  });
+}
+
+export async function deleteSimulationJob(jobId) {
+  const response = await fetch(`${API_BASE_URL}/api/v1/simulation-jobs/${jobId}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response));
+  }
+
+  return response.json();
 }
 
 export function listScenes() {

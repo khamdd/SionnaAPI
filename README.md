@@ -4,7 +4,8 @@ A radio-network planning application built with FastAPI, React, NVIDIA Sionna RT
 PostgreSQL/PostGIS, and Elasticsearch/Kibana.
 
 The application lets users manage scenes and antennas, run coverage, RSRP, SINR,
-and throughput simulations, and compare saved results.
+and throughput simulations, review queued results, save selected results to
+history, and compare saved results.
 
 ## Run with Docker (recommended)
 
@@ -151,7 +152,7 @@ Docker Compose uses named volumes:
 
 | Volume | Contents |
 | --- | --- |
-| `postgres-data` | Users, jobs, scene references, and simulation history |
+| `postgres-data` | Users, simulation jobs, scene references, and saved simulation history |
 | `elasticsearch-data` | Application logs |
 | `application-static` | Imported scenes and generated simulation files |
 
@@ -243,7 +244,11 @@ POST   /api/v1/rsrp-simulation
 POST   /api/v1/sinr
 POST   /api/v1/throughput-comparison
 
+GET    /api/v1/simulation-jobs
 GET    /api/v1/simulation-jobs/{job_id}
+GET    /api/v1/simulation-jobs/{job_id}/result
+POST   /api/v1/simulation-jobs/{job_id}/save
+DELETE /api/v1/simulation-jobs/{job_id}
 GET    /api/v1/simulation-runs
 GET    /api/v1/simulation-runs/{run_id}
 GET    /api/v1/simulation-runs/{run_id}/result

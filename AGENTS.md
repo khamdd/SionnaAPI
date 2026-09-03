@@ -34,9 +34,15 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   positions against the active scene solver bounds.
 - When a database is configured, simulations are queued as jobs and processed by
   `backend/services/simulation_worker.py`; without a database they run inline.
+  Completed queued simulations remain in the Simulation Queue until a user
+  explicitly saves the result to history.
 - Simulation history is stored through `backend/services/simulation_store.py`.
   Heavy grid/user results are summarized in PostgreSQL and written as JSON files
   under `static/simulation-results/`.
+- Simulation queue results are stored through
+  `backend/services/simulation_job_store.py`. Heavy queued results are written as
+  temporary JSON files under `static/simulation-job-results/` and are not history
+  until the user saves them.
 - History UI supports viewing details, preview loading state, deleting one or
   many saved runs, and comparing compatible successful runs. The history list is
   scoped to the currently selected work scene.
@@ -117,7 +123,8 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 - `backend/services/osm_scene_builder.py`: OSM/Overpass to Sionna scene generation.
 - `frontend/src/App.jsx`: top-level routes, auth state, scene state, simulation
   orchestration, history/comparison orchestration.
-- `frontend/src/api.js`: API wrapper, auth headers, queued job polling.
+- `frontend/src/api.js`: API wrapper, auth headers, simulation queue, history,
+  scene, and artifact fetch calls.
 - `frontend/src/constants/`: frontend route, map, radio, scene, storage, API
   constants.
 - `frontend/src/components/`: feature UI components.
@@ -126,6 +133,8 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 ## Current UI Routes
 
 - `/network`: main network coverage planner.
+- `/queue`: submitted simulation jobs, status tracking, result review, save to
+  history, and discard actions.
 - `/coverage`: coverage map API tool.
 - `/rsrp`: RSRP simulation tool.
 - `/sinr`: SINR tool.
@@ -143,7 +152,8 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 - Frontend stores auth token/user in localStorage using constants from
   `frontend/src/constants`.
 - Simulation API calls may return queued job IDs; `frontend/src/api.js` polls
-  `/api/v1/simulation-jobs/{job_id}` and then fetches the saved result.
+  no longer waits for completion. Users open `/queue` to see job status, inspect
+  completed results, and save only selected results into history.
 - Scene dimensions drive solver bounds on the frontend.
 - Imported fixed antennas are no longer scaled to fit scene dimensions. A scene
   with saved `fixed_antennas` uses those antennas as-is; a scene without fixed

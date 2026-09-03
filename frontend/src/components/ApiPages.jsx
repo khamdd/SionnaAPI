@@ -28,7 +28,7 @@ import {
 } from "../utils/scene";
 import Scene3DPreview, { hasCachedSceneModel } from "./Scene3DPreview";
 
-export function CoverageApiPage({ activeScene, onProgressChange, onSceneLoadingChange }) {
+export function CoverageApiPage({ activeScene, onProgressChange, onQueueOpen, onSceneLoadingChange, onSimulationQueued }) {
   const [form, setForm] = useState(() => ({
     tilt: 8,
     transmitter_position: [-45, -40, 30],
@@ -39,6 +39,8 @@ export function CoverageApiPage({ activeScene, onProgressChange, onSceneLoadingC
   const [resultState, setResultState] = useApiResult(
     onProgressChange,
     "Running Coverage API...",
+    onSimulationQueued,
+    { sceneName: activeScene?.name },
   );
   const sceneStatus = useScenePreviewStatus(activeScene, onSceneLoadingChange);
   const sceneSolver = solverForScene(activeScene, form.solver);
@@ -78,6 +80,7 @@ export function CoverageApiPage({ activeScene, onProgressChange, onSceneLoadingC
           onSceneLoadingChange={sceneStatus.handleSceneLoadingChange}
         />
       )}
+      onQueueOpen={onQueueOpen}
       resultState={resultState}
       renderResult={(result) => (
         <CoverageResult
@@ -110,7 +113,7 @@ export function CoverageApiPage({ activeScene, onProgressChange, onSceneLoadingC
   );
 }
 
-export function SinrApiPage({ activeScene, onProgressChange, onSceneLoadingChange }) {
+export function SinrApiPage({ activeScene, onProgressChange, onQueueOpen, onSceneLoadingChange, onSimulationQueued }) {
   const [form, setForm] = useState(() => ({
     tilt: 8,
     transmitter_position: [0, 0, 30],
@@ -123,6 +126,8 @@ export function SinrApiPage({ activeScene, onProgressChange, onSceneLoadingChang
   const [resultState, setResultState] = useApiResult(
     onProgressChange,
     "Running SINR API...",
+    onSimulationQueued,
+    { sceneName: activeScene?.name },
   );
   const sceneStatus = useScenePreviewStatus(activeScene, onSceneLoadingChange);
   const sceneSolver = solverForScene(activeScene, form.solver);
@@ -172,6 +177,7 @@ export function SinrApiPage({ activeScene, onProgressChange, onSceneLoadingChang
           onSceneLoadingChange={sceneStatus.handleSceneLoadingChange}
         />
       )}
+      onQueueOpen={onQueueOpen}
       resultState={resultState}
       renderResult={(result) => (
         <SinrResult
@@ -221,7 +227,7 @@ export function SinrApiPage({ activeScene, onProgressChange, onSceneLoadingChang
   );
 }
 
-export function RsrpSimulationPage({ activeScene, antennas, onProgressChange, onSceneLoadingChange }) {
+export function RsrpSimulationPage({ activeScene, antennas, onProgressChange, onQueueOpen, onSceneLoadingChange, onSimulationQueued }) {
   const [selectedUser, setSelectedUser] = useState(null);
   const [form, setForm] = useState(() => ({
     user_count: suggestUserCount(DEFAULT_SOLVER),
@@ -232,6 +238,8 @@ export function RsrpSimulationPage({ activeScene, antennas, onProgressChange, on
   const [resultState, setResultState] = useApiResult(
     onProgressChange,
     "Running RSRP simulation...",
+    onSimulationQueued,
+    { sceneName: activeScene?.name },
   );
   const sceneStatus = useScenePreviewStatus(activeScene, onSceneLoadingChange);
   const sceneSolver = solverForScene(activeScene, form.solver);
@@ -256,6 +264,7 @@ export function RsrpSimulationPage({ activeScene, antennas, onProgressChange, on
   }
 
   const result = resultState.result;
+  const isQueued = result?.status === "queued";
   const solver = result?.solver || sceneSolver;
   const rsrpUsers = result?.users || EMPTY_ARRAY;
 
@@ -308,6 +317,9 @@ export function RsrpSimulationPage({ activeScene, antennas, onProgressChange, on
           <h2>Result</h2>
           {resultState.error && <p className="history-status error-text">{resultState.error}</p>}
           {!resultState.error && resultState.loading && <p className="history-status">Waiting for backend...</p>}
+          {!resultState.error && !resultState.loading && isQueued && (
+            <QueueNotice result={result} onQueueOpen={onQueueOpen} />
+          )}
           <div className="result-summary">
             <div className="api-result-scene-wrap rsrp-scene-wrap">
               {activeScene?.bounds ? (
@@ -326,7 +338,7 @@ export function RsrpSimulationPage({ activeScene, antennas, onProgressChange, on
                     viewMode="top"
                   />
                   <RsrpMapLegend />
-                  {selectedUser && (
+                  {selectedUser && !isQueued && (
                     <RsrpUserDialog
                       user={selectedUser}
                       onClose={() => setSelectedUser(null)}
@@ -342,7 +354,7 @@ export function RsrpSimulationPage({ activeScene, antennas, onProgressChange, on
                 The active scene is ready. Run the simulation to generate and place user dots.
               </p>
             )}
-            {!resultState.error && result && (
+            {!resultState.error && result && !isQueued && (
               <RsrpSummary result={result} />
             )}
           </div>
@@ -369,7 +381,7 @@ function RsrpMapLegend() {
   );
 }
 
-export function ThroughputApiPage({ activeScene, onProgressChange, onSceneLoadingChange }) {
+export function ThroughputApiPage({ activeScene, onProgressChange, onQueueOpen, onSceneLoadingChange, onSimulationQueued }) {
   const [form, setForm] = useState(() => ({
     base_tilt: 6,
     target_tilt: 12,
@@ -385,6 +397,8 @@ export function ThroughputApiPage({ activeScene, onProgressChange, onSceneLoadin
   const [resultState, setResultState] = useApiResult(
     onProgressChange,
     "Running Throughput API...",
+    onSimulationQueued,
+    { sceneName: activeScene?.name },
   );
   const sceneStatus = useScenePreviewStatus(activeScene, onSceneLoadingChange);
   const sceneSolver = solverForScene(activeScene, form.solver);
@@ -434,6 +448,7 @@ export function ThroughputApiPage({ activeScene, onProgressChange, onSceneLoadin
           onSceneLoadingChange={sceneStatus.handleSceneLoadingChange}
         />
       )}
+      onQueueOpen={onQueueOpen}
       resultState={resultState}
       renderResult={(result) => (
         <ThroughputResult
@@ -609,7 +624,9 @@ function suggestUserCount(solver) {
   );
 }
 
-function ApiPageShell({ children, description, renderPreview, renderResult, resultState, title }) {
+function ApiPageShell({ children, description, onQueueOpen, renderPreview, renderResult, resultState, title }) {
+  const isQueued = resultState.result?.status === "queued";
+
   return (
     <section className="api-page">
       <div className="page-title">
@@ -625,10 +642,31 @@ function ApiPageShell({ children, description, renderPreview, renderResult, resu
           {resultState.error && <p className="history-status error-text">{resultState.error}</p>}
           {!resultState.error && resultState.loading && <p className="history-status">Waiting for backend...</p>}
           {!resultState.error && !resultState.result && renderPreview?.()}
-          {!resultState.error && resultState.result && renderResult(resultState.result)}
+          {!resultState.error && isQueued && <QueueNotice result={resultState.result} onQueueOpen={onQueueOpen} />}
+          {!resultState.error && resultState.result && !isQueued && renderResult(resultState.result)}
         </div>
       </div>
     </section>
+  );
+}
+
+function QueueNotice({ onQueueOpen, result }) {
+  const sceneName = result.scene_name || result.scene?.name || result.scene?.id;
+
+  return (
+    <div className="queue-notice">
+      <strong>Simulation recorded</strong>
+      <p>The job is in Simulation Queue. Open the queue to watch its status and save the result after it finishes.</p>
+      <dl className="detail-grid">
+        <dt>Scene</dt><dd>{sceneName || "--"}</dd>
+        <dt>Type</dt><dd>{result.simulation_type || "--"}</dd>
+      </dl>
+      {onQueueOpen && (
+        <button className="primary-button" type="button" onClick={onQueueOpen}>
+          Open Simulation Queue
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -1127,7 +1165,7 @@ function runButtonLabel(isLoading, isSceneReady, isFormValid, readyLabel) {
   return readyLabel;
 }
 
-function useApiResult(onProgressChange, progressLabel) {
+function useApiResult(onProgressChange, progressLabel, onSimulationQueued, queuedContext = {}) {
   const [state, setState] = useState({
     error: "",
     loading: false,
@@ -1149,14 +1187,25 @@ function useApiResult(onProgressChange, progressLabel) {
     try {
       const result = await requestFactory();
 
-      if (result.status && result.status !== "success") {
+      if (result.status && result.status !== "success" && result.status !== "queued") {
         throw new Error(result.error || "API returned failure.");
+      }
+
+      const displayResult = result.status === "queued"
+        ? {
+          ...result,
+          scene_name: queuedContext.sceneName,
+        }
+        : result;
+
+      if (displayResult.status === "queued") {
+        onSimulationQueued?.(displayResult);
       }
 
       setState({
         error: "",
         loading: false,
-        result,
+        result: displayResult,
       });
     } catch (error) {
       setState({

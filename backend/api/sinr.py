@@ -40,7 +40,11 @@ from backend.services.simulation_store import (
 )
 from backend.services.simulation_job_store import (
     create_simulation_job,
+    delete_simulation_job,
     get_simulation_job,
+    get_simulation_job_result,
+    list_simulation_jobs,
+    save_simulation_job_result,
 )
 from backend.services.scene_service import (
     activate_scene,
@@ -458,6 +462,115 @@ def simulation_job_detail(job_id: str):
             status_code=404,
             detail="Simulation job not found.",
         )
+
+    return result
+
+
+@router.get("/simulation-jobs")
+def simulation_jobs(limit: int = 100):
+    return list_simulation_jobs(limit=limit)
+
+
+@router.get("/simulation-jobs/{job_id}/result")
+def simulation_job_result(job_id: str):
+    response = get_simulation_job_result(job_id)
+
+    if not response.get("database_configured"):
+        raise HTTPException(
+            status_code=503,
+            detail="Database is not configured.",
+        )
+
+    if response.get("not_found"):
+        raise HTTPException(
+            status_code=404,
+            detail="Simulation job not found.",
+        )
+
+    if response.get("error"):
+        raise HTTPException(
+            status_code=500,
+            detail=response["error"],
+        )
+
+    if response.get("result") is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Simulation job result not found.",
+        )
+
+    return response["result"]
+
+
+@router.post("/simulation-jobs/{job_id}/save")
+def save_simulation_job(job_id: str):
+    result = save_simulation_job_result(job_id)
+
+    if not result.get("database_configured"):
+        raise HTTPException(
+            status_code=503,
+            detail="Database is not configured.",
+        )
+
+    if result.get("not_found"):
+        raise HTTPException(
+            status_code=404,
+            detail="Simulation job not found.",
+        )
+
+    if result.get("error"):
+        raise HTTPException(
+            status_code=result.get("status_code", 500),
+            detail=result,
+        )
+
+    log_business_event(
+        "simulation_job_saved_to_history",
+        job_id=job_id,
+        run_id=result.get("run_id"),
+        already_saved=result.get("already_saved", False),
+    )
+
+    return result
+
+
+@router.delete("/simulation-jobs/{job_id}")
+def delete_simulation_job_route(job_id: str):
+    result = delete_simulation_job(job_id)
+
+    if result.get("error"):
+        log_business_event(
+            "simulation_job_delete_failed",
+            level="ERROR",
+            job_id=job_id,
+            error=result.get("error"),
+        )
+        raise HTTPException(
+            status_code=result.get("status_code", 500),
+            detail=result,
+        )
+
+    if result.get("database_configured") and not result.get("deleted"):
+        log_business_event(
+            "simulation_job_delete_failed",
+            level="WARNING",
+            job_id=job_id,
+            status_code=404,
+            error="Simulation job not found.",
+        )
+        raise HTTPException(
+            status_code=404,
+            detail="Simulation job not found.",
+        )
+
+    log_business_event(
+        "simulation_job_deleted",
+        job_id=job_id,
+        database_configured=result.get("database_configured"),
+        deleted=result.get("deleted"),
+        deleted_files=result.get("deleted_files"),
+        result_run_id=result.get("result_run_id"),
+    )
 
     return result
 

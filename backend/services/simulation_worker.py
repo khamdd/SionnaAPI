@@ -21,7 +21,6 @@ from backend.services.simulation_job_store import (
     mark_simulation_job_failed,
     mark_simulation_job_succeeded,
 )
-from backend.services.simulation_store import store_simulation_result, utc_now
 from backend.services.sinr_service import calculate_sinr_service
 from backend.services.throughput_service import compare_throughput_service
 
@@ -89,8 +88,6 @@ def run_simulation_job(job):
     simulation_type = job["simulation_type"]
     scene_info = job.get("scene_json") or {}
     request_json = job.get("request_json") or {}
-    started_at = utc_now()
-
     try:
         req = build_request(simulation_type, request_json)
         runtime_req = with_runtime_antenna_positions(req, scene_info)
@@ -101,16 +98,6 @@ def run_simulation_job(job):
             scene,
             job.get("base_url"),
         )
-        finished_at = utc_now()
-        run_id = store_simulation_result(
-            simulation_type,
-            req,
-            result,
-            started_at,
-            finished_at,
-            scene_info=scene_info,
-        )
-
         if is_failure_result(result):
             mark_simulation_job_failed(
                 job_id,
@@ -119,20 +106,9 @@ def run_simulation_job(job):
             )
             return
 
-        if run_id is None:
-            mark_simulation_job_failed(
-                job_id,
-                "Simulation completed but its result could not be stored.",
-                result={
-                    "status": "failure",
-                    "error": "Simulation result storage failed.",
-                },
-            )
-            return
-
         mark_simulation_job_succeeded(
             job_id,
-            run_id,
+            result,
         )
 
     except Exception as exc:

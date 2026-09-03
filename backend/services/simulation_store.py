@@ -307,6 +307,20 @@ def delete_simulation_run(run_id):
                     }
                 )
 
+            linked_jobs = session.scalars(
+                select(SimulationJob).where(SimulationJob.result_run_id == run_id)
+            ).all()
+            for job in linked_jobs:
+                job_result_json = normalize_json_value(job.result_json) or {}
+                job_full_result_url = job_result_json.get("full_result_url")
+                if job_full_result_url:
+                    files_to_delete.append(
+                        {
+                            "file_path": "",
+                            "public_url": job_full_result_url,
+                        }
+                    )
+
             deleted_jobs = session.execute(
                 delete(SimulationJob).where(SimulationJob.result_run_id == run_id)
             ).rowcount
