@@ -122,13 +122,17 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   exactly one transmitter, one receiver, and one interferer are assigned to three
   different antennas. SINR type 2 antennas, per-antenna simulation settings, and
   role selections are persisted in separate scene-scoped localStorage keys and
-  cleared when resetting SINR antennas or changing the work scene.
+  cleared when resetting SINR antennas or changing the work scene. The SINR page
+  uses a workspace layout with the 3D scene/result on the left, candidate antenna
+  management on the right, and role/solver setup below the 3D scene.
 - RSRP Simulation uses all configured transmit antennas for the run, with the
   same type 1/type 2 split as Network Coverage. Fixed type 1 antenna base data
   remains immutable, users can add/delete type 2 antennas from the XLSX-shaped
   form, simulation tilt/power/azimuth settings are editable per antenna, and the
   RSRP draft is stored in its own scene-scoped localStorage keys. RSRP enforces
-  the backend limit of 10 antennas per simulation request.
+  the backend limit of 10 antennas per simulation request. The RSRP page keeps
+  antenna management on the right and places user/solver setup below the 3D
+  scene/result on the left.
 
 ## Important Files
 

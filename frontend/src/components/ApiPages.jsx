@@ -333,68 +333,105 @@ export function SinrApiPage({
     }));
   }
 
+  const result = resultState.result;
+  const isQueued = result?.status === "queued";
+  const resultRequest = result?.request || {};
+
   return (
-    <ApiPageShell
-      layout="result-wide"
-      title="SINR API"
-      description="Evaluate signal quality at one receiver point with one serving transmitter and one interferer."
-      renderPreview={() => (
-        <ApiScenePreview
-          activeScene={activeScene}
-          antennas={sinrPreviewAntennas(selectedRoles)}
-          isSceneReady={sceneStatus.isSceneReady}
-          onSceneLoadingChange={sceneStatus.handleSceneLoadingChange}
-          signalLinks={sinrPreviewLinks(rolePositions)}
-          solver={sceneSolver}
-        />
-      )}
-      onQueueOpen={onQueueOpen}
-      resultState={resultState}
-      renderResult={(result) => (
-        <SinrResult
-          activeScene={activeScene}
-          onSceneLoadingChange={sceneStatus.handleSceneLoadingChange}
-          result={result}
-        />
-      )}
-    >
-      <form className="api-form" onSubmit={submit}>
-        <fieldset className="api-form-lock" disabled={resultState.loading}>
-          <FormSection title="SINR roles">
-            <SinrRoleFields
-              antennas={antennas}
-              error={sinrError}
-              roles={roleSelection}
-              onChange={onRoleSelectionChange}
-            />
-          </FormSection>
-          <FormSection title="Candidate antennas">
-            <AntennaPanel
-              activeScene={activeScene}
-              antennas={antennas}
-              disabled={resultState.loading}
-              maxAntennas={maxSinrCandidates}
-              onAddType2={onAddType2Antenna}
-              onChange={onUpdateAntenna}
-              onRemoveType2={onRemoveType2Antenna}
-              simulationLabel="SINR API"
-            />
-          </FormSection>
-          <SolverFields solver={sceneSolver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
-          <button className="primary-button" type="submit" disabled={resultState.loading || !sceneStatus.isSceneReady || !isFormValid}>
+    <main className="app-shell api-workspace-shell sinr-page">
+      <section className="map-panel api-workspace-result" aria-label="SINR API result">
+        <div className="topbar">
+          <div>
+            <h1>SINR API</h1>
+            <p id="run-status">Evaluate signal quality at one receiver point with one serving transmitter and one interferer.</p>
+          </div>
+          <button
+            className="primary-button"
+            type="submit"
+            form="sinr-api-form"
+            disabled={resultState.loading || !sceneStatus.isSceneReady || !isFormValid}
+          >
             {runButtonLabel(resultState.loading, sceneStatus.isSceneReady, isFormValid, "Calculate SINR")}
           </button>
-          <button
-            className="ghost-button"
-            type="button"
-            disabled={resultState.loading}
-            onClick={onResetAntennas}
-          >
-            Reset SINR antennas
-          </button>
-        </fieldset>
-      </form>
-    </ApiPageShell>
+        </div>
+        <div className="api-workspace-stage">
+          {resultState.error && <p className="history-status error-text">{resultState.error}</p>}
+          {!resultState.error && resultState.loading && <p className="history-status">Waiting for backend...</p>}
+          {!resultState.error && !resultState.loading && isQueued && (
+            <QueueNotice result={result} onQueueOpen={onQueueOpen} />
+          )}
+          <div className="result-summary">
+            {result && !isQueued ? (
+              <ApiResultScene
+                activeScene={activeScene}
+                antennas={linkResultAntennas(result, resultRequest)}
+                result={result}
+                onSceneLoadingChange={sceneStatus.handleSceneLoadingChange}
+                sceneBadges={sinrSceneBadges(result)}
+                signalLinks={radioLinkVisuals(resultRequest)}
+                solver={result.solver || resultRequest.solver}
+              />
+            ) : (
+              <ApiResultScene
+                activeScene={activeScene}
+                antennas={sinrPreviewAntennas(selectedRoles)}
+                result={{}}
+                onSceneLoadingChange={sceneStatus.handleSceneLoadingChange}
+                signalLinks={sinrPreviewLinks(rolePositions)}
+                solver={sceneSolver}
+              />
+            )}
+            <form id="sinr-api-form" className="api-form api-scene-setup-form" onSubmit={submit}>
+              <fieldset className="api-form-lock" disabled={resultState.loading}>
+                <FormSection title="SINR roles">
+                  <SinrRoleFields
+                    antennas={antennas}
+                    error={sinrError}
+                    roles={roleSelection}
+                    onChange={onRoleSelectionChange}
+                  />
+                </FormSection>
+                <SolverFields solver={sceneSolver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
+              </fieldset>
+            </form>
+            {!resultState.error && result && !isQueued && (
+              <SinrResultDetails result={result} />
+            )}
+          </div>
+        </div>
+      </section>
+      <aside className="control-panel api-workspace-controls" aria-label="SINR candidate antenna controls">
+        <div className="panel-header">
+          <h2>SINR antennas</h2>
+          <div className="panel-actions">
+            <button
+              className="ghost-button"
+              type="button"
+              disabled={resultState.loading}
+              onClick={onResetAntennas}
+            >
+              Reset
+            </button>
+          </div>
+        </div>
+        <div className="api-workspace-form">
+          <div className="api-form">
+            <FormSection title="Candidate antennas">
+              <AntennaPanel
+                activeScene={activeScene}
+                antennas={antennas}
+                disabled={resultState.loading}
+                maxAntennas={maxSinrCandidates}
+                onAddType2={onAddType2Antenna}
+                onChange={onUpdateAntenna}
+                onRemoveType2={onRemoveType2Antenna}
+                simulationLabel="SINR API"
+              />
+            </FormSection>
+          </div>
+        </div>
+      </aside>
+    </main>
   );
 }
 
@@ -522,6 +559,39 @@ export function RsrpSimulationPage({
                 The active scene is ready. Run the simulation to generate and place user dots.
               </p>
             )}
+            <form id="rsrp-simulation-form" className="api-form api-scene-setup-form" onSubmit={submit}>
+              <fieldset className="api-form-lock" disabled={resultState.loading}>
+                <FormSection title="Users">
+                  <NumberField
+                    label="User count"
+                    value={form.user_count}
+                    min={1}
+                    max={MAX_RSRP_USER_COUNT}
+                    step={1}
+                    onChange={(value) => updateForm(setForm, "user_count", value)}
+                  />
+                  <NumberField
+                    label="User height"
+                    unit="m"
+                    value={form.user_height_m}
+                    min={0.5}
+                    max={10}
+                    onChange={(value) => updateForm(setForm, "user_height_m", value)}
+                  />
+                  <NumberField
+                    label="Random seed"
+                    value={form.random_seed}
+                    min={0}
+                    step={1}
+                    onChange={(value) => updateForm(setForm, "random_seed", value)}
+                  />
+                  <p className="form-help">
+                    Suggested count for this area: {suggestUserCount(sceneSolver)} users.
+                  </p>
+                </FormSection>
+                <SolverFields solver={sceneSolver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
+              </fieldset>
+            </form>
             {!resultState.error && !resultState.loading && isQueued && (
               <p className="history-status">
                 User dots will appear after this queued job finishes. Open the completed result from Simulation Queue.
@@ -548,53 +618,22 @@ export function RsrpSimulationPage({
           </div>
         </div>
         <div className="api-workspace-form">
-          <form id="rsrp-simulation-form" className="api-form" onSubmit={submit}>
-            <fieldset className="api-form-lock" disabled={resultState.loading}>
-              <FormSection title="Antennas">
-                <div className="embedded-antenna-panel">
-                  <AntennaPanel
-                    activeScene={activeScene}
-                    antennas={antennas}
-                    disabled={resultState.loading}
-                    maxAntennas={maxAntennas}
-                    onAddType2={onAddType2Antenna}
-                    onChange={onUpdateAntenna}
-                    onRemoveType2={onRemoveType2Antenna}
-                    simulationLabel="RSRP Simulation"
-                  />
-                </div>
-              </FormSection>
-              <FormSection title="Users">
-                <NumberField
-                  label="User count"
-                  value={form.user_count}
-                  min={1}
-                  max={MAX_RSRP_USER_COUNT}
-                  step={1}
-                  onChange={(value) => updateForm(setForm, "user_count", value)}
+          <div className="api-form">
+            <FormSection title="Antennas">
+              <div className="embedded-antenna-panel">
+                <AntennaPanel
+                  activeScene={activeScene}
+                  antennas={antennas}
+                  disabled={resultState.loading}
+                  maxAntennas={maxAntennas}
+                  onAddType2={onAddType2Antenna}
+                  onChange={onUpdateAntenna}
+                  onRemoveType2={onRemoveType2Antenna}
+                  simulationLabel="RSRP Simulation"
                 />
-                <NumberField
-                  label="User height"
-                  unit="m"
-                  value={form.user_height_m}
-                  min={0.5}
-                  max={10}
-                  onChange={(value) => updateForm(setForm, "user_height_m", value)}
-                />
-                <NumberField
-                  label="Random seed"
-                  value={form.random_seed}
-                  min={0}
-                  step={1}
-                  onChange={(value) => updateForm(setForm, "random_seed", value)}
-                />
-                <p className="form-help">
-                  Suggested count for this area: {suggestUserCount(sceneSolver)} users.
-                </p>
-              </FormSection>
-              <SolverFields solver={sceneSolver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
-            </fieldset>
-          </form>
+              </div>
+            </FormSection>
+          </div>
         </div>
       </aside>
     </main>
@@ -1437,6 +1476,16 @@ function SinrResult({ activeScene, onSceneLoadingChange, result }) {
         signalLinks={radioLinkVisuals(request)}
         solver={result.solver || request.solver}
       />
+      <SinrResultDetails result={result} />
+    </div>
+  );
+}
+
+function SinrResultDetails({ result }) {
+  const request = result.request || {};
+
+  return (
+    <>
       <h3>Serving transmitter</h3>
       <dl className="detail-grid">
         <dt>Position</dt><dd>{formatPositionValue(request.transmitter_position)}</dd>
@@ -1456,7 +1505,7 @@ function SinrResult({ activeScene, onSceneLoadingChange, result }) {
         <dt>Position</dt><dd>{formatPositionValue(request.interferer_position)}</dd>
         <dt>Tilt</dt><dd>{formatMaybeNumber(request.interferer_tilt)} deg</dd>
       </dl>
-    </div>
+    </>
   );
 }
 
