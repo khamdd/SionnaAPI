@@ -409,6 +409,15 @@ button.hidden,
   margin: 0 auto;
 }
 
+.api-layout-result-wide {
+  grid-template-columns: minmax(300px, 0.7fr) minmax(0, 1.3fr);
+  max-width: none;
+}
+
+.api-page-result-wide .page-title {
+  max-width: none;
+}
+
 .api-panel,
 .api-result-panel,
 .history-page-panel {
@@ -574,6 +583,32 @@ button.hidden,
 
 .api-panel,
 .api-result-panel {
+  padding: 16px;
+}
+
+.api-workspace-shell {
+  grid-template-columns: minmax(0, 1fr) 390px;
+}
+
+.api-workspace-result {
+  min-height: calc(100vh - 99px);
+}
+
+.api-workspace-stage {
+  position: relative;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+}
+
+.api-workspace-controls {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.api-workspace-form {
+  min-height: 0;
+  overflow: auto;
   padding: 16px;
 }
 
@@ -1116,10 +1151,6 @@ textarea:disabled {
   color: var(--muted);
   font-size: 11px;
   white-space: nowrap;
-}
-
-.rsrp-layout {
-  grid-template-columns: minmax(300px, 0.42fr) minmax(0, 1fr);
 }
 
 .rsrp-scene-wrap {
@@ -2389,6 +2420,16 @@ textarea:disabled {
   height: 340px;
   min-height: 340px;
   margin-bottom: 12px;
+}
+
+.api-layout-result-wide .api-result-scene-3d.scene-3d-preview {
+  height: min(54vh, 560px);
+  min-height: 430px;
+}
+
+.api-workspace-stage .api-result-scene-3d.scene-3d-preview {
+  height: min(64vh, 680px);
+  min-height: 520px;
 }
 
 .api-result-scene-3d .scene-3d-canvas {

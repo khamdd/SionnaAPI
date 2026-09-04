@@ -1218,7 +1218,7 @@ function addRsrpUsers(scene, model, users, solver) {
   const objects = [];
 
   users.forEach((user) => {
-    const position = scenePointFromWorld(model, solver, user.position, 7);
+    const position = rsrpUserPointFromWorld(model, solver, user.position);
 
     if (!position) {
       return;
@@ -1227,7 +1227,7 @@ function addRsrpUsers(scene, model, users, solver) {
     const material = getRsrpUserMaterial(materials, user.quality);
     const sprite = new THREE.Sprite(material);
     sprite.position.copy(position);
-    sprite.scale.set(8.5, 8.5, 1);
+    sprite.scale.set(2.6, 2.6, 1);
     sprite.renderOrder = 12;
     sprite.userData.rsrpUser = user;
     group.add(sprite);
@@ -1337,11 +1337,11 @@ function syncSelectedRsrpUserOutline(
   }
 
   if (user && solver) {
-    const position = scenePointFromWorld(model, solver, user.position, 6.8);
+    const position = rsrpUserPointFromWorld(model, solver, user.position);
 
     if (position) {
       const ring = new THREE.Mesh(
-        new THREE.TorusGeometry(8.5, 1.5, 12, 48),
+        new THREE.TorusGeometry(3.1, 0.55, 12, 48),
         new THREE.MeshBasicMaterial({
           color: 0x0f172a,
           depthTest: false,
@@ -1371,6 +1371,27 @@ function scenePointFromWorld(model, solver, position, yOffset = 0) {
   const x = ((Number(position[0]) - centerX) / sizeX) * model.width;
   const z = -((Number(position[1]) - centerY) / sizeY) * model.depth;
   const y = clamp((Number(position[2]) || 0) * model.scale + yOffset, 6, 90);
+
+  if (!Number.isFinite(x) || !Number.isFinite(z) || !Number.isFinite(y)) {
+    return null;
+  }
+
+  return new THREE.Vector3(x, y, z);
+}
+
+function rsrpUserPointFromWorld(model, solver, position) {
+  if (!Array.isArray(position) || position.length < 2) {
+    return null;
+  }
+
+  const sizeX = solver.size?.[0] || 300;
+  const sizeY = solver.size?.[1] || 300;
+  const centerX = solver.center?.[0] || 0;
+  const centerY = solver.center?.[1] || 0;
+  const x = ((Number(position[0]) - centerX) / sizeX) * model.width;
+  const z = -((Number(position[1]) - centerY) / sizeY) * model.depth;
+  const heightMeters = Math.max(Number(position[2]) || 0, 0);
+  const y = clamp(heightMeters * model.scale, 0.35, 3);
 
   if (!Number.isFinite(x) || !Number.isFinite(z) || !Number.isFinite(y)) {
     return null;

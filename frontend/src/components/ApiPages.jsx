@@ -152,6 +152,17 @@ export function CoverageApiPage({ activeScene, antennas = EMPTY_ARRAY, onProgres
 
   return (
     <ApiPageShell
+      layout="workspace"
+      workspaceAction={(
+        <button
+          className="primary-button"
+          type="submit"
+          form="coverage-api-form"
+          disabled={resultState.loading || !sceneStatus.isSceneReady || !positionValidation.isValid}
+        >
+          {runButtonLabel(resultState.loading, sceneStatus.isSceneReady, positionValidation.isValid, "Run coverage")}
+        </button>
+      )}
       title="Coverage API"
       description="Render a single-transmitter coverage map for a selected transmitter position, tilt, and power."
       renderPreview={() => (
@@ -172,7 +183,7 @@ export function CoverageApiPage({ activeScene, antennas = EMPTY_ARRAY, onProgres
         />
       )}
     >
-      <form className="api-form" onSubmit={submit}>
+      <form id="coverage-api-form" className="api-form" onSubmit={submit}>
         <fieldset className="api-form-lock" disabled={resultState.loading || !sceneStatus.isSceneReady}>
           <FormSection title="Transmitter">
             <CoverageTransmitterFields
@@ -202,9 +213,6 @@ export function CoverageApiPage({ activeScene, antennas = EMPTY_ARRAY, onProgres
             />
           </FormSection>
           <SolverFields solver={sceneSolver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
-          <button className="primary-button" type="submit" disabled={resultState.loading || !sceneStatus.isSceneReady || !positionValidation.isValid}>
-            {runButtonLabel(resultState.loading, sceneStatus.isSceneReady, positionValidation.isValid, "Run coverage")}
-          </button>
         </fieldset>
       </form>
     </ApiPageShell>
@@ -266,6 +274,7 @@ export function SinrApiPage({ activeScene, onProgressChange, onQueueOpen, onScen
 
   return (
     <ApiPageShell
+      layout="result-wide"
       title="SINR API"
       description="Evaluate signal quality at one receiver point with one serving transmitter and one interferer."
       renderPreview={() => (
@@ -393,79 +402,23 @@ export function RsrpSimulationPage({
   const rsrpUsers = result?.users || EMPTY_ARRAY;
 
   return (
-    <section className="api-page">
-      <div className="page-title">
-        <h1>RSRP Simulation</h1>
-        <p>Generate user spots across the active scene and calculate the received reference-signal power from each antenna.</p>
-      </div>
-      <div className="api-layout rsrp-layout">
-        <div className="api-panel">
-          <form className="api-form" onSubmit={submit}>
-            <fieldset className="api-form-lock" disabled={resultState.loading || !sceneStatus.isSceneReady}>
-              <FormSection title="Antennas">
-                <div className="embedded-antenna-panel">
-                  <div className="panel-header">
-                    <h3>RSRP antennas</h3>
-                    <div className="panel-actions">
-                      <button
-                        className="ghost-button"
-                        type="button"
-                        disabled={resultState.loading || !sceneStatus.isSceneReady}
-                        onClick={onResetAntennas}
-                      >
-                        Reset
-                      </button>
-                    </div>
-                  </div>
-                  <AntennaPanel
-                    activeScene={activeScene}
-                    antennas={antennas}
-                    disabled={resultState.loading || !sceneStatus.isSceneReady}
-                    maxAntennas={maxAntennas}
-                    onAddType2={onAddType2Antenna}
-                    onChange={onUpdateAntenna}
-                    onRemoveType2={onRemoveType2Antenna}
-                    simulationLabel="RSRP Simulation"
-                  />
-                </div>
-              </FormSection>
-              <FormSection title="Users">
-                <NumberField
-                  label="User count"
-                  value={form.user_count}
-                  min={1}
-                  max={MAX_RSRP_USER_COUNT}
-                  step={1}
-                  onChange={(value) => updateForm(setForm, "user_count", value)}
-                />
-                <NumberField
-                  label="User height"
-                  unit="m"
-                  value={form.user_height_m}
-                  min={0.5}
-                  max={10}
-                  onChange={(value) => updateForm(setForm, "user_height_m", value)}
-                />
-                <NumberField
-                  label="Random seed"
-                  value={form.random_seed}
-                  min={0}
-                  step={1}
-                  onChange={(value) => updateForm(setForm, "random_seed", value)}
-                />
-                <p className="form-help">
-                  Suggested count for this area: {suggestUserCount(sceneSolver)} users.
-                </p>
-              </FormSection>
-              <SolverFields solver={sceneSolver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
-              <button className="primary-button" type="submit" disabled={resultState.loading || !sceneStatus.isSceneReady}>
-                {resultState.loading ? "Running..." : sceneStatus.isSceneReady ? "Run RSRP simulation" : "Loading scene..."}
-              </button>
-            </fieldset>
-          </form>
+    <main className="app-shell api-workspace-shell rsrp-page">
+      <section className="map-panel api-workspace-result" aria-label="RSRP simulation result">
+        <div className="topbar">
+          <div>
+            <h1>RSRP Simulation</h1>
+            <p id="run-status">Generate user spots across the active scene and calculate received reference-signal power.</p>
+          </div>
+          <button
+            className="primary-button"
+            type="submit"
+            form="rsrp-simulation-form"
+            disabled={resultState.loading || !sceneStatus.isSceneReady}
+          >
+            {resultState.loading ? "Running..." : sceneStatus.isSceneReady ? "Run RSRP simulation" : "Loading scene..."}
+          </button>
         </div>
-        <div className="api-result-panel">
-          <h2>Result</h2>
+        <div className="api-workspace-stage">
           {resultState.error && <p className="history-status error-text">{resultState.error}</p>}
           {!resultState.error && resultState.loading && <p className="history-status">Waiting for backend...</p>}
           {!resultState.error && !resultState.loading && isQueued && (
@@ -515,8 +468,72 @@ export function RsrpSimulationPage({
             )}
           </div>
         </div>
-      </div>
-    </section>
+      </section>
+      <aside className="control-panel api-workspace-controls" aria-label="RSRP simulation controls">
+        <div className="panel-header">
+          <h2>RSRP controls</h2>
+          <div className="panel-actions">
+            <button
+              className="ghost-button"
+              type="button"
+              disabled={resultState.loading || !sceneStatus.isSceneReady}
+              onClick={onResetAntennas}
+            >
+              Reset
+            </button>
+          </div>
+        </div>
+        <div className="api-workspace-form">
+          <form id="rsrp-simulation-form" className="api-form" onSubmit={submit}>
+            <fieldset className="api-form-lock" disabled={resultState.loading || !sceneStatus.isSceneReady}>
+              <FormSection title="Antennas">
+                <div className="embedded-antenna-panel">
+                  <AntennaPanel
+                    activeScene={activeScene}
+                    antennas={antennas}
+                    disabled={resultState.loading || !sceneStatus.isSceneReady}
+                    maxAntennas={maxAntennas}
+                    onAddType2={onAddType2Antenna}
+                    onChange={onUpdateAntenna}
+                    onRemoveType2={onRemoveType2Antenna}
+                    simulationLabel="RSRP Simulation"
+                  />
+                </div>
+              </FormSection>
+              <FormSection title="Users">
+                <NumberField
+                  label="User count"
+                  value={form.user_count}
+                  min={1}
+                  max={MAX_RSRP_USER_COUNT}
+                  step={1}
+                  onChange={(value) => updateForm(setForm, "user_count", value)}
+                />
+                <NumberField
+                  label="User height"
+                  unit="m"
+                  value={form.user_height_m}
+                  min={0.5}
+                  max={10}
+                  onChange={(value) => updateForm(setForm, "user_height_m", value)}
+                />
+                <NumberField
+                  label="Random seed"
+                  value={form.random_seed}
+                  min={0}
+                  step={1}
+                  onChange={(value) => updateForm(setForm, "random_seed", value)}
+                />
+                <p className="form-help">
+                  Suggested count for this area: {suggestUserCount(sceneSolver)} users.
+                </p>
+              </FormSection>
+              <SolverFields solver={sceneSolver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
+            </fieldset>
+          </form>
+        </div>
+      </aside>
+    </main>
   );
 }
 
@@ -595,6 +612,7 @@ export function ThroughputApiPage({ activeScene, onProgressChange, onQueueOpen, 
 
   return (
     <ApiPageShell
+      layout="result-wide"
       title="Throughput API"
       description="Compare estimated receiver throughput between two transmitter tilt settings."
       renderPreview={() => (
@@ -780,16 +798,63 @@ function suggestUserCount(solver) {
   );
 }
 
-function ApiPageShell({ children, description, onQueueOpen, renderPreview, renderResult, resultState, title }) {
+function ApiPageShell({
+  children,
+  description,
+  layout = "standard",
+  onQueueOpen,
+  renderPreview,
+  renderResult,
+  resultState,
+  title,
+  workspaceAction = null,
+}) {
   const isQueued = resultState.result?.status === "queued";
 
+  if (layout === "workspace") {
+    return (
+      <main className="app-shell api-workspace-shell">
+        <section className="map-panel api-workspace-result" aria-label={`${title} result`}>
+          <div className="topbar">
+            <div>
+              <h1>{title}</h1>
+              <p id="run-status">{description}</p>
+            </div>
+            {workspaceAction}
+          </div>
+          <div className="api-workspace-stage">
+            {resultState.error && <p className="history-status error-text">{resultState.error}</p>}
+            {!resultState.error && resultState.loading && <p className="history-status">Waiting for backend...</p>}
+            {!resultState.error && !resultState.result && renderPreview?.()}
+            {!resultState.error && isQueued && <QueueNotice result={resultState.result} onQueueOpen={onQueueOpen} />}
+            {!resultState.error && resultState.result && !isQueued && renderResult(resultState.result)}
+          </div>
+        </section>
+        <aside className="control-panel api-workspace-controls" aria-label={`${title} controls`}>
+          <div className="panel-header">
+            <h2>Controls</h2>
+          </div>
+          <div className="api-workspace-form">
+            {children}
+          </div>
+        </aside>
+      </main>
+    );
+  }
+
   return (
-    <section className="api-page">
+    <section className={[
+      "api-page",
+      layout === "result-wide" ? "api-page-result-wide" : "",
+    ].filter(Boolean).join(" ")}>
       <div className="page-title">
         <h1>{title}</h1>
         <p>{description}</p>
       </div>
-      <div className="api-layout">
+      <div className={[
+        "api-layout",
+        layout === "result-wide" ? "api-layout-result-wide" : "",
+      ].filter(Boolean).join(" ")}>
         <div className="api-panel">
           {children}
         </div>
