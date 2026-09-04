@@ -52,6 +52,12 @@ class CameraConfig(BaseModel):
 class CoverageRequest(BaseModel):
     tilt: float
 
+    azimuth: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=360.0,
+    )
+
     transmitter_position: Tuple[
         float,
         float,

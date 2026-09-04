@@ -42,6 +42,7 @@ export function CoverageApiPage({ activeScene, antennas = EMPTY_ARRAY, onProgres
   const fixedAntennas = Array.isArray(antennas) ? antennas : EMPTY_ARRAY;
   const [form, setForm] = useState(() => ({
     tilt: 8,
+    azimuth: 0,
     tx_power: 30,
     transmitter: {
       id: "TX",
@@ -61,17 +62,22 @@ export function CoverageApiPage({ activeScene, antennas = EMPTY_ARRAY, onProgres
   );
   const sceneStatus = useScenePreviewStatus(activeScene, onSceneLoadingChange);
   const sceneSolver = solverForScene(activeScene, form.solver);
-  const transmitter = coverageTransmitter(form, fixedAntennas);
+  const baseTransmitter = coverageTransmitter(form, fixedAntennas);
+  const transmitter = {
+    ...baseTransmitter,
+    azimuth: form.azimuth,
+  };
   const transmitterPosition = lngLatToScenePosition(
     transmitter,
     activeScene?.bounds,
   );
   const transmitterError = validateCoverageTransmitter(
-    transmitter,
+    baseTransmitter,
     fixedAntennas,
     activeScene,
   );
-  const positionValidation = transmitterError
+  const azimuthError = validateCoverageAzimuth(form.azimuth);
+  const positionValidation = transmitterError || azimuthError
     ? { errors: { transmitter_position: transmitterError }, isValid: false }
     : validateScenePositions(sceneSolver, [
       {
@@ -103,6 +109,7 @@ export function CoverageApiPage({ activeScene, antennas = EMPTY_ARRAY, onProgres
         return {
           ...current,
           selected_antenna_id: antenna.id,
+          azimuth: antenna.azimuth ?? current.azimuth,
           tilt: antenna.tilt?.current ?? current.tilt,
           tx_power: antenna.tx_power?.current ?? current.tx_power,
         };
@@ -139,6 +146,7 @@ export function CoverageApiPage({ activeScene, antennas = EMPTY_ARRAY, onProgres
 
     const payload = {
       tilt: form.tilt,
+      azimuth: form.azimuth,
       transmitter_position: transmitterPosition,
       tx_power: form.tx_power,
       camera: form.camera,
@@ -198,6 +206,16 @@ export function CoverageApiPage({ activeScene, antennas = EMPTY_ARRAY, onProgres
               form={form}
               onChange={setForm}
             />
+            <NumberField
+              hint="0 to 360 degrees."
+              label="Azimuth"
+              max={360}
+              min={0}
+              unit="deg"
+              value={form.azimuth}
+              onChange={(value) => updateForm(setForm, "azimuth", value)}
+            />
+            {azimuthError && <small className="field-error">{azimuthError}</small>}
             <NumberField
               hint={rangeHint(transmitter.tilt, "degrees")}
               label="Tilt"
@@ -1646,6 +1664,7 @@ function CoverageResult({ activeScene, onSceneLoadingChange, result }) {
         <dt>Antenna</dt><dd>{formatText(request.transmitter?.id || "Manual transmitter")}</dd>
         <dt>Coordinates</dt><dd>{formatTransmitterCoordinates(request.transmitter)}</dd>
         <dt>Position</dt><dd>{formatPositionValue(request.transmitter_position)}</dd>
+        <dt>Azimuth</dt><dd>{formatMaybeNumber(request.azimuth)} deg</dd>
         <dt>Tilt</dt><dd>{formatMaybeNumber(request.tilt)} deg</dd>
         <dt>Power</dt><dd>{formatMaybeNumber(request.tx_power)} dBm</dd>
         <dt>Pattern</dt><dd>{formatText(request.transmitter_pattern)}</dd>
@@ -2093,6 +2112,24 @@ function validateCoverageTransmitter(transmitter, antennas, activeScene) {
   return "";
 }
 
+function validateCoverageAzimuth(azimuth) {
+  if (azimuth === "" || azimuth === null || azimuth === undefined) {
+    return "Azimuth is required.";
+  }
+
+  const numericAzimuth = Number(azimuth);
+
+  if (!Number.isFinite(numericAzimuth)) {
+    return "Azimuth must be a number.";
+  }
+
+  if (numericAzimuth < 0 || numericAzimuth > 360) {
+    return "Azimuth must be between 0 and 360 degrees.";
+  }
+
+  return "";
+}
+
 function updateManualTransmitter(onChange, form, field, value) {
   onChange({
     ...form,
@@ -2117,6 +2154,7 @@ function selectCoverageTransmitter(onChange, form, antennas, antennaId) {
   onChange({
     ...form,
     selected_antenna_id: antennaId,
+    azimuth: antenna?.azimuth ?? form.azimuth,
     tilt: antenna?.tilt?.current ?? form.tilt,
     tx_power: antenna?.tx_power?.current ?? form.tx_power,
   });

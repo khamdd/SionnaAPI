@@ -117,7 +117,10 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   automatically only as the default. If multiple fixed antennas exist, users must
   choose a fixed antenna or type 2 transmitter before running. The backend still
   receives the converted scene `transmitter_position`; fixed antenna real-world
-  coordinates remain read-only in the UI.
+  coordinates remain read-only in the UI. Coverage API exposes azimuth as a
+  simulation field: fixed antennas initialize it from base data, custom
+  transmitters default to 0 degrees, and the backend applies it to transmitter
+  orientation.
 - SINR API uses exactly three role antennas: one transmitter, one receiver, and
   one interferer. The page builds candidates from fixed type 1 scene antennas and
   SINR-only type 2 antennas. Users can add SINR-only type 2 candidates even when

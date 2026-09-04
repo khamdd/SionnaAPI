@@ -38,7 +38,17 @@ def test_coverage_request_uses_default_camera_and_solver():
     )
 
     assert request.camera.look_at == (0.0, 0.0, 10.0)
+    assert request.azimuth == 0.0
     assert request.solver.size == (400.0, 400.0)
+
+
+def test_coverage_request_rejects_invalid_azimuth():
+    with pytest.raises(ValidationError):
+        CoverageRequest(
+            tilt=8.0,
+            azimuth=361.0,
+            transmitter_position=(8.5, 21.0, 27.0),
+        )
 
 
 def test_throughput_request_rejects_invalid_bandwidth_and_layers():

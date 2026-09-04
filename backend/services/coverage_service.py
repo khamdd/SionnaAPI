@@ -22,6 +22,7 @@ def calculate_coverage_map_service(req: CoverageRequest, base_url, scene):
     try:
         solver = req.solver
         tilt_rad = req.tilt * np.pi / 180
+        azimuth_rad = req.azimuth * np.pi / 180
 
         remove_entity(scene, "tx0")
 
@@ -36,7 +37,7 @@ def calculate_coverage_map_service(req: CoverageRequest, base_url, scene):
             name="tx0",
             position=list(req.transmitter_position),
             orientation=[
-                0.0,
+                azimuth_rad,
                 tilt_rad,
                 0.0,
             ],
@@ -76,7 +77,7 @@ def calculate_coverage_map_service(req: CoverageRequest, base_url, scene):
                 {
                     "id": "TX",
                     "position": req.transmitter_position,
-                    "azimuth": 0,
+                    "azimuth": req.azimuth,
                 },
             ],
         }
