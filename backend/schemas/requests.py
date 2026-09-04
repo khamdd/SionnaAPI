@@ -213,6 +213,24 @@ class NetworkCoverageOptimizationEvaluationRequest(BaseModel):
         return self
 
 
+class NetworkCoverageOptimizationCandidateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    base_request: NetworkCoverageRequest
+
+    tilt_step: float = Field(
+        default=1.0,
+        gt=0.0,
+        le=20.0,
+    )
+
+    max_candidates: int = Field(
+        default=20,
+        ge=1,
+        le=100,
+    )
+
+
 class RSRPRequest(BaseModel):
     antennas: List[AntennaConfig] = Field(
         min_length=1,

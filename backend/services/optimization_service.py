@@ -84,6 +84,144 @@ def evaluate_network_coverage_objectives(result_or_grid, objectives):
     }
 
 
+def generate_network_coverage_tilt_candidates(
+    base_request,
+    tilt_step,
+    max_candidates,
+):
+    antennas = list(getattr(base_request, "antennas", []) or [])
+    step = numeric_value(tilt_step)
+
+    if step is None or step <= 0:
+        raise ValueError("tilt_step must be greater than 0")
+
+    if max_candidates < 1:
+        raise ValueError("max_candidates must be at least 1")
+
+    baseline_tilts = {
+        antenna.id: float(antenna.tilt.current)
+        for antenna in antennas
+    }
+    candidates = []
+    seen = set()
+
+    add_candidate(
+        candidates,
+        seen,
+        "baseline",
+        "Current setup",
+        baseline_tilts,
+        baseline_tilts,
+        max_candidates,
+    )
+
+    for direction, suffix, label in (
+        (step, "all_up", f"All antennas +{format_step(step)} deg"),
+        (-step, "all_down", f"All antennas -{format_step(step)} deg"),
+    ):
+        tilts = {
+            antenna.id: clamp_tilt(antenna.tilt.current + direction, antenna.tilt)
+            for antenna in antennas
+        }
+        add_candidate(
+            candidates,
+            seen,
+            suffix,
+            label,
+            tilts,
+            baseline_tilts,
+            max_candidates,
+        )
+
+    for antenna in antennas:
+        for direction, suffix, label in (
+            (step, "up", f"{antenna.id} +{format_step(step)} deg"),
+            (-step, "down", f"{antenna.id} -{format_step(step)} deg"),
+        ):
+            tilts = dict(baseline_tilts)
+            tilts[antenna.id] = clamp_tilt(
+                antenna.tilt.current + direction,
+                antenna.tilt,
+            )
+            add_candidate(
+                candidates,
+                seen,
+                f"{antenna.id}_{suffix}",
+                label,
+                tilts,
+                baseline_tilts,
+                max_candidates,
+            )
+
+    return {
+        "tilt_step": step,
+        "max_candidates": max_candidates,
+        "generated_count": len(candidates),
+        "antenna_count": len(antennas),
+        "candidates": candidates,
+    }
+
+
+def add_candidate(
+    candidates,
+    seen,
+    candidate_id,
+    label,
+    tilts,
+    baseline_tilts,
+    max_candidates,
+):
+    if len(candidates) >= max_candidates:
+        return
+
+    key = tuple(
+        (antenna_id, tilts[antenna_id])
+        for antenna_id in sorted(tilts)
+    )
+    if key in seen:
+        return
+
+    changes = [
+        {
+            "antenna_id": antenna_id,
+            "from": baseline_tilts[antenna_id],
+            "to": tilts[antenna_id],
+            "delta": round(tilts[antenna_id] - baseline_tilts[antenna_id], 6),
+        }
+        for antenna_id in sorted(tilts)
+        if not math.isclose(tilts[antenna_id], baseline_tilts[antenna_id])
+    ]
+
+    seen.add(key)
+    candidates.append(
+        {
+            "id": candidate_id,
+            "label": label,
+            "tilts": tilts,
+            "changes": changes,
+        }
+    )
+
+
+def clamp_tilt(value, tilt):
+    return round(
+        min(
+            max(
+                float(value),
+                float(tilt.min),
+            ),
+            float(tilt.max),
+        ),
+        6,
+    )
+
+
+def format_step(step):
+    if float(step).is_integer():
+        return str(int(step))
+    return str(step)
+
+
 def evaluate_objective(kpis, objective):
     metric = objective_value(objective, "metric")
     operator = objective_value(objective, "operator")

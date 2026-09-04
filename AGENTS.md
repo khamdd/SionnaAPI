@@ -173,7 +173,13 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   it falls back to the latest saved Network Coverage history result for the same
   scene. The frontend also has a local KPI evaluation fallback so preview still
   works when the running backend has not been restarted with the preview
-  endpoint. No optimization execution API exists yet.
+  endpoint. The "Add optimization candidate preview" slice adds
+  `POST /api/v1/optimizations/network-coverage/candidates` and candidate UI
+  controls for tilt step and max candidates. It previews deterministic legal
+  tilt setups only: current baseline, all-antennas step up/down, then individual
+  antenna step up/down, clipped to each antenna's tilt range. The frontend also
+  has a local candidate-generation fallback for stale backends. No optimization
+  execution API exists yet.
 
 ## Important Files
 

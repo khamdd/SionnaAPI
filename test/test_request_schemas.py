@@ -5,6 +5,7 @@ from backend.schemas.requests import RangeValue
 from backend.constants import DEFAULT_TRANSMITTER_PATTERN
 from backend.schemas.requests import (
     CoverageRequest,
+    NetworkCoverageOptimizationCandidateRequest,
     NetworkCoverageOptimizationEvaluationRequest,
     NetworkCoverageOptimizationRequest,
     NetworkCoverageRequest,
@@ -348,6 +349,73 @@ def test_network_coverage_optimization_evaluation_request_rejects_duplicate_metr
                     "target": 4.0,
                 },
             ],
+        )
+
+
+def test_network_coverage_optimization_candidate_request_accepts_preview_settings():
+    request = NetworkCoverageOptimizationCandidateRequest(
+        base_request={
+            "antennas": [
+                {
+                    "id": "A1",
+                    "longitude": 105.8,
+                    "latitude": 21.0,
+                    "height_m": 30.0,
+                    "tilt": {
+                        "min": 0.0,
+                        "current": 8.0,
+                        "max": 20.0,
+                    },
+                    "azimuth": 45.0,
+                    "tx_power": {
+                        "min": 20.0,
+                        "current": 30.0,
+                        "max": 40.0,
+                    },
+                }
+            ],
+        },
+        tilt_step=2.0,
+        max_candidates=12,
+    )
+
+    assert request.tilt_step == 2.0
+    assert request.max_candidates == 12
+
+
+def test_network_coverage_optimization_candidate_request_rejects_invalid_settings():
+    base_request = {
+        "antennas": [
+            {
+                "id": "A1",
+                "longitude": 105.8,
+                "latitude": 21.0,
+                "height_m": 30.0,
+                "tilt": {
+                    "min": 0.0,
+                    "current": 8.0,
+                    "max": 20.0,
+                },
+                "azimuth": 45.0,
+                "tx_power": {
+                    "min": 20.0,
+                    "current": 30.0,
+                    "max": 40.0,
+                },
+            }
+        ],
+    }
+
+    with pytest.raises(ValidationError):
+        NetworkCoverageOptimizationCandidateRequest(
+            base_request=base_request,
+            tilt_step=0.0,
+        )
+
+    with pytest.raises(ValidationError):
+        NetworkCoverageOptimizationCandidateRequest(
+            base_request=base_request,
+            max_candidates=101,
         )
 
 def test_range_value_accepts_current_inside_bounds():

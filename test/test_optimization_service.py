@@ -6,7 +6,9 @@ from backend.services.optimization_service import (
     evaluate_network_coverage_objectives,
     evaluate_objective,
     extract_network_coverage_kpis,
+    generate_network_coverage_tilt_candidates,
 )
+from backend.schemas.requests import NetworkCoverageRequest
 
 
 def test_extract_network_coverage_kpis_summarizes_grid_metrics():
@@ -145,3 +147,109 @@ def test_evaluate_objective_marks_missing_kpi_as_not_passed():
 
     assert evaluation["passed"] is False
     assert math.isinf(evaluation["score"])
+
+
+def test_generate_network_coverage_tilt_candidates_respects_ranges():
+    request = NetworkCoverageRequest(
+        antennas=[
+            {
+                "id": "A1",
+                "longitude": 105.8,
+                "latitude": 21.0,
+                "height_m": 30.0,
+                "tilt": {
+                    "min": 0.0,
+                    "current": 2.0,
+                    "max": 4.0,
+                },
+                "azimuth": 45.0,
+                "tx_power": {
+                    "min": 20.0,
+                    "current": 30.0,
+                    "max": 40.0,
+                },
+            },
+            {
+                "id": "A2",
+                "longitude": 105.801,
+                "latitude": 21.001,
+                "height_m": 30.0,
+                "tilt": {
+                    "min": 1.0,
+                    "current": 1.0,
+                    "max": 3.0,
+                },
+                "azimuth": 90.0,
+                "tx_power": {
+                    "min": 20.0,
+                    "current": 30.0,
+                    "max": 40.0,
+                },
+            },
+        ],
+    )
+
+    preview = generate_network_coverage_tilt_candidates(
+        request,
+        tilt_step=2.0,
+        max_candidates=20,
+    )
+
+    assert preview["generated_count"] == 5
+    assert preview["candidates"][0] == {
+        "id": "baseline",
+        "label": "Current setup",
+        "tilts": {
+            "A1": 2.0,
+            "A2": 1.0,
+        },
+        "changes": [],
+    }
+    assert preview["candidates"][1]["tilts"] == {
+        "A1": 4.0,
+        "A2": 3.0,
+    }
+    assert preview["candidates"][2]["tilts"] == {
+        "A1": 0.0,
+        "A2": 1.0,
+    }
+    assert all(
+        0.0 <= candidate["tilts"]["A1"] <= 4.0
+        and 1.0 <= candidate["tilts"]["A2"] <= 3.0
+        for candidate in preview["candidates"]
+    )
+
+
+def test_generate_network_coverage_tilt_candidates_applies_max_candidates():
+    request = NetworkCoverageRequest(
+        antennas=[
+            {
+                "id": "A1",
+                "longitude": 105.8,
+                "latitude": 21.0,
+                "height_m": 30.0,
+                "tilt": {
+                    "min": 0.0,
+                    "current": 8.0,
+                    "max": 20.0,
+                },
+                "azimuth": 45.0,
+                "tx_power": {
+                    "min": 20.0,
+                    "current": 30.0,
+                    "max": 40.0,
+                },
+            }
+        ],
+    )
+
+    preview = generate_network_coverage_tilt_candidates(
+        request,
+        tilt_step=1.0,
+        max_candidates=2,
+    )
+
+    assert [candidate["id"] for candidate in preview["candidates"]] == [
+        "baseline",
+        "all_up",
+    ]

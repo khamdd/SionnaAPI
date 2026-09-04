@@ -7,6 +7,7 @@ from backend.api.dependencies import require_current_user
 from backend.database import is_database_configured
 from backend.schemas.requests import (
     CoverageRequest,
+    NetworkCoverageOptimizationCandidateRequest,
     NetworkCoverageOptimizationEvaluationRequest,
     NetworkCoverageRequest,
     RSRPRequest,
@@ -56,7 +57,10 @@ from backend.services.scene_service import (
 )
 from backend.services.coordinate_service import with_runtime_antenna_positions
 from backend.services.event_logger import log_event
-from backend.services.optimization_service import evaluate_network_coverage_objectives
+from backend.services.optimization_service import (
+    evaluate_network_coverage_objectives,
+    generate_network_coverage_tilt_candidates,
+)
 
 from backend.simulations.sionna_engine import engine
 
@@ -455,6 +459,20 @@ def evaluate_network_coverage_optimization(
     return {
         "status": "success",
         **json_safe(evaluation),
+    }
+
+
+@router.post("/optimizations/network-coverage/candidates")
+def preview_network_coverage_optimization_candidates(
+    req: NetworkCoverageOptimizationCandidateRequest,
+):
+    return {
+        "status": "success",
+        **generate_network_coverage_tilt_candidates(
+            req.base_request,
+            req.tilt_step,
+            req.max_candidates,
+        ),
     }
 
 
