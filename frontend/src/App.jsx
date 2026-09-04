@@ -18,6 +18,7 @@ import {
   TRANSMITTER_PATTERN,
   AUTH_TOKEN_STORAGE_KEY,
   NETWORK_ANTENNA_SETTINGS_STORAGE_KEY,
+  NETWORK_OPTIMIZATION_OBJECTIVES_STORAGE_KEY,
   NETWORK_TYPE2_ANTENNAS_STORAGE_KEY,
   RSRP_ANTENNA_SETTINGS_STORAGE_KEY,
   RSRP_TYPE2_ANTENNAS_STORAGE_KEY,
@@ -1735,6 +1736,8 @@ export default function App() {
         <OptimizationObjectivePage
           activeAntennas={activeNetworkAntennas}
           activeScene={activeScene}
+          baseRequest={buildNetworkCoveragePayload(activeNetworkAntennas, activeScene)}
+          storageKey={NETWORK_OPTIMIZATION_OBJECTIVES_STORAGE_KEY}
           onBack={() => navigate(SIMULATION_ENTRY_ROUTE)}
         />
       )}

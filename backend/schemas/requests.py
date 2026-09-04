@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from typing import List, Tuple
+from typing import List, Literal, Tuple
 from backend.constants import (
     DEFAULT_RSRP_USER_COUNT,
     DEFAULT_TRANSMITTER_PATTERN,
@@ -135,6 +135,61 @@ class NetworkCoverageRequest(BaseModel):
         default=4,
         gt=0,
     )
+
+
+class OptimizationObjective(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    metric: Literal[
+        "uncovered_area_percent",
+        "covered_area_percent",
+        "poor_sinr_area_percent",
+        "minimum_sinr_db",
+        "median_throughput_mbps",
+        "overlap_area_percent",
+        "average_overlap_count",
+    ]
+    operator: Literal["<", ">", "<=", ">=", "="]
+    target: float
+
+
+class OptimizationVariable(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    field: Literal["tilt"] = "tilt"
+    scope: Literal["enabled_antennas"] = "enabled_antennas"
+
+
+class NetworkCoverageOptimizationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scene_id: str | None = Field(
+        default=None,
+        min_length=1,
+    )
+
+    base_request: NetworkCoverageRequest
+
+    objectives: List[OptimizationObjective] = Field(
+        min_length=1,
+        max_length=2,
+    )
+
+    variables: List[OptimizationVariable] = Field(
+        default_factory=lambda: [OptimizationVariable()],
+        min_length=1,
+        max_length=1,
+    )
+
+    @model_validator(mode="after")
+    def validate_unique_objective_metrics(self):
+        metrics = [
+            objective.metric
+            for objective in self.objectives
+        ]
+        if len(metrics) != len(set(metrics)):
+            raise ValueError("optimization objectives must use unique metrics")
+        return self
 
 
 class RSRPRequest(BaseModel):

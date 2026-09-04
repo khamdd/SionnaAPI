@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const MAX_OBJECTIVES = 2;
 const OPERATORS = ["<=", ">=", "<", ">", "="];
@@ -62,23 +62,25 @@ const NETWORK_COVERAGE_OBJECTIVES = [
   },
 ];
 
+const DEFAULT_OBJECTIVE_VALUES = Object.fromEntries(
+  NETWORK_COVERAGE_OBJECTIVES.map((objective) => [
+    objective.id,
+    {
+      operator: objective.defaultOperator,
+      value: String(objective.defaultValue),
+    },
+  ]),
+);
+
 export default function OptimizationObjectivePage({
   activeAntennas = [],
   activeScene,
+  baseRequest,
   onBack,
+  storageKey,
 }) {
   const [selectedIds, setSelectedIds] = useState(() => new Set(["uncovered_area_percent"]));
-  const [objectiveValues, setObjectiveValues] = useState(() => (
-    Object.fromEntries(
-      NETWORK_COVERAGE_OBJECTIVES.map((objective) => [
-        objective.id,
-        {
-          operator: objective.defaultOperator,
-          value: String(objective.defaultValue),
-        },
-      ]),
-    )
-  ));
+  const [objectiveValues, setObjectiveValues] = useState(() => DEFAULT_OBJECTIVE_VALUES);
   const [confirmedContract, setConfirmedContract] = useState(null);
 
   const selectedObjectives = useMemo(
@@ -91,6 +93,21 @@ export default function OptimizationObjectivePage({
     const value = Number(rawValue);
     return rawValue === "" || !Number.isFinite(value);
   });
+
+  useEffect(() => {
+    const storedContract = readStoredOptimizationContract(storageKey, activeScene?.id);
+
+    if (!storedContract) {
+      setSelectedIds(new Set(["uncovered_area_percent"]));
+      setObjectiveValues(DEFAULT_OBJECTIVE_VALUES);
+      setConfirmedContract(null);
+      return;
+    }
+
+    setSelectedIds(new Set(storedContract.objectives.map((objective) => objective.metric)));
+    setObjectiveValues(valuesFromStoredContract(storedContract));
+    setConfirmedContract(storedContract);
+  }, [activeScene?.id, storageKey]);
 
   function toggleObjective(objectiveId) {
     setConfirmedContract(null);
@@ -129,8 +146,10 @@ export default function OptimizationObjectivePage({
       return;
     }
 
-    setConfirmedContract({
+    const contract = {
+      id: `${activeScene?.id || "scene"}:network_coverage`,
       simulation_type: "network_coverage",
+      base_request: baseRequest || null,
       scene: {
         id: activeScene?.id || null,
         name: activeScene?.name || "",
@@ -153,7 +172,14 @@ export default function OptimizationObjectivePage({
         max_antennas: 10,
         active_antennas: activeAntennas.length,
       },
-    });
+    };
+
+    saveConfirmedContract(contract);
+  }
+
+  function saveConfirmedContract(contract) {
+    setConfirmedContract(contract);
+    persistOptimizationContract(storageKey, activeScene?.id, contract);
   }
 
   return (
@@ -283,4 +309,73 @@ export default function OptimizationObjectivePage({
       </form>
     </main>
   );
+}
+
+function valuesFromStoredContract(contract) {
+  const values = {
+    ...DEFAULT_OBJECTIVE_VALUES,
+  };
+
+  for (const objective of contract.objectives) {
+    values[objective.metric] = {
+      operator: objective.operator,
+      value: String(objective.target),
+    };
+  }
+
+  return values;
+}
+
+function readStoredOptimizationContract(storageKey, sceneId) {
+  if (!storageKey || !sceneId) {
+    return null;
+  }
+
+  try {
+    const saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
+    return normalizeStoredContract(saved[sceneId]);
+  } catch {
+    return null;
+  }
+}
+
+function persistOptimizationContract(storageKey, sceneId, contract) {
+  if (!storageKey || !sceneId || !contract) {
+    return;
+  }
+
+  try {
+    const saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
+    saved[sceneId] = contract;
+    localStorage.setItem(storageKey, JSON.stringify(saved));
+  } catch {
+    // Best-effort browser storage; the confirmed state remains visible in memory.
+  }
+}
+
+function normalizeStoredContract(contract) {
+  if (!contract || contract.simulation_type !== "network_coverage") {
+    return null;
+  }
+
+  if (!Array.isArray(contract.objectives)) {
+    return null;
+  }
+
+  const objectives = contract.objectives
+    .filter((objective) => (
+      NETWORK_COVERAGE_OBJECTIVES.some((candidate) => candidate.id === objective?.metric)
+      && OPERATORS.includes(objective?.operator)
+      && Number.isFinite(Number(objective?.target))
+    ))
+    .slice(0, MAX_OBJECTIVES);
+
+  if (objectives.length === 0) {
+    return null;
+  }
+
+  return {
+    ...contract,
+    objectives,
+  };
 }

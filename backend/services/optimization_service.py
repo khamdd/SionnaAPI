@@ -1,0 +1,221 @@
+import math
+from statistics import median
+
+
+NO_COVERAGE_LEVEL = "no_coverage"
+POOR_SINR_THRESHOLD_DB = 0.0
+OVERLAP_MIN_COUNT = 2
+
+
+def extract_network_coverage_kpis(result_or_grid):
+    grid = network_coverage_grid(result_or_grid)
+    cells = grid.get("cells") if isinstance(grid, dict) else None
+
+    if not isinstance(cells, list):
+        cells = []
+
+    total_cells = len(cells)
+    no_coverage_cells = [
+        cell
+        for cell in cells
+        if is_no_coverage_cell(cell)
+    ]
+    covered_cells = [
+        cell
+        for cell in cells
+        if not is_no_coverage_cell(cell)
+    ]
+    poor_sinr_cells = [
+        cell
+        for cell in covered_cells
+        if numeric_value(cell.get("sinr_db")) is not None
+        and numeric_value(cell.get("sinr_db")) < POOR_SINR_THRESHOLD_DB
+    ]
+    served_sinr_values = [
+        numeric_value(cell.get("sinr_db"))
+        for cell in covered_cells
+    ]
+    served_sinr_values = [
+        value
+        for value in served_sinr_values
+        if value is not None
+    ]
+    throughput_values = [
+        numeric_value(cell.get("throughput_mbps"))
+        for cell in covered_cells
+    ]
+    throughput_values = [
+        value
+        for value in throughput_values
+        if value is not None
+    ]
+    overlap_summary = grid.get("overlap_summary") if isinstance(grid, dict) else {}
+
+    return {
+        "total_cells": total_cells,
+        "covered_cells": len(covered_cells),
+        "uncovered_cells": len(no_coverage_cells),
+        "uncovered_area_percent": percent(len(no_coverage_cells), total_cells),
+        "covered_area_percent": percent(len(covered_cells), total_cells),
+        "poor_sinr_area_percent": percent(len(poor_sinr_cells), total_cells),
+        "minimum_sinr_db": min(served_sinr_values) if served_sinr_values else None,
+        "median_throughput_mbps": median(throughput_values) if throughput_values else None,
+        "overlap_area_percent": overlap_percent(cells, overlap_summary, total_cells),
+        "average_overlap_count": average_overlap_count(cells, overlap_summary, covered_cells),
+    }
+
+
+def evaluate_network_coverage_objectives(result_or_grid, objectives):
+    kpis = extract_network_coverage_kpis(result_or_grid)
+    evaluations = [
+        evaluate_objective(kpis, objective)
+        for objective in objectives
+    ]
+    scores = [
+        evaluation["score"]
+        for evaluation in evaluations
+    ]
+
+    return {
+        "passed": all(evaluation["passed"] for evaluation in evaluations),
+        "score": math.inf if any(math.isinf(score) for score in scores) else sum(scores),
+        "kpis": kpis,
+        "evaluations": evaluations,
+    }
+
+
+def evaluate_objective(kpis, objective):
+    metric = objective_value(objective, "metric")
+    operator = objective_value(objective, "operator")
+    target = numeric_value(objective_value(objective, "target"))
+    actual = numeric_value(kpis.get(metric))
+
+    if target is None:
+        raise ValueError("optimization objective target must be numeric")
+
+    if actual is None:
+        return {
+            "metric": metric,
+            "operator": operator,
+            "target": target,
+            "actual": None,
+            "passed": False,
+            "score": math.inf,
+        }
+
+    passed = compare_metric(actual, operator, target)
+
+    return {
+        "metric": metric,
+        "operator": operator,
+        "target": target,
+        "actual": actual,
+        "passed": passed,
+        "score": objective_score(actual, operator, target),
+    }
+
+
+def compare_metric(actual, operator, target):
+    if operator == "<":
+        return actual < target
+    if operator == "<=":
+        return actual <= target
+    if operator == ">":
+        return actual > target
+    if operator == ">=":
+        return actual >= target
+    if operator == "=":
+        return math.isclose(actual, target)
+    raise ValueError(f"Unsupported optimization operator: {operator}")
+
+
+def objective_score(actual, operator, target):
+    if operator in ("<", "<="):
+        return max(0.0, actual - target)
+    if operator in (">", ">="):
+        return max(0.0, target - actual)
+    if operator == "=":
+        return abs(actual - target)
+    raise ValueError(f"Unsupported optimization operator: {operator}")
+
+
+def network_coverage_grid(result_or_grid):
+    if not isinstance(result_or_grid, dict):
+        return {}
+
+    grid = result_or_grid.get("grid")
+    if isinstance(grid, dict):
+        return grid
+
+    return result_or_grid
+
+
+def is_no_coverage_cell(cell):
+    if not isinstance(cell, dict):
+        return True
+
+    if cell.get("overlap_level") == NO_COVERAGE_LEVEL:
+        return True
+
+    overlap_count = numeric_value(cell.get("overlap_count"))
+    if overlap_count is not None:
+        return overlap_count <= 0
+
+    return numeric_value(cell.get("sinr_db")) is None
+
+
+def overlap_percent(cells, overlap_summary, total_cells):
+    summary_value = numeric_value((overlap_summary or {}).get("overlap_percent"))
+    if summary_value is not None:
+        return summary_value
+
+    overlap_cells = [
+        cell
+        for cell in cells
+        if numeric_value(cell.get("overlap_count")) is not None
+        and numeric_value(cell.get("overlap_count")) >= OVERLAP_MIN_COUNT
+    ]
+    return percent(len(overlap_cells), total_cells)
+
+
+def average_overlap_count(cells, overlap_summary, covered_cells):
+    summary_value = numeric_value((overlap_summary or {}).get("average_overlap_count"))
+    if summary_value is not None:
+        return summary_value
+
+    counts = [
+        numeric_value(cell.get("overlap_count"))
+        for cell in covered_cells
+    ]
+    counts = [
+        count
+        for count in counts
+        if count is not None and count > 0
+    ]
+    if not counts:
+        return 0.0
+    return round(sum(counts) / len(counts), 2)
+
+
+def percent(part, total):
+    if total <= 0:
+        return 0.0
+    return round((part / total) * 100.0, 2)
+
+
+def numeric_value(value):
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+
+    if not math.isfinite(value):
+        return None
+
+    return value
+
+
+def objective_value(objective, field):
+    if isinstance(objective, dict):
+        return objective.get(field)
+    return getattr(objective, field)

@@ -5,6 +5,7 @@ from backend.schemas.requests import RangeValue
 from backend.constants import DEFAULT_TRANSMITTER_PATTERN
 from backend.schemas.requests import (
     CoverageRequest,
+    NetworkCoverageOptimizationRequest,
     NetworkCoverageRequest,
     SceneBoundsRequest,
     SINRRequest,
@@ -68,10 +69,12 @@ def test_throughput_request_rejects_invalid_bandwidth_and_layers():
 
 def test_network_coverage_request_accepts_up_to_ten_antennas():
     antennas = [
-        {
-            "id": f"A{i}",
-            "position": (float(i), float(i), 30.0),
-            "tilt": {
+            {
+                "id": f"A{i}",
+                "longitude": 105.8 + (i * 0.0001),
+                "latitude": 21.0 + (i * 0.0001),
+                "height_m": 30.0,
+                "tilt": {
                 "min": 2.0,
                 "current": 8.0,
                 "max": 18.0,
@@ -171,6 +174,136 @@ def test_network_coverage_request_rejects_per_antenna_pattern():
                     "pattern": "iso",
                 }
             ]
+        )
+
+
+def test_network_coverage_optimization_request_accepts_two_objectives():
+    request = NetworkCoverageOptimizationRequest(
+        scene_id="scene-1",
+        base_request={
+            "antennas": [
+                {
+                    "id": "A1",
+                    "longitude": 105.8,
+                    "latitude": 21.0,
+                    "height_m": 30.0,
+                    "tilt": {
+                        "min": 0.0,
+                        "current": 8.0,
+                        "max": 20.0,
+                    },
+                    "azimuth": 45.0,
+                    "tx_power": {
+                        "min": 20.0,
+                        "current": 30.0,
+                        "max": 40.0,
+                    },
+                }
+            ],
+        },
+        objectives=[
+            {
+                "metric": "uncovered_area_percent",
+                "operator": "<=",
+                "target": 2.0,
+            },
+            {
+                "metric": "median_throughput_mbps",
+                "operator": ">=",
+                "target": 50.0,
+            },
+        ],
+    )
+
+    assert len(request.objectives) == 2
+    assert request.variables[0].field == "tilt"
+    assert request.variables[0].scope == "enabled_antennas"
+
+
+def test_network_coverage_optimization_request_rejects_more_than_two_objectives():
+    base_request = {
+        "antennas": [
+            {
+                "id": "A1",
+                "longitude": 105.8,
+                "latitude": 21.0,
+                "height_m": 30.0,
+                "tilt": {
+                    "min": 0.0,
+                    "current": 8.0,
+                    "max": 20.0,
+                },
+                "azimuth": 45.0,
+                "tx_power": {
+                    "min": 20.0,
+                    "current": 30.0,
+                    "max": 40.0,
+                },
+            }
+        ],
+    }
+
+    with pytest.raises(ValidationError):
+        NetworkCoverageOptimizationRequest(
+            base_request=base_request,
+            objectives=[
+                {
+                    "metric": "uncovered_area_percent",
+                    "operator": "<=",
+                    "target": 2.0,
+                },
+                {
+                    "metric": "median_throughput_mbps",
+                    "operator": ">=",
+                    "target": 50.0,
+                },
+                {
+                    "metric": "overlap_area_percent",
+                    "operator": "<=",
+                    "target": 25.0,
+                },
+            ],
+        )
+
+
+def test_network_coverage_optimization_request_rejects_duplicate_objectives():
+    base_request = {
+        "antennas": [
+            {
+                "id": "A1",
+                "longitude": 105.8,
+                "latitude": 21.0,
+                "height_m": 30.0,
+                "tilt": {
+                    "min": 0.0,
+                    "current": 8.0,
+                    "max": 20.0,
+                },
+                "azimuth": 45.0,
+                "tx_power": {
+                    "min": 20.0,
+                    "current": 30.0,
+                    "max": 40.0,
+                },
+            }
+        ],
+    }
+
+    with pytest.raises(ValidationError):
+        NetworkCoverageOptimizationRequest(
+            base_request=base_request,
+            objectives=[
+                {
+                    "metric": "uncovered_area_percent",
+                    "operator": "<=",
+                    "target": 2.0,
+                },
+                {
+                    "metric": "uncovered_area_percent",
+                    "operator": "<=",
+                    "target": 4.0,
+                },
+            ],
         )
 
 def test_range_value_accepts_current_inside_bounds():

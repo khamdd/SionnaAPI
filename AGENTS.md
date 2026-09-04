@@ -157,8 +157,13 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   opens `/network/optimization`. The optimization page lets engineers choose up
   to two target objectives from coverage/no-coverage, SINR, throughput, and
   overlap metrics, set an operator (`<`, `>`, `<=`, `>=`, `=`) and target value,
-  then confirm a structured best-result contract for later backend optimizer
-  work. No optimization execution API exists yet.
+  then confirm a structured best-result contract. Phase 2 persists that
+  contract per scene in localStorage under
+  `sionna_network_optimization_objectives`, includes the current Network
+  Coverage `base_request`, and adds backend schema support through
+  `NetworkCoverageOptimizationRequest`. KPI extraction and objective evaluation
+  live in `backend/services/optimization_service.py`. No optimization execution
+  API exists yet.
 
 ## Important Files
 
