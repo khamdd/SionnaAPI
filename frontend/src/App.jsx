@@ -44,6 +44,7 @@ import HistoryPanel from "./components/HistoryPanel";
 import { TrashIcon } from "./components/Icons";
 import LoginPage from "./components/LoginPage";
 import MapPanel from "./components/MapPanel";
+import OptimizationObjectivePage from "./components/OptimizationObjectivePage";
 import SceneChooserPage from "./components/SceneChooserModal";
 import ScenesPage from "./components/ScenesPage";
 import { formatDateTime, formatSimulationType, formatText } from "./utils/format";
@@ -69,6 +70,7 @@ function clone(value) {
 const SCENE_SELECTION_ROUTE = "/scenes";
 const SCENE_CREATION_ROUTE = "/choose-scene";
 const SIMULATION_ENTRY_ROUTE = "/network";
+const NETWORK_OPTIMIZATION_ROUTE = "/network/optimization";
 const HISTORY_PAGE_LIMIT = 200;
 const JOB_PAGE_LIMIT = 200;
 const MAX_NETWORK_COVERAGE_ANTENNAS = 10;
@@ -1718,6 +1720,7 @@ export default function App() {
           onHoverEnd={() => setHover(null)}
           onResetAntennas={resetAntennas}
           onRun={runSimulation}
+          onOptimize={() => navigate(NETWORK_OPTIMIZATION_ROUTE)}
           onSceneLoadingChange={setIsSceneLoading}
           onAddType2Antenna={addType2Antenna}
           onRemoveType2Antenna={removeType2Antenna}
@@ -1726,6 +1729,13 @@ export default function App() {
           runError={runError}
           runStatus={runStatus}
           summary={summary}
+        />
+      )}
+      {visibleRoute === NETWORK_OPTIMIZATION_ROUTE && (
+        <OptimizationObjectivePage
+          activeAntennas={activeNetworkAntennas}
+          activeScene={activeScene}
+          onBack={() => navigate(SIMULATION_ENTRY_ROUTE)}
         />
       )}
       {visibleRoute === "/coverage" && (
@@ -1897,7 +1907,7 @@ function Navbar({
               {simulationRoutes.map((item) => (
                 <button
                   key={item.path}
-                  className={route === item.path ? "active" : ""}
+                  className={route === item.path || (item.path === SIMULATION_ENTRY_ROUTE && route === NETWORK_OPTIMIZATION_ROUTE) ? "active" : ""}
                   type="button"
                   disabled={isBusy}
                   onClick={() => onNavigate(item.path)}
@@ -2028,6 +2038,7 @@ function NetworkCoveragePage({
   onHoverEnd,
   onRemoveType2Antenna,
   onResetAntennas,
+  onOptimize,
   onRun,
   onSceneLoadingChange,
   onUpdateAntenna,
@@ -2050,6 +2061,7 @@ function NetworkCoveragePage({
         mapStageRef={mapStageRef}
         onHover={onHover}
         onHoverEnd={onHoverEnd}
+        onOptimize={onOptimize}
         onRun={onRun}
         onSceneLoadingChange={onSceneLoadingChange}
         runError={runError}
@@ -2615,7 +2627,9 @@ function normalizeRoute(pathname) {
     return SCENE_SELECTION_ROUTE;
   }
 
-  return ROUTES.some((item) => item.path === pathname) || pathname === SCENE_CREATION_ROUTE
+  return ROUTES.some((item) => item.path === pathname)
+    || pathname === SCENE_CREATION_ROUTE
+    || pathname === NETWORK_OPTIMIZATION_ROUTE
     ? pathname
     : SCENE_SELECTION_ROUTE;
 }

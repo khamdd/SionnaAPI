@@ -24,6 +24,7 @@ export default function MapPanel({
   mapStageRef,
   onHover,
   onHoverEnd,
+  onOptimize,
   onRun,
   onSceneLoadingChange,
   runError,
@@ -46,14 +47,24 @@ export default function MapPanel({
           <h1>{sceneTitle} Coverage Planner</h1>
           <p id="run-status" className={runError ? "error-text" : ""}>{runStatus}</p>
         </div>
-        <button
-          className="primary-button"
-          type="button"
-          disabled={isBusy}
-          onClick={onRun}
-        >
-          {isRunning ? "Running..." : isBusy ? "Loading..." : "Run simulation"}
-        </button>
+        <div className="topbar-actions">
+          <button
+            className="ghost-button"
+            type="button"
+            disabled={isBusy}
+            onClick={onOptimize}
+          >
+            Auto optimize input
+          </button>
+          <button
+            className="primary-button"
+            type="button"
+            disabled={isBusy}
+            onClick={onRun}
+          >
+            {isRunning ? "Running..." : isBusy ? "Loading..." : "Run simulation"}
+          </button>
+        </div>
       </div>
 
       <div ref={mapStageRef} className="map-stage">

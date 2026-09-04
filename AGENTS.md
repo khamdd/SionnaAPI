@@ -152,6 +152,13 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   RSRP enforces the backend limit of 10 active checked antennas per simulation
   request. The RSRP page keeps antenna management on the right and places
   user/solver setup below the 3D scene/result on the left.
+- Network Coverage optimization phase 1 has a frontend-only objective input
+  flow. The Network Coverage top bar includes an Auto optimize input button that
+  opens `/network/optimization`. The optimization page lets engineers choose up
+  to two target objectives from coverage/no-coverage, SINR, throughput, and
+  overlap metrics, set an operator (`<`, `>`, `<=`, `>=`, `=`) and target value,
+  then confirm a structured best-result contract for later backend optimizer
+  work. No optimization execution API exists yet.
 
 ## Important Files
 
@@ -188,6 +195,7 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 ## Current UI Routes
 
 - `/network`: main network coverage planner.
+- `/network/optimization`: Network Coverage optimization objective input.
 - `/queue`: submitted simulation jobs, status tracking, result review, save to
   history, and discard actions.
 - `/coverage`: coverage map API tool.
