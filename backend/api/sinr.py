@@ -7,6 +7,7 @@ from backend.api.dependencies import require_current_user
 from backend.database import is_database_configured
 from backend.schemas.requests import (
     CoverageRequest,
+    NetworkCoverageOptimizationEvaluationRequest,
     NetworkCoverageRequest,
     RSRPRequest,
     SceneBoundsRequest,
@@ -55,6 +56,7 @@ from backend.services.scene_service import (
 )
 from backend.services.coordinate_service import with_runtime_antenna_positions
 from backend.services.event_logger import log_event
+from backend.services.optimization_service import evaluate_network_coverage_objectives
 
 from backend.simulations.sionna_engine import engine
 
@@ -356,6 +358,25 @@ def log_failed_business_event(
     )
 
 
+def json_safe(value):
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+
+    if isinstance(value, list):
+        return [
+            json_safe(item)
+            for item in value
+        ]
+
+    if isinstance(value, dict):
+        return {
+            key: json_safe(item)
+            for key, item in value.items()
+        }
+
+    return value
+
+
 def get_engine_scene_info():
     get_active_scene_info = getattr(engine, "get_active_scene_info", None)
 
@@ -420,6 +441,21 @@ def network_coverage(req: NetworkCoverageRequest, request: Request):
         ),
         base_url=str(request.base_url),
     )
+
+
+@router.post("/optimizations/network-coverage/evaluate")
+def evaluate_network_coverage_optimization(
+    req: NetworkCoverageOptimizationEvaluationRequest,
+):
+    evaluation = evaluate_network_coverage_objectives(
+        req.result,
+        req.objectives,
+    )
+
+    return {
+        "status": "success",
+        **json_safe(evaluation),
+    }
 
 
 @router.post("/rsrp-simulation")

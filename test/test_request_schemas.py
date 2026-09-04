@@ -5,6 +5,7 @@ from backend.schemas.requests import RangeValue
 from backend.constants import DEFAULT_TRANSMITTER_PATTERN
 from backend.schemas.requests import (
     CoverageRequest,
+    NetworkCoverageOptimizationEvaluationRequest,
     NetworkCoverageOptimizationRequest,
     NetworkCoverageRequest,
     SceneBoundsRequest,
@@ -292,6 +293,49 @@ def test_network_coverage_optimization_request_rejects_duplicate_objectives():
     with pytest.raises(ValidationError):
         NetworkCoverageOptimizationRequest(
             base_request=base_request,
+            objectives=[
+                {
+                    "metric": "uncovered_area_percent",
+                    "operator": "<=",
+                    "target": 2.0,
+                },
+                {
+                    "metric": "uncovered_area_percent",
+                    "operator": "<=",
+                    "target": 4.0,
+                },
+            ],
+        )
+
+
+def test_network_coverage_optimization_evaluation_request_accepts_grid_result():
+    request = NetworkCoverageOptimizationEvaluationRequest(
+        result={
+            "grid": {
+                "cells": [],
+            },
+        },
+        objectives=[
+            {
+                "metric": "uncovered_area_percent",
+                "operator": "<=",
+                "target": 2.0,
+            },
+        ],
+    )
+
+    assert request.result["grid"]["cells"] == []
+    assert request.objectives[0].metric == "uncovered_area_percent"
+
+
+def test_network_coverage_optimization_evaluation_request_rejects_duplicate_metrics():
+    with pytest.raises(ValidationError):
+        NetworkCoverageOptimizationEvaluationRequest(
+            result={
+                "grid": {
+                    "cells": [],
+                },
+            },
             objectives=[
                 {
                     "metric": "uncovered_area_percent",

@@ -1737,6 +1737,7 @@ export default function App() {
           activeAntennas={activeNetworkAntennas}
           activeScene={activeScene}
           baseRequest={buildNetworkCoveragePayload(activeNetworkAntennas, activeScene)}
+          latestGrid={latestGrid}
           storageKey={NETWORK_OPTIMIZATION_OBJECTIVES_STORAGE_KEY}
           onBack={() => navigate(SIMULATION_ENTRY_ROUTE)}
         />

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { evaluateNetworkCoverageOptimization } from "../api";
 
 const MAX_OBJECTIVES = 2;
 const OPERATORS = ["<=", ">=", "<", ">", "="];
@@ -76,12 +77,17 @@ export default function OptimizationObjectivePage({
   activeAntennas = [],
   activeScene,
   baseRequest,
+  latestGrid,
   onBack,
   storageKey,
 }) {
   const [selectedIds, setSelectedIds] = useState(() => new Set(["uncovered_area_percent"]));
   const [objectiveValues, setObjectiveValues] = useState(() => DEFAULT_OBJECTIVE_VALUES);
   const [confirmedContract, setConfirmedContract] = useState(null);
+  const [evaluationPreview, setEvaluationPreview] = useState(null);
+  const [evaluationStatus, setEvaluationStatus] = useState("Run a Network Coverage simulation, confirm objectives, then evaluate the latest result.");
+  const [evaluationError, setEvaluationError] = useState(false);
+  const [isEvaluating, setIsEvaluating] = useState(false);
 
   const selectedObjectives = useMemo(
     () => NETWORK_COVERAGE_OBJECTIVES.filter((objective) => selectedIds.has(objective.id)),
@@ -93,6 +99,7 @@ export default function OptimizationObjectivePage({
     const value = Number(rawValue);
     return rawValue === "" || !Number.isFinite(value);
   });
+  const hasLatestGrid = Array.isArray(latestGrid?.cells) && latestGrid.cells.length > 0;
 
   useEffect(() => {
     const storedContract = readStoredOptimizationContract(storageKey, activeScene?.id);
@@ -101,16 +108,33 @@ export default function OptimizationObjectivePage({
       setSelectedIds(new Set(["uncovered_area_percent"]));
       setObjectiveValues(DEFAULT_OBJECTIVE_VALUES);
       setConfirmedContract(null);
+      setEvaluationPreview(null);
+      setEvaluationStatus("Run a Network Coverage simulation, confirm objectives, then evaluate the latest result.");
+      setEvaluationError(false);
       return;
     }
 
     setSelectedIds(new Set(storedContract.objectives.map((objective) => objective.metric)));
     setObjectiveValues(valuesFromStoredContract(storedContract));
     setConfirmedContract(storedContract);
+    setEvaluationPreview(null);
+    setEvaluationStatus(hasLatestGrid
+      ? "Ready to evaluate the latest Network Coverage result."
+      : "Run a Network Coverage simulation before evaluating.");
+    setEvaluationError(false);
   }, [activeScene?.id, storageKey]);
+
+  useEffect(() => {
+    setEvaluationPreview(null);
+    setEvaluationStatus(hasLatestGrid
+      ? "Ready to evaluate the latest Network Coverage result."
+      : "Run a Network Coverage simulation before evaluating.");
+    setEvaluationError(false);
+  }, [latestGrid]);
 
   function toggleObjective(objectiveId) {
     setConfirmedContract(null);
+    setEvaluationPreview(null);
     setSelectedIds((current) => {
       const next = new Set(current);
 
@@ -130,6 +154,7 @@ export default function OptimizationObjectivePage({
 
   function updateObjectiveValue(objectiveId, field, value) {
     setConfirmedContract(null);
+    setEvaluationPreview(null);
     setObjectiveValues((current) => ({
       ...current,
       [objectiveId]: {
@@ -179,7 +204,46 @@ export default function OptimizationObjectivePage({
 
   function saveConfirmedContract(contract) {
     setConfirmedContract(contract);
+    setEvaluationPreview(null);
+    setEvaluationStatus(hasLatestGrid
+      ? "Objectives confirmed. Evaluate the latest result when ready."
+      : "Objectives confirmed. Run a Network Coverage simulation before evaluating.");
+    setEvaluationError(false);
     persistOptimizationContract(storageKey, activeScene?.id, contract);
+  }
+
+  async function evaluateLatestResult() {
+    if (!confirmedContract || !hasLatestGrid || isEvaluating) {
+      return;
+    }
+
+    setIsEvaluating(true);
+    setEvaluationError(false);
+    setEvaluationStatus("Evaluating latest Network Coverage result...");
+
+    try {
+      const result = await evaluateNetworkCoverageOptimization({
+        result: {
+          grid: latestGrid,
+        },
+        objectives: confirmedContract.objectives.map((objective) => ({
+          metric: objective.metric,
+          operator: objective.operator,
+          target: objective.target,
+        })),
+      });
+
+      setEvaluationPreview(result);
+      setEvaluationStatus(result.passed
+        ? "Latest result satisfies the confirmed objectives."
+        : "Latest result does not satisfy every confirmed objective.");
+    } catch (error) {
+      setEvaluationPreview(null);
+      setEvaluationStatus(`Evaluation failed: ${error.message}`);
+      setEvaluationError(true);
+    } finally {
+      setIsEvaluating(false);
+    }
   }
 
   return (
@@ -299,15 +363,73 @@ export default function OptimizationObjectivePage({
             Confirm
           </button>
 
+          <button
+            className="ghost-button"
+            type="button"
+            disabled={!confirmedContract || !hasLatestGrid || isEvaluating}
+            onClick={evaluateLatestResult}
+          >
+            {isEvaluating ? "Evaluating..." : "Evaluate latest result"}
+          </button>
+
+          <p className={`optimization-preview-status ${evaluationError ? "error-text" : ""}`}>
+            {evaluationStatus}
+          </p>
+
           {confirmedContract && (
             <div className="optimization-contract">
               <strong>Confirmed best-result data</strong>
               <pre>{JSON.stringify(confirmedContract, null, 2)}</pre>
             </div>
           )}
+
+          {evaluationPreview && (
+            <EvaluationPreview
+              evaluation={evaluationPreview}
+              objectives={confirmedContract?.objectives || []}
+            />
+          )}
         </aside>
       </form>
     </main>
+  );
+}
+
+function EvaluationPreview({ evaluation, objectives }) {
+  const objectiveByMetric = new Map(
+    objectives.map((objective) => [objective.metric, objective]),
+  );
+
+  return (
+    <div className="optimization-evaluation-preview">
+      <div>
+        <strong>Latest result preview</strong>
+        <span>{evaluation.passed ? "Passed" : "Needs improvement"}</span>
+      </div>
+      <dl className="optimization-context">
+        <dt>Total score</dt>
+        <dd>{formatNumber(evaluation.score)}</dd>
+        <dt>Covered area</dt>
+        <dd>{formatMetric(evaluation.kpis?.covered_area_percent, "%")}</dd>
+        <dt>Uncovered area</dt>
+        <dd>{formatMetric(evaluation.kpis?.uncovered_area_percent, "%")}</dd>
+      </dl>
+      <div className="objective-evaluation-list">
+        {(evaluation.evaluations || []).map((item) => {
+          const objective = objectiveByMetric.get(item.metric);
+          return (
+            <div className={item.passed ? "passed" : "failed"} key={item.metric}>
+              <span>{objective?.label || item.metric}</span>
+              <strong>{item.passed ? "Pass" : "Fail"}</strong>
+              <small>
+                Actual {formatMetric(item.actual, objective?.unit)}
+                {" "}vs {item.operator} {formatMetric(item.target, objective?.unit)}
+              </small>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -378,4 +500,20 @@ function normalizeStoredContract(contract) {
     ...contract,
     objectives,
   };
+}
+
+function formatMetric(value, unit = "") {
+  if (!Number.isFinite(Number(value))) {
+    return "--";
+  }
+
+  return `${formatNumber(value)}${unit ? ` ${unit}` : ""}`;
+}
+
+function formatNumber(value) {
+  if (!Number.isFinite(Number(value))) {
+    return "--";
+  }
+
+  return Number(value).toFixed(2).replace(/\.00$/, "");
 }

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from typing import List, Literal, Tuple
+from typing import Any, List, Literal, Tuple
 from backend.constants import (
     DEFAULT_RSRP_USER_COUNT,
     DEFAULT_TRANSMITTER_PATTERN,
@@ -179,6 +179,27 @@ class NetworkCoverageOptimizationRequest(BaseModel):
         default_factory=lambda: [OptimizationVariable()],
         min_length=1,
         max_length=1,
+    )
+
+    @model_validator(mode="after")
+    def validate_unique_objective_metrics(self):
+        metrics = [
+            objective.metric
+            for objective in self.objectives
+        ]
+        if len(metrics) != len(set(metrics)):
+            raise ValueError("optimization objectives must use unique metrics")
+        return self
+
+
+class NetworkCoverageOptimizationEvaluationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    result: dict[str, Any]
+
+    objectives: List[OptimizationObjective] = Field(
+        min_length=1,
+        max_length=2,
     )
 
     @model_validator(mode="after")

@@ -1079,6 +1079,12 @@ textarea:disabled {
   padding-top: 14px;
 }
 
+.optimization-preview-status {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .optimization-contract strong {
   font-size: 13px;
 }
@@ -1094,6 +1100,76 @@ textarea:disabled {
   line-height: 1.45;
   margin: 0;
   padding: 12px;
+}
+
+.optimization-evaluation-preview {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.optimization-evaluation-preview > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.optimization-evaluation-preview > div:first-child strong {
+  font-size: 13px;
+}
+
+.optimization-evaluation-preview > div:first-child span {
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.objective-evaluation-list {
+  display: grid;
+  gap: 8px;
+}
+
+.objective-evaluation-list div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  padding: 10px;
+}
+
+.objective-evaluation-list div.passed {
+  border-color: rgba(22, 163, 74, 0.34);
+  background: #f0fdf4;
+}
+
+.objective-evaluation-list div.failed {
+  border-color: rgba(220, 38, 38, 0.28);
+  background: #fff1f2;
+}
+
+.objective-evaluation-list span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.objective-evaluation-list strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.objective-evaluation-list small {
+  grid-column: 1 / -1;
+  color: #334155;
+  font-size: 12px;
 }
 
 .map-stage {

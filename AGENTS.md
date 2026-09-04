@@ -162,8 +162,13 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   `sionna_network_optimization_objectives`, includes the current Network
   Coverage `base_request`, and adds backend schema support through
   `NetworkCoverageOptimizationRequest`. KPI extraction and objective evaluation
-  live in `backend/services/optimization_service.py`. No optimization execution
-  API exists yet.
+  live in `backend/services/optimization_service.py`. The "Add optimization
+  preview" slice adds
+  `POST /api/v1/optimizations/network-coverage/evaluate`, which evaluates a
+  provided Network Coverage result grid against confirmed objectives without
+  running Sionna, creating jobs, or touching the database. The optimization page
+  can evaluate the latest in-memory Network Coverage result after objectives are
+  confirmed. No optimization execution API exists yet.
 
 ## Important Files
 
