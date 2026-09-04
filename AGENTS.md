@@ -168,7 +168,12 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   provided Network Coverage result grid against confirmed objectives without
   running Sionna, creating jobs, or touching the database. The optimization page
   can evaluate the latest in-memory Network Coverage result after objectives are
-  confirmed. No optimization execution API exists yet.
+  confirmed, or fetch the latest completed queued Network Coverage result for the
+  active scene when no in-memory grid is present. If queue artifacts are missing,
+  it falls back to the latest saved Network Coverage history result for the same
+  scene. The frontend also has a local KPI evaluation fallback so preview still
+  works when the running backend has not been restarted with the preview
+  endpoint. No optimization execution API exists yet.
 
 ## Important Files
 

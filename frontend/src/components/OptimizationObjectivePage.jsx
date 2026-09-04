@@ -79,6 +79,7 @@ export default function OptimizationObjectivePage({
   baseRequest,
   latestGrid,
   onBack,
+  onLoadLatestResult,
   storageKey,
 }) {
   const [selectedIds, setSelectedIds] = useState(() => new Set(["uncovered_area_percent"]));
@@ -213,25 +214,35 @@ export default function OptimizationObjectivePage({
   }
 
   async function evaluateLatestResult() {
-    if (!confirmedContract || !hasLatestGrid || isEvaluating) {
+    if (!confirmedContract || isEvaluating) {
       return;
     }
 
     setIsEvaluating(true);
     setEvaluationError(false);
-    setEvaluationStatus("Evaluating latest Network Coverage result...");
+    setEvaluationStatus(hasLatestGrid
+      ? "Evaluating latest Network Coverage result..."
+      : "Looking for the latest completed Network Coverage result...");
 
     try {
-      const result = await evaluateNetworkCoverageOptimization({
-        result: {
-          grid: latestGrid,
-        },
-        objectives: confirmedContract.objectives.map((objective) => ({
-          metric: objective.metric,
-          operator: objective.operator,
-          target: objective.target,
-        })),
-      });
+      const latestResult = hasLatestGrid
+        ? { grid: latestGrid }
+        : await onLoadLatestResult?.();
+      const grid = latestResult?.grid;
+
+      if (!Array.isArray(grid?.cells) || grid.cells.length === 0) {
+        setEvaluationPreview(null);
+        setEvaluationStatus("No completed Network Coverage result is available for this scene yet. If the run was queued, wait for it to finish in Simulation Queue.");
+        setEvaluationError(true);
+        return;
+      }
+
+      const objectives = confirmedContract.objectives.map((objective) => ({
+        metric: objective.metric,
+        operator: objective.operator,
+        target: objective.target,
+      }));
+      const result = await evaluateWithBackendOrLocalFallback(grid, objectives);
 
       setEvaluationPreview(result);
       setEvaluationStatus(result.passed
@@ -243,6 +254,23 @@ export default function OptimizationObjectivePage({
       setEvaluationError(true);
     } finally {
       setIsEvaluating(false);
+    }
+  }
+
+  async function evaluateWithBackendOrLocalFallback(grid, objectives) {
+    try {
+      return await evaluateNetworkCoverageOptimization({
+        result: {
+          grid,
+        },
+        objectives,
+      });
+    } catch {
+      return {
+        status: "success",
+        source: "local",
+        ...evaluateNetworkCoverageGrid(grid, objectives),
+      };
     }
   }
 
@@ -366,7 +394,7 @@ export default function OptimizationObjectivePage({
           <button
             className="ghost-button"
             type="button"
-            disabled={!confirmedContract || !hasLatestGrid || isEvaluating}
+            disabled={!confirmedContract || isEvaluating}
             onClick={evaluateLatestResult}
           >
             {isEvaluating ? "Evaluating..." : "Evaluate latest result"}
@@ -500,6 +528,144 @@ function normalizeStoredContract(contract) {
     ...contract,
     objectives,
   };
+}
+
+function evaluateNetworkCoverageGrid(grid, objectives) {
+  const kpis = extractNetworkCoverageKpis(grid);
+  const evaluations = objectives.map((objective) => evaluateObjective(kpis, objective));
+  const scores = evaluations.map((evaluation) => evaluation.score);
+
+  return {
+    passed: evaluations.every((evaluation) => evaluation.passed),
+    score: scores.some((score) => !Number.isFinite(score))
+      ? Infinity
+      : scores.reduce((total, score) => total + score, 0),
+    kpis,
+    evaluations,
+  };
+}
+
+function extractNetworkCoverageKpis(grid) {
+  const cells = Array.isArray(grid?.cells) ? grid.cells : [];
+  const totalCells = cells.length;
+  const coveredCells = cells.filter((cell) => !isNoCoverageCell(cell));
+  const uncoveredCells = cells.length - coveredCells.length;
+  const servedSinrValues = coveredCells
+    .map((cell) => numericValue(cell.sinr_db))
+    .filter((value) => value !== null);
+  const throughputValues = coveredCells
+    .map((cell) => numericValue(cell.throughput_mbps))
+    .filter((value) => value !== null)
+    .sort((a, b) => a - b);
+  const poorSinrCells = coveredCells.filter((cell) => {
+    const sinr = numericValue(cell.sinr_db);
+    return sinr !== null && sinr < 0;
+  });
+  const overlapSummary = grid?.overlap_summary || {};
+
+  return {
+    total_cells: totalCells,
+    covered_cells: coveredCells.length,
+    uncovered_cells: uncoveredCells,
+    uncovered_area_percent: percent(uncoveredCells, totalCells),
+    covered_area_percent: percent(coveredCells.length, totalCells),
+    poor_sinr_area_percent: percent(poorSinrCells.length, totalCells),
+    minimum_sinr_db: servedSinrValues.length ? Math.min(...servedSinrValues) : null,
+    median_throughput_mbps: throughputValues.length ? throughputValues[Math.floor(throughputValues.length / 2)] : null,
+    overlap_area_percent: numericValue(overlapSummary.overlap_percent) ?? percent(
+      cells.filter((cell) => numericValue(cell.overlap_count) >= 2).length,
+      totalCells,
+    ),
+    average_overlap_count: numericValue(overlapSummary.average_overlap_count) ?? averageOverlapCount(coveredCells),
+  };
+}
+
+function evaluateObjective(kpis, objective) {
+  const actual = numericValue(kpis[objective.metric]);
+  const target = numericValue(objective.target);
+
+  return {
+    metric: objective.metric,
+    operator: objective.operator,
+    target,
+    actual,
+    passed: actual !== null && target !== null && compareMetric(actual, objective.operator, target),
+    score: actual === null || target === null ? Infinity : objectiveScore(actual, objective.operator, target),
+  };
+}
+
+function compareMetric(actual, operator, target) {
+  if (operator === "<") {
+    return actual < target;
+  }
+  if (operator === "<=") {
+    return actual <= target;
+  }
+  if (operator === ">") {
+    return actual > target;
+  }
+  if (operator === ">=") {
+    return actual >= target;
+  }
+  if (operator === "=") {
+    return Math.abs(actual - target) <= Number.EPSILON;
+  }
+  return false;
+}
+
+function objectiveScore(actual, operator, target) {
+  if (operator === "<" || operator === "<=") {
+    return Math.max(0, actual - target);
+  }
+  if (operator === ">" || operator === ">=") {
+    return Math.max(0, target - actual);
+  }
+  if (operator === "=") {
+    return Math.abs(actual - target);
+  }
+  return Infinity;
+}
+
+function isNoCoverageCell(cell) {
+  if (!cell || typeof cell !== "object") {
+    return true;
+  }
+
+  if (cell.overlap_level === "no_coverage") {
+    return true;
+  }
+
+  const overlapCount = numericValue(cell.overlap_count);
+  if (overlapCount !== null) {
+    return overlapCount <= 0;
+  }
+
+  return numericValue(cell.sinr_db) === null;
+}
+
+function averageOverlapCount(cells) {
+  const counts = cells
+    .map((cell) => numericValue(cell.overlap_count))
+    .filter((value) => value !== null && value > 0);
+
+  if (!counts.length) {
+    return 0;
+  }
+
+  return Math.round((counts.reduce((total, value) => total + value, 0) / counts.length) * 100) / 100;
+}
+
+function percent(part, total) {
+  if (!total) {
+    return 0;
+  }
+
+  return Math.round((part / total) * 10000) / 100;
+}
+
+function numericValue(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function formatMetric(value, unit = "") {
