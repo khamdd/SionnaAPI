@@ -22,6 +22,9 @@ import {
   RSRP_ANTENNA_SETTINGS_STORAGE_KEY,
   RSRP_TYPE2_ANTENNAS_STORAGE_KEY,
   SCENE_FIXED_ANTENNAS_STORAGE_KEY,
+  SINR_ANTENNA_SETTINGS_STORAGE_KEY,
+  SINR_ROLE_SELECTION_STORAGE_KEY,
+  SINR_TYPE2_ANTENNAS_STORAGE_KEY,
   USER_STORAGE_KEY,
 } from "./constants";
 import AntennaPanel from "./components/AntennaPanel";
@@ -66,6 +69,8 @@ const HISTORY_PAGE_LIMIT = 200;
 const JOB_PAGE_LIMIT = 200;
 const MAX_NETWORK_COVERAGE_ANTENNAS = 10;
 const MAX_RSRP_SIMULATION_ANTENNAS = 10;
+const SINR_REQUIRED_ROLE_COUNT = 3;
+const MAX_SINR_TYPE2_ANTENNAS = 10;
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -81,6 +86,15 @@ export default function App() {
   ));
   const [rsrpAntennaSettingsByScene, setRsrpAntennaSettingsByScene] = useState(() => (
     readStoredSceneMap(RSRP_ANTENNA_SETTINGS_STORAGE_KEY, normalizeStoredAntennaSettings)
+  ));
+  const [sinrType2AntennasByScene, setSinrType2AntennasByScene] = useState(() => (
+    readStoredSceneMap(SINR_TYPE2_ANTENNAS_STORAGE_KEY, normalizeStoredType2Antennas)
+  ));
+  const [sinrAntennaSettingsByScene, setSinrAntennaSettingsByScene] = useState(() => (
+    readStoredSceneMap(SINR_ANTENNA_SETTINGS_STORAGE_KEY, normalizeStoredAntennaSettings)
+  ));
+  const [sinrRoleSelectionsByScene, setSinrRoleSelectionsByScene] = useState(() => (
+    readStoredSceneMap(SINR_ROLE_SELECTION_STORAGE_KEY, normalizeStoredSinrRoles)
   ));
   const [latestGrid, setLatestGrid] = useState(null);
   const [latestSolver, setLatestSolver] = useState(() => clone(DEFAULT_SOLVER));
@@ -152,6 +166,24 @@ export default function App() {
       rsrpType2AntennasByScene,
       rsrpAntennaSettingsByScene,
     ],
+  );
+  const sinrAntennas = useMemo(
+    () => networkCoverageAntennasForScene(
+      activeScene,
+      fixedSceneAntennas,
+      sinrType2AntennasByScene,
+      sinrAntennaSettingsByScene,
+    ),
+    [
+      activeScene,
+      fixedSceneAntennas,
+      sinrType2AntennasByScene,
+      sinrAntennaSettingsByScene,
+    ],
+  );
+  const sinrRoleSelection = useMemo(
+    () => sinrRoleSelectionsByScene.get(activeScene?.id) || {},
+    [activeScene?.id, sinrRoleSelectionsByScene],
   );
 
   function authenticate(authResult) {
@@ -737,8 +769,154 @@ export default function App() {
     });
   }
 
+  function updateSinrAntenna(antennaId, field, value) {
+    if (!activeScene?.id || value === "") {
+      return;
+    }
+
+    const antenna = sinrAntennas.find((item) => item.id === antennaId);
+    if (!antenna) {
+      return;
+    }
+
+    setSinrAntennaSettingsByScene((current) => {
+      const next = new Map(current);
+      const sceneSettings = {
+        ...(next.get(activeScene.id) || {}),
+      };
+      const currentSetting = {
+        ...simulationSettingsForAntenna(antenna),
+        ...(sceneSettings[antennaId] || {}),
+      };
+
+      if (field === "tilt") {
+        currentSetting.tilt_current = value;
+      } else if (field === "tx_power") {
+        currentSetting.tx_power_current = value;
+      } else if (field === "azimuth") {
+        currentSetting.azimuth = value;
+      }
+
+      sceneSettings[antennaId] = currentSetting;
+      setSceneMapValue(next, activeScene.id, sceneSettings, normalizeStoredAntennaSettings);
+      persistSceneMap(SINR_ANTENNA_SETTINGS_STORAGE_KEY, next);
+      return next;
+    });
+  }
+
+  function addSinrType2Antenna(antenna) {
+    if (!activeScene?.id) {
+      return { error: "Select a scene before adding an antenna." };
+    }
+
+    const maxCandidates = sinrCandidateLimit(fixedSceneAntennas.length);
+    if (sinrAntennas.length >= maxCandidates) {
+      return { error: `SINR supports up to ${MAX_SINR_TYPE2_ANTENNAS} type 2 candidate antennas for each scene.` };
+    }
+
+    const normalized = normalizeAntennaBase(antenna);
+    if (!normalized) {
+      return { error: "Antenna base config is incomplete." };
+    }
+
+    if (!lngLatInsideBounds(normalized, activeScene.bounds)) {
+      return { error: "Type 2 antenna coordinates must stay inside the selected scene." };
+    }
+
+    if (sinrAntennas.some((item) => item.id.toLowerCase() === normalized.id.toLowerCase())) {
+      return { error: `antenna_id "${normalized.id}" is already used.` };
+    }
+
+    setSinrType2AntennasByScene((current) => {
+      const next = new Map(current);
+      const sceneAntennas = [
+        ...(next.get(activeScene.id) || []),
+        normalized,
+      ];
+      setSceneMapValue(next, activeScene.id, sceneAntennas, normalizeStoredType2Antennas);
+      persistSceneMap(SINR_TYPE2_ANTENNAS_STORAGE_KEY, next);
+      return next;
+    });
+    setSinrAntennaSettingsByScene((current) => {
+      const next = new Map(current);
+      const sceneSettings = {
+        ...(next.get(activeScene.id) || {}),
+        [normalized.id]: simulationSettingsForAntenna(normalized),
+      };
+      setSceneMapValue(next, activeScene.id, sceneSettings, normalizeStoredAntennaSettings);
+      persistSceneMap(SINR_ANTENNA_SETTINGS_STORAGE_KEY, next);
+      return next;
+    });
+    return { ok: true };
+  }
+
+  function removeSinrType2Antenna(antennaId) {
+    if (!activeScene?.id) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete type 2 antenna "${antennaId}"?`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    setSinrType2AntennasByScene((current) => {
+      const next = new Map(current);
+      const sceneAntennas = (next.get(activeScene.id) || []).filter((item) => (
+        item.id !== antennaId
+      ));
+      setSceneMapValue(next, activeScene.id, sceneAntennas, normalizeStoredType2Antennas);
+      persistSceneMap(SINR_TYPE2_ANTENNAS_STORAGE_KEY, next);
+      return next;
+    });
+    setSinrAntennaSettingsByScene((current) => {
+      const next = new Map(current);
+      const sceneSettings = {
+        ...(next.get(activeScene.id) || {}),
+      };
+      delete sceneSettings[antennaId];
+      setSceneMapValue(next, activeScene.id, sceneSettings, normalizeStoredAntennaSettings);
+      persistSceneMap(SINR_ANTENNA_SETTINGS_STORAGE_KEY, next);
+      return next;
+    });
+    setSinrRoleSelectionsByScene((current) => {
+      const next = new Map(current);
+      const roles = {
+        ...(next.get(activeScene.id) || {}),
+      };
+
+      for (const [role, selectedId] of Object.entries(roles)) {
+        if (selectedId === antennaId) {
+          roles[role] = "";
+        }
+      }
+
+      setSceneMapValue(next, activeScene.id, roles, normalizeStoredSinrRoles);
+      persistSceneMap(SINR_ROLE_SELECTION_STORAGE_KEY, next);
+      return next;
+    });
+  }
+
+  function updateSinrRoleSelection(nextRoles) {
+    if (!activeScene?.id) {
+      return;
+    }
+
+    setSinrRoleSelectionsByScene((current) => {
+      const next = new Map(current);
+      setSceneMapValue(next, activeScene.id, nextRoles, normalizeStoredSinrRoles);
+      persistSceneMap(SINR_ROLE_SELECTION_STORAGE_KEY, next);
+      return next;
+    });
+  }
+
   function resetRsrpAntennas() {
     clearRsrpDraft(activeScene?.id);
+  }
+
+  function resetSinrAntennas() {
+    clearSinrDraft(activeScene?.id);
   }
 
   function resetAntennas() {
@@ -789,6 +967,31 @@ export default function App() {
       const next = new Map(current);
       next.delete(sceneId);
       persistSceneMap(RSRP_ANTENNA_SETTINGS_STORAGE_KEY, next);
+      return next;
+    });
+  }
+
+  function clearSinrDraft(sceneId) {
+    if (!sceneId) {
+      return;
+    }
+
+    setSinrType2AntennasByScene((current) => {
+      const next = new Map(current);
+      next.delete(sceneId);
+      persistSceneMap(SINR_TYPE2_ANTENNAS_STORAGE_KEY, next);
+      return next;
+    });
+    setSinrAntennaSettingsByScene((current) => {
+      const next = new Map(current);
+      next.delete(sceneId);
+      persistSceneMap(SINR_ANTENNA_SETTINGS_STORAGE_KEY, next);
+      return next;
+    });
+    setSinrRoleSelectionsByScene((current) => {
+      const next = new Map(current);
+      next.delete(sceneId);
+      persistSceneMap(SINR_ROLE_SELECTION_STORAGE_KEY, next);
       return next;
     });
   }
@@ -855,6 +1058,7 @@ export default function App() {
 
     clearNetworkCoverageDraft(activeScene?.id);
     clearRsrpDraft(activeScene?.id);
+    clearSinrDraft(activeScene?.id);
     setHasWorkScene(false);
     setActiveScene(null);
     setLatestSolver(clone(DEFAULT_SOLVER));
@@ -1328,10 +1532,19 @@ export default function App() {
       {visibleRoute === "/sinr" && (
         <SinrApiPage
           activeScene={activeScene}
+          antennas={sinrAntennas}
+          fixedAntennaCount={fixedSceneAntennas.length}
+          maxType2Antennas={MAX_SINR_TYPE2_ANTENNAS}
+          onAddType2Antenna={addSinrType2Antenna}
           onQueueOpen={() => navigate("/queue")}
+          onRemoveType2Antenna={removeSinrType2Antenna}
+          onResetAntennas={resetSinrAntennas}
+          onRoleSelectionChange={updateSinrRoleSelection}
           onSimulationQueued={showQueuedPrompt}
+          onUpdateAntenna={updateSinrAntenna}
           onProgressChange={handleApiProgressChange}
           onSceneLoadingChange={setIsSceneLoading}
+          roleSelection={sinrRoleSelection}
         />
       )}
       {visibleRoute === "/throughput" && (
@@ -2058,6 +2271,10 @@ function validateRange(range, label) {
   return "";
 }
 
+function sinrCandidateLimit(fixedAntennaCount) {
+  return Math.max(SINR_REQUIRED_ROLE_COUNT, fixedAntennaCount + MAX_SINR_TYPE2_ANTENNAS);
+}
+
 function toAntennaRequest(antenna) {
   const base = normalizeAntennaBase(antenna);
 
@@ -2297,6 +2514,24 @@ function normalizeStoredAntennaSettings(settings) {
       tilt_current: tiltCurrent,
       tx_power_current: txPowerCurrent,
     };
+  }
+
+  return Object.keys(normalized).length ? normalized : null;
+}
+
+function normalizeStoredSinrRoles(roles) {
+  if (!roles || typeof roles !== "object" || Array.isArray(roles)) {
+    return null;
+  }
+
+  const normalized = {};
+
+  for (const role of ["transmitter", "receiver", "interferer"]) {
+    const antennaId = String(roles[role] || "").trim();
+
+    if (antennaId) {
+      normalized[role] = antennaId;
+    }
   }
 
   return Object.keys(normalized).length ? normalized : null;

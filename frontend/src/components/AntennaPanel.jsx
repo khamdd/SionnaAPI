@@ -50,7 +50,8 @@ export default function AntennaPanel({
   const [addError, setAddError] = useState("");
   const fixedCount = antennas.filter((item) => item._type === TYPE_1).length;
   const type2Count = antennas.length - fixedCount;
-  const canAdd = !disabled && antennas.length < maxAntennas;
+  const addLimitReached = antennas.length >= maxAntennas;
+  const canAdd = !disabled && !addLimitReached;
   const overLimit = antennas.length > maxAntennas;
 
   useEffect(() => {
@@ -108,93 +109,101 @@ export default function AntennaPanel({
       <div className="antenna-add-form">
         <details open={antennas.length === 0}>
           <summary>Add type 2 antenna</summary>
-          <div className="antenna-form-grid">
-            <TextField
-              label="antenna_id"
-              value={draft.antenna_id}
-              disabled={!canAdd}
-              onChange={(value) => updateDraft("antenna_id", value)}
-            />
-            <NumberField
-              label="longitude"
-              hint={draftHint("longitude")}
-              value={draft.longitude}
-              disabled={!canAdd}
-              onChange={(value) => updateDraft("longitude", value)}
-            />
-            <NumberField
-              label="latitude"
-              hint={draftHint("latitude")}
-              value={draft.latitude}
-              disabled={!canAdd}
-              onChange={(value) => updateDraft("latitude", value)}
-            />
-            <NumberField
-              label="height_m"
-              hint={draftHint("height_m")}
-              value={draft.height_m}
-              disabled={!canAdd}
-              onChange={(value) => updateDraft("height_m", value)}
-            />
-            <NumberField
-              label="azimuth_deg"
-              hint={draftHint("azimuth_deg")}
-              value={draft.azimuth_deg}
-              disabled={!canAdd}
-              onChange={(value) => updateDraft("azimuth_deg", value)}
-            />
-            <NumberField
-              label="tilt_min_deg"
-              hint={draftHint("tilt_min_deg")}
-              value={draft.tilt_min_deg}
-              disabled={!canAdd}
-              onChange={(value) => updateDraft("tilt_min_deg", value)}
-            />
-            <NumberField
-              label="tilt_current_deg"
-              hint={draftHint("tilt_current_deg")}
-              value={draft.tilt_current_deg}
-              disabled={!canAdd}
-              onChange={(value) => updateDraft("tilt_current_deg", value)}
-            />
-            <NumberField
-              label="tilt_max_deg"
-              hint={draftHint("tilt_max_deg")}
-              value={draft.tilt_max_deg}
-              disabled={!canAdd}
-              onChange={(value) => updateDraft("tilt_max_deg", value)}
-            />
-            <NumberField
-              label="tx_power_min_dbm"
-              hint={draftHint("tx_power_min_dbm")}
-              value={draft.tx_power_min_dbm}
-              disabled={!canAdd}
-              onChange={(value) => updateDraft("tx_power_min_dbm", value)}
-            />
-            <NumberField
-              label="tx_power_current_dbm"
-              hint={draftHint("tx_power_current_dbm")}
-              value={draft.tx_power_current_dbm}
-              disabled={!canAdd}
-              onChange={(value) => updateDraft("tx_power_current_dbm", value)}
-            />
-            <NumberField
-              label="tx_power_max_dbm"
-              hint={draftHint("tx_power_max_dbm")}
-              value={draft.tx_power_max_dbm}
-              disabled={!canAdd}
-              onChange={(value) => updateDraft("tx_power_max_dbm", value)}
-            />
-          </div>
-          {addError && <p className="field-error">{addError}</p>}
-          <button
-            className="primary-button"
-            type="button"
-            disabled={!canAdd}
-            onClick={submitType2}
-          >
-            Add antenna
-          </button>
+          {addLimitReached && !disabled ? (
+            <p className="form-help">
+              {simulationLabel} already has the maximum {maxAntennas} antenna candidates. Delete a type 2 antenna before adding another.
+            </p>
+          ) : (
+            <>
+              <div className="antenna-form-grid">
+                <TextField
+                  label="antenna_id"
+                  value={draft.antenna_id}
+                  disabled={!canAdd}
+                  onChange={(value) => updateDraft("antenna_id", value)}
+                />
+                <NumberField
+                  label="longitude"
+                  hint={draftHint("longitude")}
+                  value={draft.longitude}
+                  disabled={!canAdd}
+                  onChange={(value) => updateDraft("longitude", value)}
+                />
+                <NumberField
+                  label="latitude"
+                  hint={draftHint("latitude")}
+                  value={draft.latitude}
+                  disabled={!canAdd}
+                  onChange={(value) => updateDraft("latitude", value)}
+                />
+                <NumberField
+                  label="height_m"
+                  hint={draftHint("height_m")}
+                  value={draft.height_m}
+                  disabled={!canAdd}
+                  onChange={(value) => updateDraft("height_m", value)}
+                />
+                <NumberField
+                  label="azimuth_deg"
+                  hint={draftHint("azimuth_deg")}
+                  value={draft.azimuth_deg}
+                  disabled={!canAdd}
+                  onChange={(value) => updateDraft("azimuth_deg", value)}
+                />
+                <NumberField
+                  label="tilt_min_deg"
+                  hint={draftHint("tilt_min_deg")}
+                  value={draft.tilt_min_deg}
+                  disabled={!canAdd}
+                  onChange={(value) => updateDraft("tilt_min_deg", value)}
+                />
+                <NumberField
+                  label="tilt_current_deg"
+                  hint={draftHint("tilt_current_deg")}
+                  value={draft.tilt_current_deg}
+                  disabled={!canAdd}
+                  onChange={(value) => updateDraft("tilt_current_deg", value)}
+                />
+                <NumberField
+                  label="tilt_max_deg"
+                  hint={draftHint("tilt_max_deg")}
+                  value={draft.tilt_max_deg}
+                  disabled={!canAdd}
+                  onChange={(value) => updateDraft("tilt_max_deg", value)}
+                />
+                <NumberField
+                  label="tx_power_min_dbm"
+                  hint={draftHint("tx_power_min_dbm")}
+                  value={draft.tx_power_min_dbm}
+                  disabled={!canAdd}
+                  onChange={(value) => updateDraft("tx_power_min_dbm", value)}
+                />
+                <NumberField
+                  label="tx_power_current_dbm"
+                  hint={draftHint("tx_power_current_dbm")}
+                  value={draft.tx_power_current_dbm}
+                  disabled={!canAdd}
+                  onChange={(value) => updateDraft("tx_power_current_dbm", value)}
+                />
+                <NumberField
+                  label="tx_power_max_dbm"
+                  hint={draftHint("tx_power_max_dbm")}
+                  value={draft.tx_power_max_dbm}
+                  disabled={!canAdd}
+                  onChange={(value) => updateDraft("tx_power_max_dbm", value)}
+                />
+              </div>
+              {addError && <p className="field-error">{addError}</p>}
+              <button
+                className="primary-button"
+                type="button"
+                disabled={!canAdd}
+                onClick={submitType2}
+              >
+                Add antenna
+              </button>
+            </>
+          )}
         </details>
       </div>
       {antennas.length === 0 && (

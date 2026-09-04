@@ -32,6 +32,11 @@ import AntennaPanel from "./AntennaPanel";
 import Scene3DPreview, { hasCachedSceneModel } from "./Scene3DPreview";
 
 const COVERAGE_TYPE2_TRANSMITTER_ID = "__coverage_type2_transmitter__";
+const SINR_ROLES = [
+  { key: "transmitter", label: "Transmitter" },
+  { key: "receiver", label: "Receiver" },
+  { key: "interferer", label: "Interferer" },
+];
 
 export function CoverageApiPage({ activeScene, antennas = EMPTY_ARRAY, onProgressChange, onQueueOpen, onSceneLoadingChange, onSimulationQueued }) {
   const fixedAntennas = Array.isArray(antennas) ? antennas : EMPTY_ARRAY;
@@ -184,7 +189,7 @@ export function CoverageApiPage({ activeScene, antennas = EMPTY_ARRAY, onProgres
       )}
     >
       <form id="coverage-api-form" className="api-form" onSubmit={submit}>
-        <fieldset className="api-form-lock" disabled={resultState.loading || !sceneStatus.isSceneReady}>
+        <fieldset className="api-form-lock" disabled={resultState.loading}>
           <FormSection title="Transmitter">
             <CoverageTransmitterFields
               activeScene={activeScene}
@@ -219,14 +224,23 @@ export function CoverageApiPage({ activeScene, antennas = EMPTY_ARRAY, onProgres
   );
 }
 
-export function SinrApiPage({ activeScene, onProgressChange, onQueueOpen, onSceneLoadingChange, onSimulationQueued }) {
+export function SinrApiPage({
+  activeScene,
+  antennas = EMPTY_ARRAY,
+  fixedAntennaCount = 0,
+  maxType2Antennas = 10,
+  onAddType2Antenna,
+  onProgressChange,
+  onQueueOpen,
+  onRemoveType2Antenna,
+  onResetAntennas,
+  onRoleSelectionChange,
+  onSceneLoadingChange,
+  onSimulationQueued,
+  onUpdateAntenna,
+  roleSelection = {},
+}) {
   const [form, setForm] = useState(() => ({
-    tilt: 8,
-    transmitter_position: [0, 0, 30],
-    receiver_position: [40, 20, 1.5],
-    interferer_position: [120, 100, 25],
-    interferer_tilt: 12,
-    tx_power: 30,
     solver: DEFAULT_SOLVER,
   }));
   const [resultState, setResultState] = useApiResult(
@@ -237,38 +251,85 @@ export function SinrApiPage({ activeScene, onProgressChange, onQueueOpen, onScen
   );
   const sceneStatus = useScenePreviewStatus(activeScene, onSceneLoadingChange);
   const sceneSolver = solverForScene(activeScene, form.solver);
-  const positionValidation = validateScenePositions(sceneSolver, [
-    {
-      key: "transmitter_position",
-      label: "Transmitter position",
-      value: form.transmitter_position,
-    },
-    {
-      key: "receiver_position",
-      label: "Receiver position",
-      value: form.receiver_position,
-    },
-    {
-      key: "interferer_position",
-      label: "Interferer position",
-      value: form.interferer_position,
-    },
-  ]);
+  const selectedRoles = sinrSelectedRoleAntennas(antennas, roleSelection);
+  const rolePositions = sinrRolePositions(selectedRoles, activeScene?.bounds);
+  const roleValidation = validateSinrRoles(
+    antennas,
+    roleSelection,
+    selectedRoles,
+    rolePositions,
+    activeScene,
+  );
+  const positionValidation = roleValidation
+    ? { errors: {}, isValid: false }
+    : validateScenePositions(sceneSolver, [
+      {
+        key: "transmitter_position",
+        label: "Transmitter position",
+        value: rolePositions.transmitter_position,
+      },
+      {
+        key: "receiver_position",
+        label: "Receiver position",
+        value: rolePositions.receiver_position,
+      },
+      {
+        key: "interferer_position",
+        label: "Interferer position",
+        value: rolePositions.interferer_position,
+      },
+    ]);
+  const sinrError = roleValidation || firstPositionError(positionValidation.errors);
+  const isFormValid = !sinrError && positionValidation.isValid;
+  const maxSinrCandidates = Math.max(3, fixedAntennaCount + maxType2Antennas);
+
+  useEffect(() => {
+    const cleanedRoles = cleanSinrRoleSelection(roleSelection, antennas);
+
+    if (sinrRoleSelectionChanged(cleanedRoles, roleSelection)) {
+      onRoleSelectionChange?.(cleanedRoles);
+      return;
+    }
+
+    if (
+      antennas.length === 3
+      && SINR_ROLES.every((role) => !cleanedRoles[role.key])
+    ) {
+      onRoleSelectionChange?.({
+        transmitter: cleanedRoles.transmitter || antennas[0]?.id || "",
+        receiver: cleanedRoles.receiver || antennas[1]?.id || "",
+        interferer: cleanedRoles.interferer || antennas[2]?.id || "",
+      });
+    }
+  }, [antennas, onRoleSelectionChange, roleSelection]);
 
   async function submit(event) {
     event.preventDefault();
-    if (resultState.loading || !sceneStatus.isSceneReady || !positionValidation.isValid) {
+    if (resultState.loading || !sceneStatus.isSceneReady || !isFormValid) {
       return;
     }
 
     const payload = {
-      ...form,
+      tilt: selectedRoles.transmitter.tilt.current,
+      transmitter_position: rolePositions.transmitter_position,
+      receiver_position: rolePositions.receiver_position,
+      interferer_position: rolePositions.interferer_position,
+      interferer_tilt: selectedRoles.interferer.tilt.current,
+      tx_power: selectedRoles.transmitter.tx_power.current,
       solver: sceneSolver,
       transmitter_pattern: TRANSMITTER_PATTERN,
     };
+    const displayPayload = {
+      ...payload,
+      antenna_roles: {
+        transmitter: selectedRoles.transmitter,
+        receiver: selectedRoles.receiver,
+        interferer: selectedRoles.interferer,
+      },
+    };
     await setResultState(async () => ({
       ...(await runSinr(payload)),
-      request: payload,
+      request: displayPayload,
     }));
   }
 
@@ -280,8 +341,11 @@ export function SinrApiPage({ activeScene, onProgressChange, onQueueOpen, onScen
       renderPreview={() => (
         <ApiScenePreview
           activeScene={activeScene}
+          antennas={sinrPreviewAntennas(selectedRoles)}
           isSceneReady={sceneStatus.isSceneReady}
           onSceneLoadingChange={sceneStatus.handleSceneLoadingChange}
+          signalLinks={sinrPreviewLinks(rolePositions)}
+          solver={sceneSolver}
         />
       )}
       onQueueOpen={onQueueOpen}
@@ -295,38 +359,38 @@ export function SinrApiPage({ activeScene, onProgressChange, onQueueOpen, onScen
       )}
     >
       <form className="api-form" onSubmit={submit}>
-        <fieldset className="api-form-lock" disabled={resultState.loading || !sceneStatus.isSceneReady}>
-          <FormSection title="Serving transmitter">
-            <NumberField label="Tilt" unit="deg" value={form.tilt} onChange={(value) => updateForm(setForm, "tilt", value)} />
-            <NumberField label="Power" unit="dBm" value={form.tx_power} onChange={(value) => updateForm(setForm, "tx_power", value)} />
-            <PositionField
-              error={positionValidation.errors.transmitter_position}
-              label="Position"
-              solver={sceneSolver}
-              value={form.transmitter_position}
-              onChange={(value) => updateForm(setForm, "transmitter_position", value)}
+        <fieldset className="api-form-lock" disabled={resultState.loading}>
+          <FormSection title="SINR roles">
+            <SinrRoleFields
+              antennas={antennas}
+              error={sinrError}
+              roles={roleSelection}
+              onChange={onRoleSelectionChange}
             />
           </FormSection>
-          <FormSection title="Receiver and interferer">
-            <PositionField
-              error={positionValidation.errors.receiver_position}
-              label="Receiver"
-              solver={sceneSolver}
-              value={form.receiver_position}
-              onChange={(value) => updateForm(setForm, "receiver_position", value)}
+          <FormSection title="Candidate antennas">
+            <AntennaPanel
+              activeScene={activeScene}
+              antennas={antennas}
+              disabled={resultState.loading}
+              maxAntennas={maxSinrCandidates}
+              onAddType2={onAddType2Antenna}
+              onChange={onUpdateAntenna}
+              onRemoveType2={onRemoveType2Antenna}
+              simulationLabel="SINR API"
             />
-            <PositionField
-              error={positionValidation.errors.interferer_position}
-              label="Interferer"
-              solver={sceneSolver}
-              value={form.interferer_position}
-              onChange={(value) => updateForm(setForm, "interferer_position", value)}
-            />
-            <NumberField label="Interferer tilt" unit="deg" value={form.interferer_tilt} onChange={(value) => updateForm(setForm, "interferer_tilt", value)} />
           </FormSection>
           <SolverFields solver={sceneSolver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
-          <button className="primary-button" type="submit" disabled={resultState.loading || !sceneStatus.isSceneReady || !positionValidation.isValid}>
-            {runButtonLabel(resultState.loading, sceneStatus.isSceneReady, positionValidation.isValid, "Calculate SINR")}
+          <button className="primary-button" type="submit" disabled={resultState.loading || !sceneStatus.isSceneReady || !isFormValid}>
+            {runButtonLabel(resultState.loading, sceneStatus.isSceneReady, isFormValid, "Calculate SINR")}
+          </button>
+          <button
+            className="ghost-button"
+            type="button"
+            disabled={resultState.loading}
+            onClick={onResetAntennas}
+          >
+            Reset SINR antennas
           </button>
         </fieldset>
       </form>
@@ -476,7 +540,7 @@ export function RsrpSimulationPage({
             <button
               className="ghost-button"
               type="button"
-              disabled={resultState.loading || !sceneStatus.isSceneReady}
+              disabled={resultState.loading}
               onClick={onResetAntennas}
             >
               Reset
@@ -485,13 +549,13 @@ export function RsrpSimulationPage({
         </div>
         <div className="api-workspace-form">
           <form id="rsrp-simulation-form" className="api-form" onSubmit={submit}>
-            <fieldset className="api-form-lock" disabled={resultState.loading || !sceneStatus.isSceneReady}>
+            <fieldset className="api-form-lock" disabled={resultState.loading}>
               <FormSection title="Antennas">
                 <div className="embedded-antenna-panel">
                   <AntennaPanel
                     activeScene={activeScene}
                     antennas={antennas}
-                    disabled={resultState.loading || !sceneStatus.isSceneReady}
+                    disabled={resultState.loading}
                     maxAntennas={maxAntennas}
                     onAddType2={onAddType2Antenna}
                     onChange={onUpdateAntenna}
@@ -1015,7 +1079,14 @@ function QueueNotice({ onQueueOpen, result }) {
   );
 }
 
-function ApiScenePreview({ activeScene, antennas = EMPTY_ARRAY, isSceneReady, onSceneLoadingChange }) {
+function ApiScenePreview({
+  activeScene,
+  antennas = EMPTY_ARRAY,
+  isSceneReady,
+  onSceneLoadingChange,
+  signalLinks = EMPTY_ARRAY,
+  solver = null,
+}) {
   return (
     <div className="result-summary">
       <div className="api-result-scene-wrap">
@@ -1027,7 +1098,8 @@ function ApiScenePreview({ activeScene, antennas = EMPTY_ARRAY, isSceneReady, on
             onLoadingChange={onSceneLoadingChange}
             sceneName={activeScene.name}
             showOverlay={false}
-            solver={solverForScene(activeScene)}
+            signalLinks={signalLinks}
+            solver={solver || solverForScene(activeScene)}
             viewMode="top"
           />
         ) : (
@@ -1041,6 +1113,177 @@ function ApiScenePreview({ activeScene, antennas = EMPTY_ARRAY, isSceneReady, on
       </p>
     </div>
   );
+}
+
+function SinrRoleFields({ antennas, error, onChange, roles }) {
+  const availableAntennas = Array.isArray(antennas) ? antennas : EMPTY_ARRAY;
+
+  function updateRole(role, antennaId) {
+    onChange?.({
+      ...roles,
+      [role]: antennaId,
+    });
+  }
+
+  return (
+    <>
+      {availableAntennas.length < 3 && (
+        <p className="form-help">
+          Add {3 - availableAntennas.length} more type 2 antenna(s) before running SINR.
+        </p>
+      )}
+      {SINR_ROLES.map((role) => (
+        <label className="form-field" key={role.key}>
+          <span>{role.label}</span>
+          <select
+            value={roles[role.key] || ""}
+            required
+            onChange={(event) => updateRole(role.key, event.target.value)}
+          >
+            <option value="">Select {role.label.toLowerCase()}</option>
+            {availableAntennas.map((antenna) => (
+              <option key={antenna.id} value={antenna.id}>
+                {antenna.id} ({antenna._type === "type2" ? "Type 2" : "Type 1"})
+              </option>
+            ))}
+          </select>
+        </label>
+      ))}
+      {error && <small className="field-error">{error}</small>}
+      <p className="form-help">
+        SINR runs only when one transmitter, one receiver, and one interferer are selected as three different antennas.
+      </p>
+    </>
+  );
+}
+
+function sinrSelectedRoleAntennas(antennas, roles) {
+  const byId = new Map((Array.isArray(antennas) ? antennas : []).map((antenna) => [
+    antenna.id,
+    antenna,
+  ]));
+
+  return {
+    transmitter: byId.get(roles.transmitter) || null,
+    receiver: byId.get(roles.receiver) || null,
+    interferer: byId.get(roles.interferer) || null,
+  };
+}
+
+function sinrRolePositions(selectedRoles, bounds) {
+  return {
+    transmitter_position: scenePositionForAntenna(selectedRoles.transmitter, bounds),
+    receiver_position: scenePositionForAntenna(selectedRoles.receiver, bounds),
+    interferer_position: scenePositionForAntenna(selectedRoles.interferer, bounds),
+  };
+}
+
+function scenePositionForAntenna(antenna, bounds) {
+  if (!antenna) {
+    return null;
+  }
+
+  return lngLatToScenePosition(antenna, bounds);
+}
+
+function validateSinrRoles(antennas, roles, selectedRoles, rolePositions, activeScene) {
+  if (!Array.isArray(antennas) || antennas.length < 3) {
+    return `SINR needs exactly 3 role antennas. Add ${3 - (antennas?.length || 0)} missing antenna(s).`;
+  }
+
+  const selectedIds = SINR_ROLES.map((role) => roles[role.key]).filter(Boolean);
+  if (selectedIds.length < 3) {
+    return "Select one transmitter, one receiver, and one interferer.";
+  }
+
+  if (new Set(selectedIds).size !== 3) {
+    return "Transmitter, receiver, and interferer must be three different antennas.";
+  }
+
+  for (const role of SINR_ROLES) {
+    const antenna = selectedRoles[role.key];
+
+    if (!antenna) {
+      return `${role.label} antenna is not available in this scene.`;
+    }
+
+    if (!lngLatInsideBounds(antenna, activeScene?.bounds)) {
+      return `${role.label} antenna must stay inside the selected scene.`;
+    }
+  }
+
+  for (const [field, position] of Object.entries(rolePositions)) {
+    if (!Array.isArray(position)) {
+      return `${formatText(field.replace("_position", ""))} position is invalid.`;
+    }
+  }
+
+  return "";
+}
+
+function cleanSinrRoleSelection(roles, antennas) {
+  const availableIds = new Set((Array.isArray(antennas) ? antennas : []).map((antenna) => antenna.id));
+  const cleaned = {};
+
+  for (const role of SINR_ROLES) {
+    const antennaId = roles[role.key] || "";
+    cleaned[role.key] = antennaId && availableIds.has(antennaId) ? antennaId : "";
+  }
+
+  return cleaned;
+}
+
+function sinrRoleSelectionChanged(nextRoles, currentRoles) {
+  return SINR_ROLES.some((role) => (nextRoles[role.key] || "") !== (currentRoles[role.key] || ""));
+}
+
+function firstPositionError(errors) {
+  return Object.values(errors || {}).find(Boolean) || "";
+}
+
+function sinrPreviewAntennas(selectedRoles) {
+  return SINR_ROLES.map((role) => {
+    const antenna = selectedRoles[role.key];
+
+    if (!antenna) {
+      return null;
+    }
+
+    return {
+      ...antenna,
+      id: role.key === "interferer" ? "INT" : role.key === "receiver" ? "RX" : "TX",
+    };
+  }).filter(Boolean);
+}
+
+function sinrPreviewLinks(rolePositions) {
+  const links = [];
+
+  if (
+    Array.isArray(rolePositions.transmitter_position)
+    && Array.isArray(rolePositions.receiver_position)
+  ) {
+    links.push({
+      from: rolePositions.transmitter_position,
+      to: rolePositions.receiver_position,
+      label: "Serving",
+      type: "serving",
+    });
+  }
+
+  if (
+    Array.isArray(rolePositions.interferer_position)
+    && Array.isArray(rolePositions.receiver_position)
+  ) {
+    links.push({
+      from: rolePositions.interferer_position,
+      to: rolePositions.receiver_position,
+      label: "Interference",
+      type: "interference",
+    });
+  }
+
+  return links;
 }
 
 function useScenePreviewStatus(activeScene, onSceneLoadingChange) {

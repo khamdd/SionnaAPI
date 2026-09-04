@@ -115,6 +115,14 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   choose a fixed antenna or type 2 transmitter before running. The backend still
   receives the converted scene `transmitter_position`; fixed antenna real-world
   coordinates remain read-only in the UI.
+- SINR API uses exactly three role antennas: one transmitter, one receiver, and
+  one interferer. The page builds candidates from fixed type 1 scene antennas and
+  SINR-only type 2 antennas. Users can add SINR-only type 2 candidates even when
+  three or more fixed antennas already exist. The run button stays disabled until
+  exactly one transmitter, one receiver, and one interferer are assigned to three
+  different antennas. SINR type 2 antennas, per-antenna simulation settings, and
+  role selections are persisted in separate scene-scoped localStorage keys and
+  cleared when resetting SINR antennas or changing the work scene.
 - RSRP Simulation uses all configured transmit antennas for the run, with the
   same type 1/type 2 split as Network Coverage. Fixed type 1 antenna base data
   remains immutable, users can add/delete type 2 antennas from the XLSX-shaped
