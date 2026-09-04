@@ -120,11 +120,22 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   SINR-only type 2 antennas. Users can add SINR-only type 2 candidates even when
   three or more fixed antennas already exist. The run button stays disabled until
   exactly one transmitter, one receiver, and one interferer are assigned to three
-  different antennas. SINR type 2 antennas, per-antenna simulation settings, and
-  role selections are persisted in separate scene-scoped localStorage keys and
-  cleared when resetting SINR antennas or changing the work scene. The SINR page
-  uses a workspace layout with the 3D scene/result on the left, candidate antenna
-  management on the right, and role/solver setup below the 3D scene.
+  different antennas. SINR does not cap candidate antenna count because only the
+  three selected role antennas are sent to the backend. SINR type 2 antennas,
+  per-antenna simulation settings, and role selections are persisted in separate
+  scene-scoped localStorage keys and cleared when resetting SINR antennas or
+  changing the work scene. The SINR page uses a workspace layout with the 3D
+  scene/result on the left, candidate antenna management on the right, and
+  role/solver setup below the 3D scene.
+- Throughput API uses the same three-role antenna workflow as SINR, but stores
+  Throughput-only type 2 antennas, per-antenna simulation settings, and role
+  selections in separate scene-scoped localStorage keys. Base tilt and target
+  tilt are constrained to the selected transmitter antenna's configured tilt
+  min/max range. Throughput does not cap candidate antenna count because only the
+  selected transmitter, receiver, and interferer are sent to the backend. The
+  Throughput page uses the same workspace layout pattern as SINR, with candidate
+  antenna management on the right and role/tilt/solver setup below the 3D
+  scene/result on the left.
 - RSRP Simulation uses all configured transmit antennas for the run, with the
   same type 1/type 2 split as Network Coverage. Fixed type 1 antenna base data
   remains immutable, users can add/delete type 2 antennas from the XLSX-shaped

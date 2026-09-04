@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { lngLatInsideBounds } from "../utils/scene";
+import { lngLatBoundsError } from "../utils/scene";
 import { formatMaybeNumber } from "../utils/format";
 
 const TYPE_1 = "type1";
@@ -37,7 +37,7 @@ export default function AntennaPanel({
   activeScene,
   antennas,
   disabled = false,
-  maxAntennas = 10,
+  maxAntennas = null,
   onAddType2,
   onChange,
   onRemoveType2,
@@ -50,9 +50,10 @@ export default function AntennaPanel({
   const [addError, setAddError] = useState("");
   const fixedCount = antennas.filter((item) => item._type === TYPE_1).length;
   const type2Count = antennas.length - fixedCount;
-  const addLimitReached = antennas.length >= maxAntennas;
+  const hasAntennaLimit = Number.isFinite(maxAntennas);
+  const addLimitReached = hasAntennaLimit && antennas.length >= maxAntennas;
   const canAdd = !disabled && !addLimitReached;
-  const overLimit = antennas.length > maxAntennas;
+  const overLimit = hasAntennaLimit && antennas.length > maxAntennas;
 
   useEffect(() => {
     setDraft((current) => ({
@@ -98,7 +99,9 @@ export default function AntennaPanel({
   return (
     <div className="antenna-list">
       <div className="antenna-summary">
-        <strong>{antennas.length}/{maxAntennas} antennas</strong>
+        <strong>
+          {hasAntennaLimit ? `${antennas.length}/${maxAntennas}` : antennas.length} antennas
+        </strong>
         <span>{fixedCount} type 1, {type2Count} type 2</span>
       </div>
       {overLimit && (
@@ -125,6 +128,8 @@ export default function AntennaPanel({
                 <NumberField
                   label="longitude"
                   hint={draftHint("longitude")}
+                  min={activeScene?.bounds?.west}
+                  max={activeScene?.bounds?.east}
                   value={draft.longitude}
                   disabled={!canAdd}
                   onChange={(value) => updateDraft("longitude", value)}
@@ -132,6 +137,8 @@ export default function AntennaPanel({
                 <NumberField
                   label="latitude"
                   hint={draftHint("latitude")}
+                  min={activeScene?.bounds?.south}
+                  max={activeScene?.bounds?.north}
                   value={draft.latitude}
                   disabled={!canAdd}
                   onChange={(value) => updateDraft("latitude", value)}
@@ -314,7 +321,7 @@ function TextField({ disabled, label, onChange, value }) {
   );
 }
 
-function NumberField({ disabled, hint = "", label, onChange, value }) {
+function NumberField({ disabled, hint = "", label, max, min, onChange, value }) {
   return (
     <label className="form-field">
       <span>{fieldLabel(label)}</span>
@@ -323,6 +330,8 @@ function NumberField({ disabled, hint = "", label, onChange, value }) {
           type="number"
           value={value}
           disabled={disabled}
+          min={min}
+          max={max}
           step="any"
           onChange={(event) => onChange(parseNumericInput(event.target.value))}
         />
@@ -405,44 +414,58 @@ function validateType2Draft(draft, antennas, activeScene) {
     return { error: `antenna_id "${id}" is already used.` };
   }
 
-  const antenna = {
-    id,
-    longitude: Number(draft.longitude),
-    latitude: Number(draft.latitude),
-    height_m: Number(draft.height_m),
-    azimuth: Number(draft.azimuth_deg),
-    tilt: {
-      min: Number(draft.tilt_min_deg),
-      current: Number(draft.tilt_current_deg),
-      max: Number(draft.tilt_max_deg),
-    },
-    tx_power: {
-      min: Number(draft.tx_power_min_dbm),
-      current: Number(draft.tx_power_current_dbm),
-      max: Number(draft.tx_power_max_dbm),
-    },
-  };
-
-  const numericFields = [
-    ["longitude", antenna.longitude],
-    ["latitude", antenna.latitude],
-    ["height_m", antenna.height_m],
-    ["azimuth_deg", antenna.azimuth],
-    ["tilt_min_deg", antenna.tilt.min],
-    ["tilt_current_deg", antenna.tilt.current],
-    ["tilt_max_deg", antenna.tilt.max],
-    ["tx_power_min_dbm", antenna.tx_power.min],
-    ["tx_power_current_dbm", antenna.tx_power.current],
-    ["tx_power_max_dbm", antenna.tx_power.max],
+  const numericDraftFields = [
+    ["longitude", draft.longitude],
+    ["latitude", draft.latitude],
+    ["height_m", draft.height_m],
+    ["azimuth_deg", draft.azimuth_deg],
+    ["tilt_min_deg", draft.tilt_min_deg],
+    ["tilt_current_deg", draft.tilt_current_deg],
+    ["tilt_max_deg", draft.tilt_max_deg],
+    ["tx_power_min_dbm", draft.tx_power_min_dbm],
+    ["tx_power_current_dbm", draft.tx_power_current_dbm],
+    ["tx_power_max_dbm", draft.tx_power_max_dbm],
   ];
+  const missingField = numericDraftFields.find(([, value]) => value === "" || value === null || value === undefined);
+
+  if (missingField) {
+    return { error: `${missingField[0]} is required.` };
+  }
+
+  const numericFields = numericDraftFields.map(([field, value]) => [field, Number(value)]);
   const invalidField = numericFields.find(([, value]) => !Number.isFinite(value));
 
   if (invalidField) {
     return { error: `${invalidField[0]} must be a number.` };
   }
 
-  if (!lngLatInsideBounds(antenna, activeScene?.bounds)) {
-    return { error: "Type 2 antenna coordinates must stay inside the selected scene." };
+  const values = Object.fromEntries(numericFields);
+  const antenna = {
+    id,
+    longitude: values.longitude,
+    latitude: values.latitude,
+    height_m: values.height_m,
+    azimuth: values.azimuth_deg,
+    tilt: {
+      min: values.tilt_min_deg,
+      current: values.tilt_current_deg,
+      max: values.tilt_max_deg,
+    },
+    tx_power: {
+      min: values.tx_power_min_dbm,
+      current: values.tx_power_current_dbm,
+      max: values.tx_power_max_dbm,
+    },
+  };
+
+  const coordinateError = lngLatBoundsError(
+    antenna,
+    activeScene?.bounds,
+    "Type 2 antenna coordinates",
+  );
+
+  if (coordinateError) {
+    return { error: coordinateError };
   }
 
   if (antenna.height_m <= 0) {

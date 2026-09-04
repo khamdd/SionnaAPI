@@ -227,8 +227,6 @@ export function CoverageApiPage({ activeScene, antennas = EMPTY_ARRAY, onProgres
 export function SinrApiPage({
   activeScene,
   antennas = EMPTY_ARRAY,
-  fixedAntennaCount = 0,
-  maxType2Antennas = 10,
   onAddType2Antenna,
   onProgressChange,
   onQueueOpen,
@@ -281,7 +279,6 @@ export function SinrApiPage({
     ]);
   const sinrError = roleValidation || firstPositionError(positionValidation.errors);
   const isFormValid = !sinrError && positionValidation.isValid;
-  const maxSinrCandidates = Math.max(3, fixedAntennaCount + maxType2Antennas);
 
   useEffect(() => {
     const cleanedRoles = cleanSinrRoleSelection(roleSelection, antennas);
@@ -421,7 +418,6 @@ export function SinrApiPage({
                 activeScene={activeScene}
                 antennas={antennas}
                 disabled={resultState.loading}
-                maxAntennas={maxSinrCandidates}
                 onAddType2={onAddType2Antenna}
                 onChange={onUpdateAntenna}
                 onRemoveType2={onRemoveType2Antenna}
@@ -657,15 +653,23 @@ function RsrpMapLegend() {
   );
 }
 
-export function ThroughputApiPage({ activeScene, onProgressChange, onQueueOpen, onSceneLoadingChange, onSimulationQueued }) {
+export function ThroughputApiPage({
+  activeScene,
+  antennas = EMPTY_ARRAY,
+  onAddType2Antenna,
+  onProgressChange,
+  onQueueOpen,
+  onRemoveType2Antenna,
+  onResetAntennas,
+  onRoleSelectionChange,
+  onSceneLoadingChange,
+  onSimulationQueued,
+  onUpdateAntenna,
+  roleSelection = {},
+}) {
   const [form, setForm] = useState(() => ({
     base_tilt: 6,
     target_tilt: 12,
-    transmitter_position: [0, 0, 30],
-    receiver_position: [40, 20, 1.5],
-    interferer_position: [120, 100, 25],
-    interferer_tilt: 12,
-    tx_power: 30,
     bandwidth_mhz: 100,
     mimo_layers: 4,
     solver: DEFAULT_SOLVER,
@@ -678,105 +682,261 @@ export function ThroughputApiPage({ activeScene, onProgressChange, onQueueOpen, 
   );
   const sceneStatus = useScenePreviewStatus(activeScene, onSceneLoadingChange);
   const sceneSolver = solverForScene(activeScene, form.solver);
-  const positionValidation = validateScenePositions(sceneSolver, [
-    {
-      key: "transmitter_position",
-      label: "Transmitter position",
-      value: form.transmitter_position,
-    },
-    {
-      key: "receiver_position",
-      label: "Receiver position",
-      value: form.receiver_position,
-    },
-    {
-      key: "interferer_position",
-      label: "Interferer position",
-      value: form.interferer_position,
-    },
+  const selectedRoles = sinrSelectedRoleAntennas(antennas, roleSelection);
+  const rolePositions = sinrRolePositions(selectedRoles, activeScene?.bounds);
+  const roleValidation = validateSinrRoles(
+    antennas,
+    roleSelection,
+    selectedRoles,
+    rolePositions,
+    activeScene,
+    "Throughput",
+  );
+  const positionValidation = roleValidation
+    ? { errors: {}, isValid: false }
+    : validateScenePositions(sceneSolver, [
+      {
+        key: "transmitter_position",
+        label: "Transmitter position",
+        value: rolePositions.transmitter_position,
+      },
+      {
+        key: "receiver_position",
+        label: "Receiver position",
+        value: rolePositions.receiver_position,
+      },
+      {
+        key: "interferer_position",
+        label: "Interferer position",
+        value: rolePositions.interferer_position,
+      },
+    ]);
+  const positionError = firstPositionError(positionValidation.errors);
+  const tiltError = validateThroughputTilts(form, selectedRoles.transmitter);
+  const throughputError = roleValidation || positionError || tiltError;
+  const isFormValid = !throughputError && positionValidation.isValid;
+
+  useEffect(() => {
+    const cleanedRoles = cleanSinrRoleSelection(roleSelection, antennas);
+
+    if (sinrRoleSelectionChanged(cleanedRoles, roleSelection)) {
+      onRoleSelectionChange?.(cleanedRoles);
+      return;
+    }
+
+    if (
+      antennas.length === 3
+      && SINR_ROLES.every((role) => !cleanedRoles[role.key])
+    ) {
+      onRoleSelectionChange?.({
+        transmitter: cleanedRoles.transmitter || antennas[0]?.id || "",
+        receiver: cleanedRoles.receiver || antennas[1]?.id || "",
+        interferer: cleanedRoles.interferer || antennas[2]?.id || "",
+      });
+    }
+  }, [antennas, onRoleSelectionChange, roleSelection]);
+
+  useEffect(() => {
+    const tiltRange = selectedRoles.transmitter?.tilt;
+
+    if (!tiltRange) {
+      return;
+    }
+
+    setForm((current) => {
+      const nextBaseTilt = clampNumber(current.base_tilt, tiltRange.min, tiltRange.max);
+      const nextTargetTilt = clampNumber(current.target_tilt, tiltRange.min, tiltRange.max);
+
+      if (nextBaseTilt === current.base_tilt && nextTargetTilt === current.target_tilt) {
+        return current;
+      }
+
+      return {
+        ...current,
+        base_tilt: nextBaseTilt,
+        target_tilt: nextTargetTilt,
+      };
+    });
+  }, [
+    selectedRoles.transmitter?.id,
+    selectedRoles.transmitter?.tilt?.max,
+    selectedRoles.transmitter?.tilt?.min,
   ]);
 
   async function submit(event) {
     event.preventDefault();
-    if (resultState.loading || !sceneStatus.isSceneReady || !positionValidation.isValid) {
+    if (resultState.loading || !sceneStatus.isSceneReady || !isFormValid) {
       return;
     }
 
     const payload = {
       ...form,
+      transmitter_position: rolePositions.transmitter_position,
+      receiver_position: rolePositions.receiver_position,
+      interferer_position: rolePositions.interferer_position,
+      interferer_tilt: selectedRoles.interferer.tilt.current,
+      tx_power: selectedRoles.transmitter.tx_power.current,
       solver: sceneSolver,
       transmitter_pattern: TRANSMITTER_PATTERN,
     };
+    const displayPayload = {
+      ...payload,
+      antenna_roles: {
+        transmitter: selectedRoles.transmitter,
+        receiver: selectedRoles.receiver,
+        interferer: selectedRoles.interferer,
+      },
+    };
     await setResultState(async () => ({
       ...(await runThroughputComparison(payload)),
-      request: payload,
+      request: displayPayload,
     }));
   }
 
+  const result = resultState.result;
+  const isQueued = result?.status === "queued";
+  const resultRequest = result?.request || {};
+  const tiltHint = throughputTiltHint(selectedRoles.transmitter);
+
   return (
-    <ApiPageShell
-      layout="result-wide"
-      title="Throughput API"
-      description="Compare estimated receiver throughput between two transmitter tilt settings."
-      renderPreview={() => (
-        <ApiScenePreview
-          activeScene={activeScene}
-          isSceneReady={sceneStatus.isSceneReady}
-          onSceneLoadingChange={sceneStatus.handleSceneLoadingChange}
-        />
-      )}
-      onQueueOpen={onQueueOpen}
-      resultState={resultState}
-      renderResult={(result) => (
-        <ThroughputResult
-          activeScene={activeScene}
-          onSceneLoadingChange={sceneStatus.handleSceneLoadingChange}
-          result={result}
-        />
-      )}
-    >
-      <form className="api-form" onSubmit={submit}>
-        <fieldset className="api-form-lock" disabled={resultState.loading || !sceneStatus.isSceneReady}>
-          <FormSection title="Tilt comparison">
-            <NumberField label="Base tilt" unit="deg" value={form.base_tilt} onChange={(value) => updateForm(setForm, "base_tilt", value)} />
-            <NumberField label="Target tilt" unit="deg" value={form.target_tilt} onChange={(value) => updateForm(setForm, "target_tilt", value)} />
-            <NumberField label="Power" unit="dBm" value={form.tx_power} onChange={(value) => updateForm(setForm, "tx_power", value)} />
-          </FormSection>
-          <FormSection title="Radio link">
-            <PositionField
-              error={positionValidation.errors.transmitter_position}
-              label="Transmitter"
-              solver={sceneSolver}
-              value={form.transmitter_position}
-              onChange={(value) => updateForm(setForm, "transmitter_position", value)}
-            />
-            <PositionField
-              error={positionValidation.errors.receiver_position}
-              label="Receiver"
-              solver={sceneSolver}
-              value={form.receiver_position}
-              onChange={(value) => updateForm(setForm, "receiver_position", value)}
-            />
-            <PositionField
-              error={positionValidation.errors.interferer_position}
-              label="Interferer"
-              solver={sceneSolver}
-              value={form.interferer_position}
-              onChange={(value) => updateForm(setForm, "interferer_position", value)}
-            />
-            <NumberField label="Interferer tilt" unit="deg" value={form.interferer_tilt} onChange={(value) => updateForm(setForm, "interferer_tilt", value)} />
-          </FormSection>
-          <FormSection title="Throughput assumptions">
-            <NumberField label="Bandwidth" unit="MHz" value={form.bandwidth_mhz} min={1} onChange={(value) => updateForm(setForm, "bandwidth_mhz", value)} />
-            <NumberField label="MIMO layers" value={form.mimo_layers} min={1} step={1} onChange={(value) => updateForm(setForm, "mimo_layers", value)} />
-          </FormSection>
-          <SolverFields solver={sceneSolver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
-          <button className="primary-button" type="submit" disabled={resultState.loading || !sceneStatus.isSceneReady || !positionValidation.isValid}>
-            {runButtonLabel(resultState.loading, sceneStatus.isSceneReady, positionValidation.isValid, "Compare throughput")}
+    <main className="app-shell api-workspace-shell throughput-page">
+      <section className="map-panel api-workspace-result" aria-label="Throughput API result">
+        <div className="topbar">
+          <div>
+            <h1>Throughput API</h1>
+            <p id="run-status">Compare receiver throughput between two tilt settings with one serving transmitter and one interferer.</p>
+          </div>
+          <button
+            className="primary-button"
+            type="submit"
+            form="throughput-api-form"
+            disabled={resultState.loading || !sceneStatus.isSceneReady || !isFormValid}
+          >
+            {runButtonLabel(resultState.loading, sceneStatus.isSceneReady, isFormValid, "Compare throughput")}
           </button>
-        </fieldset>
-      </form>
-    </ApiPageShell>
+        </div>
+        <div className="api-workspace-stage">
+          {resultState.error && <p className="history-status error-text">{resultState.error}</p>}
+          {!resultState.error && resultState.loading && <p className="history-status">Waiting for backend...</p>}
+          {!resultState.error && !resultState.loading && isQueued && (
+            <QueueNotice result={result} onQueueOpen={onQueueOpen} />
+          )}
+          <div className="result-summary">
+            {result && !isQueued ? (
+              <ApiResultScene
+                activeScene={activeScene}
+                antennas={linkResultAntennas(result, resultRequest)}
+                result={result}
+                onSceneLoadingChange={sceneStatus.handleSceneLoadingChange}
+                sceneBadges={throughputSceneBadges(result)}
+                signalLinks={radioLinkVisuals(resultRequest)}
+                solver={result.solver || resultRequest.solver}
+              />
+            ) : (
+              <ApiResultScene
+                activeScene={activeScene}
+                antennas={sinrPreviewAntennas(selectedRoles)}
+                result={{}}
+                onSceneLoadingChange={sceneStatus.handleSceneLoadingChange}
+                signalLinks={sinrPreviewLinks(rolePositions)}
+                solver={sceneSolver}
+              />
+            )}
+            <form id="throughput-api-form" className="api-form api-scene-setup-form" onSubmit={submit}>
+              <fieldset className="api-form-lock" disabled={resultState.loading}>
+                <FormSection title="Throughput roles">
+                  <SinrRoleFields
+                    antennas={antennas}
+                    error={roleValidation || positionError}
+                    roles={roleSelection}
+                    onChange={onRoleSelectionChange}
+                    simulationLabel="Throughput"
+                  />
+                </FormSection>
+                <FormSection title="Tilt comparison">
+                  <NumberField
+                    hint={tiltHint}
+                    label="Base tilt"
+                    unit="deg"
+                    value={form.base_tilt}
+                    min={selectedRoles.transmitter?.tilt?.min}
+                    max={selectedRoles.transmitter?.tilt?.max}
+                    onChange={(value) => updateForm(setForm, "base_tilt", value)}
+                  />
+                  <NumberField
+                    hint={tiltHint}
+                    label="Target tilt"
+                    unit="deg"
+                    value={form.target_tilt}
+                    min={selectedRoles.transmitter?.tilt?.min}
+                    max={selectedRoles.transmitter?.tilt?.max}
+                    onChange={(value) => updateForm(setForm, "target_tilt", value)}
+                  />
+                  {tiltError && <small className="field-error">{tiltError}</small>}
+                  {selectedRoles.transmitter && (
+                    <p className="form-help">
+                      Power uses the selected transmitter simulation setting: {formatMaybeNumber(selectedRoles.transmitter.tx_power.current)} dBm.
+                    </p>
+                  )}
+                </FormSection>
+                <FormSection title="Throughput assumptions">
+                  <NumberField
+                    hint="1 MHz or greater."
+                    label="Bandwidth"
+                    unit="MHz"
+                    value={form.bandwidth_mhz}
+                    min={1}
+                    onChange={(value) => updateForm(setForm, "bandwidth_mhz", value)}
+                  />
+                  <NumberField
+                    hint="1 layer or greater."
+                    label="MIMO layers"
+                    value={form.mimo_layers}
+                    min={1}
+                    step={1}
+                    onChange={(value) => updateForm(setForm, "mimo_layers", value)}
+                  />
+                </FormSection>
+                <SolverFields solver={sceneSolver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
+              </fieldset>
+            </form>
+            {!resultState.error && result && !isQueued && (
+              <ThroughputResultDetails result={result} />
+            )}
+          </div>
+        </div>
+      </section>
+      <aside className="control-panel api-workspace-controls" aria-label="Throughput candidate antenna controls">
+        <div className="panel-header">
+          <h2>Throughput antennas</h2>
+          <div className="panel-actions">
+            <button
+              className="ghost-button"
+              type="button"
+              disabled={resultState.loading}
+              onClick={onResetAntennas}
+            >
+              Reset
+            </button>
+          </div>
+        </div>
+        <div className="api-workspace-form">
+          <div className="api-form">
+            <FormSection title="Candidate antennas">
+              <AntennaPanel
+                activeScene={activeScene}
+                antennas={antennas}
+                disabled={resultState.loading}
+                onAddType2={onAddType2Antenna}
+                onChange={onUpdateAntenna}
+                onRemoveType2={onRemoveType2Antenna}
+                simulationLabel="Throughput API"
+              />
+            </FormSection>
+          </div>
+        </div>
+      </aside>
+    </main>
   );
 }
 
@@ -1154,7 +1314,7 @@ function ApiScenePreview({
   );
 }
 
-function SinrRoleFields({ antennas, error, onChange, roles }) {
+function SinrRoleFields({ antennas, error, onChange, roles, simulationLabel = "SINR" }) {
   const availableAntennas = Array.isArray(antennas) ? antennas : EMPTY_ARRAY;
 
   function updateRole(role, antennaId) {
@@ -1168,7 +1328,7 @@ function SinrRoleFields({ antennas, error, onChange, roles }) {
     <>
       {availableAntennas.length < 3 && (
         <p className="form-help">
-          Add {3 - availableAntennas.length} more type 2 antenna(s) before running SINR.
+          Add {3 - availableAntennas.length} more type 2 antenna(s) before running {simulationLabel}.
         </p>
       )}
       {SINR_ROLES.map((role) => (
@@ -1190,7 +1350,7 @@ function SinrRoleFields({ antennas, error, onChange, roles }) {
       ))}
       {error && <small className="field-error">{error}</small>}
       <p className="form-help">
-        SINR runs only when one transmitter, one receiver, and one interferer are selected as three different antennas.
+        {simulationLabel} runs only when one transmitter, one receiver, and one interferer are selected as three different antennas.
       </p>
     </>
   );
@@ -1225,9 +1385,9 @@ function scenePositionForAntenna(antenna, bounds) {
   return lngLatToScenePosition(antenna, bounds);
 }
 
-function validateSinrRoles(antennas, roles, selectedRoles, rolePositions, activeScene) {
+function validateSinrRoles(antennas, roles, selectedRoles, rolePositions, activeScene, simulationLabel = "SINR") {
   if (!Array.isArray(antennas) || antennas.length < 3) {
-    return `SINR needs exactly 3 role antennas. Add ${3 - (antennas?.length || 0)} missing antenna(s).`;
+    return `${simulationLabel} needs exactly 3 role antennas. Add ${3 - (antennas?.length || 0)} missing antenna(s).`;
   }
 
   const selectedIds = SINR_ROLES.map((role) => roles[role.key]).filter(Boolean);
@@ -1258,6 +1418,44 @@ function validateSinrRoles(antennas, roles, selectedRoles, rolePositions, active
   }
 
   return "";
+}
+
+function validateThroughputTilts(form, transmitter) {
+  if (!transmitter) {
+    return "";
+  }
+
+  const tiltRange = transmitter.tilt;
+  const baseTilt = Number(form.base_tilt);
+  const targetTilt = Number(form.target_tilt);
+
+  if (!tiltRange || !Number.isFinite(tiltRange.min) || !Number.isFinite(tiltRange.max)) {
+    return `Transmitter ${transmitter.id} does not have a valid tilt range.`;
+  }
+
+  if (!Number.isFinite(baseTilt) || !Number.isFinite(targetTilt)) {
+    return "Base tilt and target tilt must be numbers.";
+  }
+
+  if (baseTilt < tiltRange.min || baseTilt > tiltRange.max) {
+    return `Base tilt must stay between ${formatMaybeNumber(tiltRange.min)} and ${formatMaybeNumber(tiltRange.max)} deg for ${transmitter.id}.`;
+  }
+
+  if (targetTilt < tiltRange.min || targetTilt > tiltRange.max) {
+    return `Target tilt must stay between ${formatMaybeNumber(tiltRange.min)} and ${formatMaybeNumber(tiltRange.max)} deg for ${transmitter.id}.`;
+  }
+
+  return "";
+}
+
+function throughputTiltHint(transmitter) {
+  const tiltRange = transmitter?.tilt;
+
+  if (!tiltRange || !Number.isFinite(tiltRange.min) || !Number.isFinite(tiltRange.max)) {
+    return "Select a transmitter to use its allowed tilt range.";
+  }
+
+  return `${formatMaybeNumber(tiltRange.min)} to ${formatMaybeNumber(tiltRange.max)} deg for ${transmitter.id}.`;
 }
 
 function cleanSinrRoleSelection(roles, antennas) {
@@ -1511,7 +1709,6 @@ function SinrResultDetails({ result }) {
 
 function ThroughputResult({ activeScene, onSceneLoadingChange, result }) {
   const request = result.request || {};
-  const comparison = result.comparison || {};
 
   return (
     <div className="result-summary">
@@ -1524,6 +1721,17 @@ function ThroughputResult({ activeScene, onSceneLoadingChange, result }) {
         signalLinks={radioLinkVisuals(request)}
         solver={result.solver || request.solver}
       />
+      <ThroughputResultDetails result={result} />
+    </div>
+  );
+}
+
+function ThroughputResultDetails({ result }) {
+  const request = result.request || {};
+  const comparison = result.comparison || {};
+
+  return (
+    <>
       <h3>Radio link</h3>
       <dl className="detail-grid">
         <dt>Transmitter</dt><dd>{formatPositionValue(request.transmitter_position)}</dd>
@@ -1544,7 +1752,7 @@ function ThroughputResult({ activeScene, onSceneLoadingChange, result }) {
         <dt>Change</dt><dd>{formatMaybeNumber(comparison.percentage_change)}%</dd>
         <dt>Direction</dt><dd>{formatText(comparison.direction)}</dd>
       </dl>
-    </div>
+    </>
   );
 }
 
@@ -2102,6 +2310,24 @@ function replaceArrayValue(values, index, value) {
   return values.map((item, itemIndex) => (
     itemIndex === index ? value : item
   ));
+}
+
+function clampNumber(value, min, max) {
+  const numericValue = Number(value);
+
+  if (!Number.isFinite(numericValue)) {
+    return value;
+  }
+
+  if (Number.isFinite(min) && numericValue < min) {
+    return min;
+  }
+
+  if (Number.isFinite(max) && numericValue > max) {
+    return max;
+  }
+
+  return value;
 }
 
 function parseNumericInput(value) {

@@ -1,5 +1,8 @@
 import { DEFAULT_SOLVER } from "../constants";
 
+const LNG_LAT_DISPLAY_DECIMALS = 4;
+const LNG_LAT_ROUNDING_TOLERANCE = 0.5 * (10 ** -LNG_LAT_DISPLAY_DECIMALS);
+
 export function sceneSizeMeters(scene) {
   const metricsWidth = Number(scene?.metrics?.width_m);
   const metricsHeight = Number(scene?.metrics?.height_m);
@@ -145,17 +148,23 @@ export function lngLatToScenePosition({ longitude, latitude, height_m }, bounds)
   const numericLongitude = Number(longitude);
   const numericLatitude = Number(latitude);
   const numericHeight = Number(height_m);
+  const sceneBounds = normalizeLngLatBounds(bounds);
 
   if (
-    !bounds ||
+    !sceneBounds ||
     !Number.isFinite(numericLongitude) ||
     !Number.isFinite(numericLatitude)
   ) {
     return null;
   }
 
-  const centerLat = (bounds.south + bounds.north) / 2;
-  const centerLng = (bounds.west + bounds.east) / 2;
+  const clampedCoordinate = clampLngLatToBounds(
+    numericLongitude,
+    numericLatitude,
+    sceneBounds,
+  );
+  const centerLat = (sceneBounds.south + sceneBounds.north) / 2;
+  const centerLng = (sceneBounds.west + sceneBounds.east) / 2;
   const metersPerDegreeLat = 111320;
   const metersPerDegreeLng = metersPerDegreeLat * Math.max(
     Math.cos((centerLat * Math.PI) / 180),
@@ -163,23 +172,77 @@ export function lngLatToScenePosition({ longitude, latitude, height_m }, bounds)
   );
 
   return [
-    Number(((numericLongitude - centerLng) * metersPerDegreeLng).toFixed(2)),
-    Number(((numericLatitude - centerLat) * metersPerDegreeLat).toFixed(2)),
+    Number(((clampedCoordinate.longitude - centerLng) * metersPerDegreeLng).toFixed(2)),
+    Number(((clampedCoordinate.latitude - centerLat) * metersPerDegreeLat).toFixed(2)),
     Number.isFinite(numericHeight) ? numericHeight : 0,
   ];
 }
 
 export function lngLatInsideBounds({ longitude, latitude }, bounds) {
+  return !lngLatBoundsError({ longitude, latitude }, bounds);
+}
+
+export function lngLatBoundsError({ longitude, latitude }, bounds, label = "Coordinates") {
   const numericLongitude = Number(longitude);
   const numericLatitude = Number(latitude);
+  const sceneBounds = normalizeLngLatBounds(bounds);
 
-  return (
-    bounds &&
-    Number.isFinite(numericLongitude) &&
-    Number.isFinite(numericLatitude) &&
-    numericLongitude >= bounds.west &&
-    numericLongitude <= bounds.east &&
-    numericLatitude >= bounds.south &&
-    numericLatitude <= bounds.north
-  );
+  if (!sceneBounds) {
+    return `${label} cannot be checked because selected scene bounds are unavailable.`;
+  }
+
+  if (!Number.isFinite(numericLongitude) || !Number.isFinite(numericLatitude)) {
+    return `${label} must include numeric longitude and latitude.`;
+  }
+
+  if (
+    numericLongitude < sceneBounds.west - LNG_LAT_ROUNDING_TOLERANCE ||
+    numericLongitude > sceneBounds.east + LNG_LAT_ROUNDING_TOLERANCE ||
+    numericLatitude < sceneBounds.south - LNG_LAT_ROUNDING_TOLERANCE ||
+    numericLatitude > sceneBounds.north + LNG_LAT_ROUNDING_TOLERANCE
+  ) {
+    return `${label} must stay inside the selected scene. Longitude ${formatLngLat(numericLongitude)} must be ${formatLngLat(sceneBounds.west)} to ${formatLngLat(sceneBounds.east)}, and latitude ${formatLngLat(numericLatitude)} must be ${formatLngLat(sceneBounds.south)} to ${formatLngLat(sceneBounds.north)}.`;
+  }
+
+  return "";
+}
+
+function normalizeLngLatBounds(bounds) {
+  if (!bounds) {
+    return null;
+  }
+
+  const south = Number(bounds.south);
+  const west = Number(bounds.west);
+  const north = Number(bounds.north);
+  const east = Number(bounds.east);
+
+  if (
+    !Number.isFinite(south) ||
+    !Number.isFinite(west) ||
+    !Number.isFinite(north) ||
+    !Number.isFinite(east) ||
+    south > north ||
+    west > east
+  ) {
+    return null;
+  }
+
+  return {
+    east,
+    north,
+    south,
+    west,
+  };
+}
+
+function clampLngLatToBounds(longitude, latitude, bounds) {
+  return {
+    longitude: Math.min(Math.max(longitude, bounds.west), bounds.east),
+    latitude: Math.min(Math.max(latitude, bounds.south), bounds.north),
+  };
+}
+
+function formatLngLat(value) {
+  return Number(value).toFixed(LNG_LAT_DISPLAY_DECIMALS);
 }

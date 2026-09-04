@@ -8,3 +8,6 @@ export const RSRP_ANTENNA_SETTINGS_STORAGE_KEY = "sionna_rsrp_antenna_settings";
 export const SINR_TYPE2_ANTENNAS_STORAGE_KEY = "sionna_sinr_type2_antennas";
 export const SINR_ANTENNA_SETTINGS_STORAGE_KEY = "sionna_sinr_antenna_settings";
 export const SINR_ROLE_SELECTION_STORAGE_KEY = "sionna_sinr_role_selection";
+export const THROUGHPUT_TYPE2_ANTENNAS_STORAGE_KEY = "sionna_throughput_type2_antennas";
+export const THROUGHPUT_ANTENNA_SETTINGS_STORAGE_KEY = "sionna_throughput_antenna_settings";
+export const THROUGHPUT_ROLE_SELECTION_STORAGE_KEY = "sionna_throughput_role_selection";
