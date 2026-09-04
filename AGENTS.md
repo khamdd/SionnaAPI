@@ -155,8 +155,8 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 - Network Coverage optimization phase 1 has a frontend-only objective input
   flow. The Network Coverage top bar includes an Auto optimize input button that
   opens `/network/optimization`. The optimization page lets engineers choose up
-  to two target objectives from coverage/no-coverage, SINR, throughput, and
-  overlap metrics, set an operator (`<`, `>`, `<=`, `>=`, `=`) and target value,
+  to two target objectives from Network Coverage-specific coverage and overlap
+  metrics, set an operator (`<`, `>`, `<=`, `>=`, `=`) and target value,
   then confirm a structured best-result contract. Phase 2 persists that
   contract per scene in localStorage under
   `sionna_network_optimization_objectives`, includes the current Network

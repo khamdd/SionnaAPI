@@ -143,9 +143,6 @@ class OptimizationObjective(BaseModel):
     metric: Literal[
         "uncovered_area_percent",
         "covered_area_percent",
-        "poor_sinr_area_percent",
-        "minimum_sinr_db",
-        "median_throughput_mbps",
         "overlap_area_percent",
         "average_overlap_count",
     ]

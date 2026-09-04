@@ -210,9 +210,9 @@ def test_network_coverage_optimization_request_accepts_two_objectives():
                 "target": 2.0,
             },
             {
-                "metric": "median_throughput_mbps",
-                "operator": ">=",
-                "target": 50.0,
+                "metric": "overlap_area_percent",
+                "operator": "<=",
+                "target": 25.0,
             },
         ],
     )
@@ -255,9 +255,9 @@ def test_network_coverage_optimization_request_rejects_more_than_two_objectives(
                     "target": 2.0,
                 },
                 {
-                    "metric": "median_throughput_mbps",
+                    "metric": "covered_area_percent",
                     "operator": ">=",
-                    "target": 50.0,
+                    "target": 98.0,
                 },
                 {
                     "metric": "overlap_area_percent",

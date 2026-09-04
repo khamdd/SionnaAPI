@@ -52,9 +52,6 @@ def test_extract_network_coverage_kpis_summarizes_grid_metrics():
     assert kpis["uncovered_cells"] == 1
     assert kpis["uncovered_area_percent"] == 25.0
     assert kpis["covered_area_percent"] == 75.0
-    assert kpis["poor_sinr_area_percent"] == 25.0
-    assert kpis["minimum_sinr_db"] == -2.0
-    assert kpis["median_throughput_mbps"] == 60.0
     assert kpis["overlap_area_percent"] == 50.0
     assert kpis["average_overlap_count"] == 2.0
 
@@ -78,7 +75,7 @@ def test_extract_network_coverage_kpis_computes_overlap_without_summary():
 def test_evaluate_objective_handles_threshold_operators():
     kpis = {
         "uncovered_area_percent": 1.8,
-        "median_throughput_mbps": 45.0,
+        "covered_area_percent": 45.0,
     }
 
     uncovered = evaluate_objective(
@@ -92,7 +89,7 @@ def test_evaluate_objective_handles_threshold_operators():
     throughput = evaluate_objective(
         kpis,
         {
-            "metric": "median_throughput_mbps",
+            "metric": "covered_area_percent",
             "operator": ">=",
             "target": 50.0,
         },
@@ -137,10 +134,10 @@ def test_evaluate_network_coverage_objectives_returns_combined_result():
 
 def test_evaluate_objective_marks_missing_kpi_as_not_passed():
     evaluation = evaluate_objective(
-        {"minimum_sinr_db": None},
+        {"average_overlap_count": None},
         {
-            "metric": "minimum_sinr_db",
-            "operator": ">=",
+            "metric": "average_overlap_count",
+            "operator": "<=",
             "target": 0.0,
         },
     )

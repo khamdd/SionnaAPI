@@ -25,30 +25,6 @@ const NETWORK_COVERAGE_OBJECTIVES = [
     description: "Require a minimum share of the selected scene to be covered.",
   },
   {
-    id: "poor_sinr_area_percent",
-    label: "Poor SINR area",
-    unit: "%",
-    defaultOperator: "<=",
-    defaultValue: 5,
-    description: "Reduce the share of cells below the poor-quality SINR threshold.",
-  },
-  {
-    id: "minimum_sinr_db",
-    label: "Minimum SINR",
-    unit: "dB",
-    defaultOperator: ">=",
-    defaultValue: 0,
-    description: "Protect the weakest served cells from dropping below a target SINR.",
-  },
-  {
-    id: "median_throughput_mbps",
-    label: "Median throughput",
-    unit: "Mbps",
-    defaultOperator: ">=",
-    defaultValue: 50,
-    description: "Push the typical user-cell throughput above the engineer target.",
-  },
-  {
     id: "overlap_area_percent",
     label: "Overlap area",
     unit: "%",
@@ -793,17 +769,6 @@ function extractNetworkCoverageKpis(grid) {
   const totalCells = cells.length;
   const coveredCells = cells.filter((cell) => !isNoCoverageCell(cell));
   const uncoveredCells = cells.length - coveredCells.length;
-  const servedSinrValues = coveredCells
-    .map((cell) => numericValue(cell.sinr_db))
-    .filter((value) => value !== null);
-  const throughputValues = coveredCells
-    .map((cell) => numericValue(cell.throughput_mbps))
-    .filter((value) => value !== null)
-    .sort((a, b) => a - b);
-  const poorSinrCells = coveredCells.filter((cell) => {
-    const sinr = numericValue(cell.sinr_db);
-    return sinr !== null && sinr < 0;
-  });
   const overlapSummary = grid?.overlap_summary || {};
 
   return {
@@ -812,9 +777,6 @@ function extractNetworkCoverageKpis(grid) {
     uncovered_cells: uncoveredCells,
     uncovered_area_percent: percent(uncoveredCells, totalCells),
     covered_area_percent: percent(coveredCells.length, totalCells),
-    poor_sinr_area_percent: percent(poorSinrCells.length, totalCells),
-    minimum_sinr_db: servedSinrValues.length ? Math.min(...servedSinrValues) : null,
-    median_throughput_mbps: throughputValues.length ? throughputValues[Math.floor(throughputValues.length / 2)] : null,
     overlap_area_percent: numericValue(overlapSummary.overlap_percent) ?? percent(
       cells.filter((cell) => numericValue(cell.overlap_count) >= 2).length,
       totalCells,

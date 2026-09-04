@@ -1,9 +1,7 @@
 import math
-from statistics import median
 
 
 NO_COVERAGE_LEVEL = "no_coverage"
-POOR_SINR_THRESHOLD_DB = 0.0
 OVERLAP_MIN_COUNT = 2
 
 
@@ -25,30 +23,6 @@ def extract_network_coverage_kpis(result_or_grid):
         for cell in cells
         if not is_no_coverage_cell(cell)
     ]
-    poor_sinr_cells = [
-        cell
-        for cell in covered_cells
-        if numeric_value(cell.get("sinr_db")) is not None
-        and numeric_value(cell.get("sinr_db")) < POOR_SINR_THRESHOLD_DB
-    ]
-    served_sinr_values = [
-        numeric_value(cell.get("sinr_db"))
-        for cell in covered_cells
-    ]
-    served_sinr_values = [
-        value
-        for value in served_sinr_values
-        if value is not None
-    ]
-    throughput_values = [
-        numeric_value(cell.get("throughput_mbps"))
-        for cell in covered_cells
-    ]
-    throughput_values = [
-        value
-        for value in throughput_values
-        if value is not None
-    ]
     overlap_summary = grid.get("overlap_summary") if isinstance(grid, dict) else {}
 
     return {
@@ -57,9 +31,6 @@ def extract_network_coverage_kpis(result_or_grid):
         "uncovered_cells": len(no_coverage_cells),
         "uncovered_area_percent": percent(len(no_coverage_cells), total_cells),
         "covered_area_percent": percent(len(covered_cells), total_cells),
-        "poor_sinr_area_percent": percent(len(poor_sinr_cells), total_cells),
-        "minimum_sinr_db": min(served_sinr_values) if served_sinr_values else None,
-        "median_throughput_mbps": median(throughput_values) if throughput_values else None,
         "overlap_area_percent": overlap_percent(cells, overlap_summary, total_cells),
         "average_overlap_count": average_overlap_count(cells, overlap_summary, covered_cells),
     }
