@@ -1,6 +1,6 @@
 export const DEFAULT_SOLVER = {
-  max_depth: 2,
-  samples_per_tx: 20000,
+  max_depth: 8,
+  samples_per_tx: 1000000,
   cell_size: 5,
   center: [0, 0, 0],
   size: [300, 300],

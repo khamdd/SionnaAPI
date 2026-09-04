@@ -133,6 +133,67 @@ def generate_network_coverage_tilt_candidates(
     }
 
 
+def build_network_coverage_candidate_request(base_request, candidate_tilts):
+    antennas = list(getattr(base_request, "antennas", []) or [])
+    antenna_by_id = {
+        antenna.id: antenna
+        for antenna in antennas
+    }
+    updated_antennas = []
+    changes = []
+
+    for antenna_id in candidate_tilts:
+        if antenna_id not in antenna_by_id:
+            raise ValueError(f"Unknown antenna in candidate tilts: {antenna_id}")
+
+    for antenna in antennas:
+        if antenna.id not in candidate_tilts:
+            updated_antennas.append(antenna)
+            continue
+
+        next_tilt = numeric_value(candidate_tilts[antenna.id])
+        if next_tilt is None:
+            raise ValueError(f"Candidate tilt for {antenna.id} must be numeric")
+
+        if next_tilt < antenna.tilt.min or next_tilt > antenna.tilt.max:
+            raise ValueError(
+                f"Candidate tilt for {antenna.id} must be between "
+                f"{antenna.tilt.min} and {antenna.tilt.max}"
+            )
+
+        updated_tilt = antenna.tilt.model_copy(
+            update={
+                "current": next_tilt,
+            },
+        )
+        updated_antennas.append(
+            antenna.model_copy(
+                update={
+                    "tilt": updated_tilt,
+                },
+            )
+        )
+
+        if not math.isclose(float(antenna.tilt.current), next_tilt):
+            changes.append(
+                {
+                    "antenna_id": antenna.id,
+                    "from": float(antenna.tilt.current),
+                    "to": next_tilt,
+                    "delta": round(next_tilt - float(antenna.tilt.current), 6),
+                }
+            )
+
+    return {
+        "request": base_request.model_copy(
+            update={
+                "antennas": updated_antennas,
+            },
+        ),
+        "changes": changes,
+    }
+
+
 def add_candidate(
     candidates,
     seen,

@@ -178,8 +178,13 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   controls for tilt step and max candidates. It previews deterministic legal
   tilt setups only: current baseline, all-antennas step up/down, then individual
   antenna step up/down, clipped to each antenna's tilt range. The frontend also
-  has a local candidate-generation fallback for stale backends. No optimization
-  execution API exists yet.
+  has a local candidate-generation fallback for stale backends. The "Add
+  candidate request preview" slice adds
+  `POST /api/v1/optimizations/network-coverage/candidate-request`, allowing the
+  page to select one generated candidate and preview the exact Network Coverage
+  request payload with that candidate's tilt values applied. This is still
+  preview-only and does not run Sionna, create jobs, or store results. No
+  optimization execution API exists yet.
 
 ## Important Files
 

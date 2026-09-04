@@ -3,6 +3,7 @@ import math
 import pytest
 
 from backend.services.optimization_service import (
+    build_network_coverage_candidate_request,
     evaluate_network_coverage_objectives,
     evaluate_objective,
     extract_network_coverage_kpis,
@@ -250,3 +251,124 @@ def test_generate_network_coverage_tilt_candidates_applies_max_candidates():
         "baseline",
         "all_up",
     ]
+
+
+def test_build_network_coverage_candidate_request_updates_tilts_only():
+    request = NetworkCoverageRequest(
+        antennas=[
+            {
+                "id": "A1",
+                "longitude": 105.8,
+                "latitude": 21.0,
+                "height_m": 30.0,
+                "tilt": {
+                    "min": 0.0,
+                    "current": 8.0,
+                    "max": 20.0,
+                },
+                "azimuth": 45.0,
+                "tx_power": {
+                    "min": 20.0,
+                    "current": 30.0,
+                    "max": 40.0,
+                },
+            },
+            {
+                "id": "A2",
+                "longitude": 105.801,
+                "latitude": 21.001,
+                "height_m": 30.0,
+                "tilt": {
+                    "min": 0.0,
+                    "current": 4.0,
+                    "max": 12.0,
+                },
+                "azimuth": 90.0,
+                "tx_power": {
+                    "min": 20.0,
+                    "current": 32.0,
+                    "max": 40.0,
+                },
+            },
+        ],
+        bandwidth_mhz=80.0,
+        mimo_layers=2,
+    )
+
+    preview = build_network_coverage_candidate_request(
+        request,
+        {
+            "A1": 10.0,
+            "A2": 4.0,
+        },
+    )
+
+    candidate_request = preview["request"]
+    assert candidate_request.antennas[0].tilt.current == 10.0
+    assert candidate_request.antennas[0].azimuth == 45.0
+    assert candidate_request.antennas[0].tx_power.current == 30.0
+    assert candidate_request.antennas[1].tilt.current == 4.0
+    assert candidate_request.bandwidth_mhz == 80.0
+    assert candidate_request.mimo_layers == 2
+    assert preview["changes"] == [
+        {
+            "antenna_id": "A1",
+            "from": 8.0,
+            "to": 10.0,
+            "delta": 2.0,
+        }
+    ]
+
+
+def test_build_network_coverage_candidate_request_rejects_unknown_antenna():
+    request = NetworkCoverageRequest(
+        antennas=[
+            {
+                "id": "A1",
+                "longitude": 105.8,
+                "latitude": 21.0,
+                "height_m": 30.0,
+                "tilt": {
+                    "min": 0.0,
+                    "current": 8.0,
+                    "max": 20.0,
+                },
+                "azimuth": 45.0,
+                "tx_power": {
+                    "min": 20.0,
+                    "current": 30.0,
+                    "max": 40.0,
+                },
+            },
+        ],
+    )
+
+    with pytest.raises(ValueError, match="Unknown antenna"):
+        build_network_coverage_candidate_request(request, {"A2": 10.0})
+
+
+def test_build_network_coverage_candidate_request_rejects_out_of_range_tilt():
+    request = NetworkCoverageRequest(
+        antennas=[
+            {
+                "id": "A1",
+                "longitude": 105.8,
+                "latitude": 21.0,
+                "height_m": 30.0,
+                "tilt": {
+                    "min": 0.0,
+                    "current": 8.0,
+                    "max": 20.0,
+                },
+                "azimuth": 45.0,
+                "tx_power": {
+                    "min": 20.0,
+                    "current": 30.0,
+                    "max": 40.0,
+                },
+            },
+        ],
+    )
+
+    with pytest.raises(ValueError, match="between 0.0 and 20.0"):
+        build_network_coverage_candidate_request(request, {"A1": 25.0})

@@ -228,6 +228,16 @@ class NetworkCoverageOptimizationCandidateRequest(BaseModel):
     )
 
 
+class NetworkCoverageOptimizationCandidatePreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    base_request: NetworkCoverageRequest
+
+    candidate_tilts: dict[str, float] = Field(
+        min_length=1,
+    )
+
+
 class RSRPRequest(BaseModel):
     antennas: List[AntennaConfig] = Field(
         min_length=1,

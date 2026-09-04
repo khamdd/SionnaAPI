@@ -8,6 +8,7 @@ from backend.database import is_database_configured
 from backend.schemas.requests import (
     CoverageRequest,
     NetworkCoverageOptimizationCandidateRequest,
+    NetworkCoverageOptimizationCandidatePreviewRequest,
     NetworkCoverageOptimizationEvaluationRequest,
     NetworkCoverageRequest,
     RSRPRequest,
@@ -58,6 +59,7 @@ from backend.services.scene_service import (
 from backend.services.coordinate_service import with_runtime_antenna_positions
 from backend.services.event_logger import log_event
 from backend.services.optimization_service import (
+    build_network_coverage_candidate_request,
     evaluate_network_coverage_objectives,
     generate_network_coverage_tilt_candidates,
 )
@@ -473,6 +475,32 @@ def preview_network_coverage_optimization_candidates(
             req.tilt_step,
             req.max_candidates,
         ),
+    }
+
+
+@router.post("/optimizations/network-coverage/candidate-request")
+def preview_network_coverage_optimization_candidate_request(
+    req: NetworkCoverageOptimizationCandidatePreviewRequest,
+):
+    try:
+        preview = build_network_coverage_candidate_request(
+            req.base_request,
+            req.candidate_tilts,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "status": "failure",
+                "status_code": 400,
+                "error": str(exc),
+            },
+        ) from exc
+
+    return {
+        "status": "success",
+        "request": preview["request"].model_dump(mode="json"),
+        "changes": preview["changes"],
     }
 
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   evaluateNetworkCoverageOptimization,
+  previewNetworkCoverageOptimizationCandidateRequest,
   previewNetworkCoverageOptimizationCandidates,
 } from "../api";
 
@@ -74,6 +75,11 @@ export default function OptimizationObjectivePage({
   const [candidateStatus, setCandidateStatus] = useState("Confirm objectives to preview candidate tilt setups.");
   const [candidateError, setCandidateError] = useState(false);
   const [isGeneratingCandidates, setIsGeneratingCandidates] = useState(false);
+  const [selectedCandidateId, setSelectedCandidateId] = useState(null);
+  const [candidateRequestPreview, setCandidateRequestPreview] = useState(null);
+  const [candidateRequestStatus, setCandidateRequestStatus] = useState("Generate candidate tilt setups, then select one to preview its request.");
+  const [candidateRequestError, setCandidateRequestError] = useState(false);
+  const [isPreviewingCandidateRequest, setIsPreviewingCandidateRequest] = useState(false);
 
   const selectedObjectives = useMemo(
     () => NETWORK_COVERAGE_OBJECTIVES.filter((objective) => selectedIds.has(objective.id)),
@@ -215,6 +221,14 @@ export default function OptimizationObjectivePage({
     setCandidatePreview(null);
     setCandidateStatus(status);
     setCandidateError(false);
+    resetCandidateRequestPreview("Generate candidate tilt setups, then select one to preview its request.");
+  }
+
+  function resetCandidateRequestPreview(status) {
+    setSelectedCandidateId(null);
+    setCandidateRequestPreview(null);
+    setCandidateRequestStatus(status);
+    setCandidateRequestError(false);
   }
 
   async function generateCandidatePreview() {
@@ -236,10 +250,12 @@ export default function OptimizationObjectivePage({
 
       setCandidatePreview(result);
       setCandidateStatus(`Generated ${result.generated_count || 0} candidate tilt setup(s).`);
+      resetCandidateRequestPreview("Select a generated candidate to preview its Network Coverage request.");
     } catch (error) {
       setCandidatePreview(null);
       setCandidateStatus(`Candidate preview failed: ${error.message}`);
       setCandidateError(true);
+      resetCandidateRequestPreview("Generate candidate tilt setups, then select one to preview its request.");
     } finally {
       setIsGeneratingCandidates(false);
     }
@@ -256,6 +272,52 @@ export default function OptimizationObjectivePage({
           payload.base_request,
           payload.tilt_step,
           payload.max_candidates,
+        ),
+      };
+    }
+  }
+
+  async function selectCandidate(candidate) {
+    if (!candidateRequest || !candidate || isPreviewingCandidateRequest) {
+      return;
+    }
+
+    setSelectedCandidateId(candidate.id);
+    setIsPreviewingCandidateRequest(true);
+    setCandidateRequestError(false);
+    setCandidateRequestStatus(`Building request preview for ${candidate.label}...`);
+
+    try {
+      const payload = {
+        base_request: candidateRequest,
+        candidate_tilts: candidate.tilts || {},
+      };
+      const result = await previewCandidateRequestWithBackendOrLocalFallback(payload);
+
+      setCandidateRequestPreview({
+        ...result,
+        candidate,
+      });
+      setCandidateRequestStatus("Candidate request preview ready.");
+    } catch (error) {
+      setCandidateRequestPreview(null);
+      setCandidateRequestStatus(`Candidate request preview failed: ${error.message}`);
+      setCandidateRequestError(true);
+    } finally {
+      setIsPreviewingCandidateRequest(false);
+    }
+  }
+
+  async function previewCandidateRequestWithBackendOrLocalFallback(payload) {
+    try {
+      return await previewNetworkCoverageOptimizationCandidateRequest(payload);
+    } catch {
+      return {
+        status: "success",
+        source: "local",
+        ...buildNetworkCoverageCandidateRequest(
+          payload.base_request,
+          payload.candidate_tilts,
         ),
       };
     }
@@ -514,7 +576,22 @@ export default function OptimizationObjectivePage({
           )}
 
           {candidatePreview && (
-            <CandidatePreview preview={candidatePreview} />
+            <CandidatePreview
+              preview={candidatePreview}
+              selectedCandidateId={selectedCandidateId}
+              isPreviewingCandidateRequest={isPreviewingCandidateRequest}
+              onSelectCandidate={selectCandidate}
+            />
+          )}
+
+          {candidatePreview && (
+            <p className={`optimization-preview-status ${candidateRequestError ? "error-text" : ""}`}>
+              {candidateRequestStatus}
+            </p>
+          )}
+
+          {candidateRequestPreview && (
+            <CandidateRequestPreview preview={candidateRequestPreview} />
           )}
         </aside>
       </form>
@@ -522,7 +599,12 @@ export default function OptimizationObjectivePage({
   );
 }
 
-function CandidatePreview({ preview }) {
+function CandidatePreview({
+  preview,
+  selectedCandidateId,
+  isPreviewingCandidateRequest,
+  onSelectCandidate,
+}) {
   return (
     <div className="candidate-preview-list">
       <div>
@@ -530,14 +612,48 @@ function CandidatePreview({ preview }) {
         <span>{preview.generated_count || 0}/{preview.max_candidates || 0}</span>
       </div>
       {(preview.candidates || []).map((candidate) => (
-        <article key={candidate.id}>
+        <button
+          className={candidate.id === selectedCandidateId ? "active" : ""}
+          disabled={isPreviewingCandidateRequest}
+          key={candidate.id}
+          type="button"
+          onClick={() => onSelectCandidate(candidate)}
+        >
           <div>
             <strong>{candidate.label}</strong>
             <span>{candidate.changes?.length ? `${candidate.changes.length} change(s)` : "Baseline"}</span>
           </div>
           <p>{formatTiltMap(candidate.tilts)}</p>
-        </article>
+        </button>
       ))}
+    </div>
+  );
+}
+
+function CandidateRequestPreview({ preview }) {
+  const changes = preview.changes || [];
+
+  return (
+    <div className="candidate-request-preview">
+      <div>
+        <strong>Candidate request preview</strong>
+        <span>{preview.candidate?.label || "Selected candidate"}</span>
+      </div>
+      {changes.length > 0 ? (
+        <div className="candidate-change-list">
+          {changes.map((change) => (
+            <div key={change.antenna_id}>
+              <span>{change.antenna_id}</span>
+              <strong>
+                {formatNumber(change.from)} deg to {formatNumber(change.to)} deg
+              </strong>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p>No tilt changes. This is the current baseline request.</p>
+      )}
+      <pre>{JSON.stringify(preview.request, null, 2)}</pre>
     </div>
   );
 }
@@ -726,6 +842,62 @@ function addCandidate(candidates, seen, id, label, tilts, baselineTilts, limit) 
         delta: roundCandidateNumber(tilts[antennaId] - baselineTilts[antennaId]),
       })),
   });
+}
+
+function buildNetworkCoverageCandidateRequest(baseRequest, candidateTilts) {
+  const antennas = Array.isArray(baseRequest?.antennas) ? baseRequest.antennas : [];
+  const antennaIds = new Set(antennas.map((antenna) => antenna.id));
+  const changes = [];
+
+  Object.keys(candidateTilts || {}).forEach((antennaId) => {
+    if (!antennaIds.has(antennaId)) {
+      throw new Error(`Unknown antenna in candidate tilts: ${antennaId}`);
+    }
+  });
+
+  const updatedAntennas = antennas.map((antenna) => {
+    if (!Object.prototype.hasOwnProperty.call(candidateTilts || {}, antenna.id)) {
+      return antenna;
+    }
+
+    const nextTilt = Number(candidateTilts[antenna.id]);
+    const minTilt = Number(antenna.tilt?.min);
+    const maxTilt = Number(antenna.tilt?.max);
+    const currentTilt = Number(antenna.tilt?.current);
+
+    if (!Number.isFinite(nextTilt)) {
+      throw new Error(`Candidate tilt for ${antenna.id} must be numeric.`);
+    }
+
+    if (nextTilt < minTilt || nextTilt > maxTilt) {
+      throw new Error(`Candidate tilt for ${antenna.id} must be between ${minTilt} and ${maxTilt}.`);
+    }
+
+    if (Math.abs(nextTilt - currentTilt) > Number.EPSILON) {
+      changes.push({
+        antenna_id: antenna.id,
+        from: currentTilt,
+        to: nextTilt,
+        delta: roundCandidateNumber(nextTilt - currentTilt),
+      });
+    }
+
+    return {
+      ...antenna,
+      tilt: {
+        ...antenna.tilt,
+        current: nextTilt,
+      },
+    };
+  });
+
+  return {
+    request: {
+      ...baseRequest,
+      antennas: updatedAntennas,
+    },
+    changes,
+  };
 }
 
 function clampTilt(value, tilt) {

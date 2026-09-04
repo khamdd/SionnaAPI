@@ -1178,35 +1178,123 @@ textarea:disabled {
   white-space: nowrap;
 }
 
-.candidate-preview-list article {
+.candidate-preview-list button {
   display: grid;
   gap: 6px;
+  width: 100%;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
   padding: 10px;
+  text-align: left;
 }
 
-.candidate-preview-list article > div {
+.candidate-preview-list button:hover,
+.candidate-preview-list button.active {
+  border-color: var(--accent);
+  background: #f0fdfa;
+}
+
+.candidate-preview-list button:disabled {
+  cursor: progress;
+  opacity: 0.75;
+}
+
+.candidate-preview-list button > div {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
 }
 
-.candidate-preview-list article strong {
+.candidate-preview-list button strong {
   font-size: 12px;
 }
 
-.candidate-preview-list article span,
-.candidate-preview-list article p {
+.candidate-preview-list button span,
+.candidate-preview-list button p {
   color: var(--muted);
   font-size: 12px;
 }
 
-.candidate-preview-list article p {
+.candidate-preview-list button p {
   overflow-wrap: anywhere;
   line-height: 1.4;
+}
+
+.candidate-request-preview {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.candidate-request-preview > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.candidate-request-preview > div:first-child strong {
+  font-size: 13px;
+}
+
+.candidate-request-preview > div:first-child span {
+  border: 1px solid #99f6e4;
+  border-radius: 999px;
+  background: #f0fdfa;
+  color: var(--accent-dark);
+  font-size: 11px;
+  font-weight: 900;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.candidate-request-preview > p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.candidate-change-list {
+  display: grid;
+  gap: 8px;
+}
+
+.candidate-change-list div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  padding: 9px 10px;
+}
+
+.candidate-change-list span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.candidate-change-list strong {
+  font-size: 12px;
+}
+
+.candidate-request-preview pre {
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #111827;
+  color: #e5e7eb;
+  font-size: 11px;
+  line-height: 1.45;
+  margin: 0;
+  padding: 12px;
 }
 
 .optimization-evaluation-preview > div:first-child {
