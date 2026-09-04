@@ -106,7 +106,10 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   localStorage so accidental reloads preserve the draft. Resetting
   antennas or changing the work scene clears that Network Coverage draft. Scene
   import does not cap the number of type 1 antennas, but Network Coverage still
-  enforces a maximum of 10 antennas per simulation request.
+  enforces a maximum of 10 active checked antennas per simulation request.
+  Network Coverage antenna cards include an enabled checkbox; unchecked antennas
+  remain in the sidebar draft but are hidden from the 3D scene and excluded from
+  the simulation payload.
 - Coverage API uses exactly one transmitter. If the selected scene has no fixed
   antennas, users enter one type 2 transmitter with antenna ID, longitude,
   latitude, and height. If fixed antennas exist, users can choose one fixed
@@ -140,10 +143,12 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   same type 1/type 2 split as Network Coverage. Fixed type 1 antenna base data
   remains immutable, users can add/delete type 2 antennas from the XLSX-shaped
   form, simulation tilt/power/azimuth settings are editable per antenna, and the
-  RSRP draft is stored in its own scene-scoped localStorage keys. RSRP enforces
-  the backend limit of 10 antennas per simulation request. The RSRP page keeps
-  antenna management on the right and places user/solver setup below the 3D
-  scene/result on the left.
+  RSRP draft is stored in its own scene-scoped localStorage keys. RSRP antenna
+  cards include an enabled checkbox; unchecked antennas remain in the sidebar
+  draft but are hidden from the 3D scene and excluded from the simulation payload.
+  RSRP enforces the backend limit of 10 active checked antennas per simulation
+  request. The RSRP page keeps antenna management on the right and places
+  user/solver setup below the 3D scene/result on the left.
 
 ## Important Files
 

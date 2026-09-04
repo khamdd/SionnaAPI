@@ -41,6 +41,7 @@ export default function AntennaPanel({
   onAddType2,
   onChange,
   onRemoveType2,
+  showEnabledToggle = false,
   simulationLabel = "Network Coverage",
 }) {
   const [draft, setDraft] = useState(() => ({
@@ -50,10 +51,12 @@ export default function AntennaPanel({
   const [addError, setAddError] = useState("");
   const fixedCount = antennas.filter((item) => item._type === TYPE_1).length;
   const type2Count = antennas.length - fixedCount;
+  const enabledCount = antennas.filter(isAntennaEnabled).length;
+  const limitCount = showEnabledToggle ? enabledCount : antennas.length;
   const hasAntennaLimit = Number.isFinite(maxAntennas);
-  const addLimitReached = hasAntennaLimit && antennas.length >= maxAntennas;
+  const addLimitReached = hasAntennaLimit && limitCount >= maxAntennas;
   const canAdd = !disabled && !addLimitReached;
-  const overLimit = hasAntennaLimit && antennas.length > maxAntennas;
+  const overLimit = hasAntennaLimit && limitCount > maxAntennas;
 
   useEffect(() => {
     setDraft((current) => ({
@@ -100,21 +103,23 @@ export default function AntennaPanel({
     <div className="antenna-list">
       <div className="antenna-summary">
         <strong>
-          {hasAntennaLimit ? `${antennas.length}/${maxAntennas}` : antennas.length} antennas
+          {hasAntennaLimit
+            ? `${limitCount}/${maxAntennas} ${showEnabledToggle ? "active" : ""}`
+            : antennas.length} antennas
         </strong>
-        <span>{fixedCount} type 1, {type2Count} type 2</span>
+        <span>{fixedCount} fixed antenna, {type2Count} added antenna</span>
       </div>
       {overLimit && (
         <p className="history-status error-text">
-          {simulationLabel} supports up to {maxAntennas} antennas. This scene has {antennas.length} selected antennas.
+          {simulationLabel} supports up to {maxAntennas} active antennas. This scene has {limitCount} active antennas.
         </p>
       )}
       <div className="antenna-add-form">
         <details open={antennas.length === 0}>
-          <summary>Add type 2 antenna</summary>
+          <summary>Add new antenna</summary>
           {addLimitReached && !disabled ? (
             <p className="form-help">
-              {simulationLabel} already has the maximum {maxAntennas} antenna candidates. Delete a type 2 antenna before adding another.
+              {simulationLabel} already has the maximum {maxAntennas} active antennas. Uncheck one antenna before adding another.
             </p>
           ) : (
             <>
@@ -223,6 +228,7 @@ export default function AntennaPanel({
           key={`${item._type}-${item.id}`}
           onChange={onChange}
           onRemoveType2={onRemoveType2}
+          showEnabledToggle={showEnabledToggle}
         />
       ))}
     </div>
@@ -234,14 +240,28 @@ function AntennaCard({
   disabled,
   onChange,
   onRemoveType2,
+  showEnabledToggle,
 }) {
   const isType2 = antenna._type === TYPE_2;
+  const isEnabled = isAntennaEnabled(antenna);
 
   return (
-    <article className={`antenna-card ${isType2 ? "type2" : "type1"}`}>
+    <article className={`antenna-card ${isType2 ? "type2" : "type1"} ${!isEnabled ? "inactive" : ""}`}>
       <h3>
-        <span>{antenna.id}</span>
-        <small>{isType2 ? "Type 2" : "Type 1"}</small>
+        {showEnabledToggle ? (
+          <label className="antenna-enabled-toggle">
+            <input
+              type="checkbox"
+              checked={isEnabled}
+              disabled={disabled}
+              onChange={(event) => onChange(antenna.id, "enabled", event.target.checked)}
+            />
+            <span>{antenna.id}</span>
+          </label>
+        ) : (
+          <span>{antenna.id}</span>
+        )}
+        <small>{isType2 ? "Added antenna" : "Fixed antenna"}</small>
       </h3>
       <div className="antenna-meta">
         <span>{formatAntennaLocation(antenna)}</span>
@@ -305,6 +325,10 @@ function AntennaCard({
       )}
     </article>
   );
+}
+
+function isAntennaEnabled(antenna) {
+  return antenna?.enabled !== false;
 }
 
 function TextField({ disabled, label, onChange, value }) {

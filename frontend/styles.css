@@ -1534,12 +1534,50 @@ textarea:disabled {
   border-color: rgba(37, 99, 235, 0.35);
 }
 
+.antenna-card.inactive {
+  background: #f8fafc;
+  border-style: dashed;
+}
+
+.antenna-card.inactive .antenna-meta,
+.antenna-card.inactive .control-row,
+.antenna-card.inactive .compact-field {
+  opacity: 0.62;
+}
+
 .antenna-card h3 {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
   font-size: 14px;
   line-height: 1.2;
+}
+
+.antenna-enabled-toggle {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.antenna-enabled-toggle input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.antenna-enabled-toggle input:disabled {
+  cursor: not-allowed;
+}
+
+.antenna-enabled-toggle span {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .antenna-card small {

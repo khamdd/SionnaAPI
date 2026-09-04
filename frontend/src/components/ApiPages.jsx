@@ -443,6 +443,7 @@ export function RsrpSimulationPage({
   onSceneLoadingChange,
   onSimulationQueued,
   onUpdateAntenna,
+  simulationAntennas = antennas,
 }) {
   const [selectedUser, setSelectedUser] = useState(null);
   const [form, setForm] = useState(() => ({
@@ -468,7 +469,7 @@ export function RsrpSimulationPage({
 
     setSelectedUser(null);
     const antennaError = validateSimulationAntennas(
-      antennas,
+      simulationAntennas,
       activeScene,
       maxAntennas,
       "RSRP Simulation",
@@ -482,7 +483,7 @@ export function RsrpSimulationPage({
     }
 
     const payload = {
-      antennas: antennas.map(toAntennaRequest),
+      antennas: simulationAntennas.map(toAntennaRequest),
       transmitter_pattern: TRANSMITTER_PATTERN,
       ...form,
       solver: sceneSolver,
@@ -497,6 +498,7 @@ export function RsrpSimulationPage({
   const isQueued = result?.status === "queued";
   const solver = result?.solver || sceneSolver;
   const rsrpUsers = result?.users || EMPTY_ARRAY;
+  const displayAntennas = simulationAntennas;
 
   return (
     <main className="app-shell api-workspace-shell rsrp-page">
@@ -526,7 +528,7 @@ export function RsrpSimulationPage({
               {activeScene?.bounds ? (
                 <>
                   <Scene3DPreview
-                    antennas={result ? result.antennas || antennas : antennas}
+                    antennas={displayAntennas}
                     bounds={activeScene.bounds}
                     className="api-result-scene-3d"
                     onLoadingChange={sceneStatus.handleSceneLoadingChange}
@@ -625,6 +627,7 @@ export function RsrpSimulationPage({
                   onAddType2={onAddType2Antenna}
                   onChange={onUpdateAntenna}
                   onRemoveType2={onRemoveType2Antenna}
+                  showEnabledToggle
                   simulationLabel="RSRP Simulation"
                 />
               </div>
@@ -1144,7 +1147,7 @@ function CoverageTransmitterFields({
   if (antennas.length === 0) {
     return (
       <>
-        <p className="form-help">No fixed antennas are inside this scene. Add one type 2 transmitter for this Coverage API run.</p>
+        <p className="form-help">No fixed antennas are inside this scene. Add one added antenna transmitter for this Coverage API run.</p>
         <TextField
           label="Antenna ID"
           value={form.transmitter.id}
@@ -1328,7 +1331,7 @@ function SinrRoleFields({ antennas, error, onChange, roles, simulationLabel = "S
     <>
       {availableAntennas.length < 3 && (
         <p className="form-help">
-          Add {3 - availableAntennas.length} more type 2 antenna(s) before running {simulationLabel}.
+          Add {3 - availableAntennas.length} more added antenna(s) before running {simulationLabel}.
         </p>
       )}
       {SINR_ROLES.map((role) => (
@@ -1342,7 +1345,7 @@ function SinrRoleFields({ antennas, error, onChange, roles, simulationLabel = "S
             <option value="">Select {role.label.toLowerCase()}</option>
             {availableAntennas.map((antenna) => (
               <option key={antenna.id} value={antenna.id}>
-                {antenna.id} ({antenna._type === "type2" ? "Type 2" : "Type 1"})
+                {antenna.id} ({antenna._type === "type2" ? "Added antenna" : "Fixed antenna"})
               </option>
             ))}
           </select>
@@ -1911,11 +1914,11 @@ function formatTransmitterCoordinates(transmitter) {
 
 function validateSimulationAntennas(antennas, activeScene, maxAntennas, label) {
   if (!Array.isArray(antennas) || antennas.length === 0) {
-    return `Add at least one antenna for ${label}.`;
+    return `Add or check at least one antenna for ${label}.`;
   }
 
   if (antennas.length > maxAntennas) {
-    return `${label} supports up to ${maxAntennas} antennas. The selected scene currently has ${antennas.length}.`;
+    return `${label} supports up to ${maxAntennas} active antennas. The selected scene currently has ${antennas.length}.`;
   }
 
   const seenIds = new Set();
@@ -2050,7 +2053,7 @@ function coverageTransmitter(form, antennas) {
 
 function validateCoverageTransmitter(transmitter, antennas, activeScene) {
   if (antennas.length > 0 && !transmitter.id) {
-    return "Select one fixed antenna or add a type 2 transmitter.";
+    return "Select one fixed antenna or add an added antenna transmitter.";
   }
 
   if (!transmitter || Object.keys(transmitter).length === 0) {

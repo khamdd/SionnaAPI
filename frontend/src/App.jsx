@@ -164,6 +164,10 @@ export default function App() {
       networkAntennaSettingsByScene,
     ],
   );
+  const activeNetworkAntennas = useMemo(
+    () => antennas.filter(isAntennaEnabled),
+    [antennas],
+  );
   const rsrpAntennas = useMemo(
     () => networkCoverageAntennasForScene(
       activeScene,
@@ -177,6 +181,10 @@ export default function App() {
       rsrpType2AntennasByScene,
       rsrpAntennaSettingsByScene,
     ],
+  );
+  const activeRsrpAntennas = useMemo(
+    () => rsrpAntennas.filter(isAntennaEnabled),
+    [rsrpAntennas],
   );
   const sinrAntennas = useMemo(
     () => networkCoverageAntennasForScene(
@@ -532,7 +540,7 @@ export default function App() {
 
     try {
       const validationError = validateNetworkCoverageSimulationAntennas(
-        antennas,
+        activeNetworkAntennas,
         activeScene,
       );
 
@@ -540,7 +548,7 @@ export default function App() {
         throw new Error(validationError);
       }
 
-      const result = await runNetworkCoverage(buildNetworkCoveragePayload(antennas, activeScene));
+      const result = await runNetworkCoverage(buildNetworkCoveragePayload(activeNetworkAntennas, activeScene));
 
       if (result.status === "queued") {
         showQueuedPrompt({
@@ -598,6 +606,8 @@ export default function App() {
         currentSetting.tx_power_current = value;
       } else if (field === "azimuth") {
         currentSetting.azimuth = value;
+      } else if (field === "enabled") {
+        currentSetting.enabled = Boolean(value);
       }
 
       sceneSettings[antennaId] = currentSetting;
@@ -612,8 +622,8 @@ export default function App() {
       return { error: "Select a scene before adding an antenna." };
     }
 
-    if (antennas.length >= MAX_NETWORK_COVERAGE_ANTENNAS) {
-      return { error: `Network Coverage supports up to ${MAX_NETWORK_COVERAGE_ANTENNAS} antennas.` };
+    if (activeNetworkAntennas.length >= MAX_NETWORK_COVERAGE_ANTENNAS) {
+      return { error: `Network Coverage supports up to ${MAX_NETWORK_COVERAGE_ANTENNAS} active antennas. Uncheck one antenna before adding another.` };
     }
 
     const normalized = normalizeAntennaBase(antenna);
@@ -717,6 +727,8 @@ export default function App() {
         currentSetting.tx_power_current = value;
       } else if (field === "azimuth") {
         currentSetting.azimuth = value;
+      } else if (field === "enabled") {
+        currentSetting.enabled = Boolean(value);
       }
 
       sceneSettings[antennaId] = currentSetting;
@@ -731,8 +743,8 @@ export default function App() {
       return { error: "Select a scene before adding an antenna." };
     }
 
-    if (rsrpAntennas.length >= MAX_RSRP_SIMULATION_ANTENNAS) {
-      return { error: `RSRP Simulation supports up to ${MAX_RSRP_SIMULATION_ANTENNAS} antennas.` };
+    if (activeRsrpAntennas.length >= MAX_RSRP_SIMULATION_ANTENNAS) {
+      return { error: `RSRP Simulation supports up to ${MAX_RSRP_SIMULATION_ANTENNAS} active antennas. Uncheck one antenna before adding another.` };
     }
 
     const normalized = normalizeAntennaBase(antenna);
@@ -1693,6 +1705,7 @@ export default function App() {
         <NetworkCoveragePage
           activeScene={activeScene}
           antennas={antennas}
+          displayAntennas={activeNetworkAntennas}
           canvasRef={canvasRef}
           coverageImageUrl={coverageImageUrl}
           hover={hover}
@@ -1729,6 +1742,7 @@ export default function App() {
         <RsrpSimulationPage
           activeScene={activeScene}
           antennas={rsrpAntennas}
+          simulationAntennas={activeRsrpAntennas}
           maxAntennas={MAX_RSRP_SIMULATION_ANTENNAS}
           onAddType2Antenna={addRsrpType2Antenna}
           onQueueOpen={() => navigate("/queue")}
@@ -2001,6 +2015,7 @@ function NetworkCoveragePage({
   antennas,
   canvasRef,
   coverageImageUrl,
+  displayAntennas = antennas,
   hover,
   isSceneLoading,
   isRunning,
@@ -2024,7 +2039,7 @@ function NetworkCoveragePage({
     <main className="app-shell">
       <MapPanel
         activeScene={activeScene}
-        antennas={antennas}
+        antennas={displayAntennas}
         coverageImageUrl={coverageImageUrl}
         canvasRef={canvasRef}
         hover={hover}
@@ -2058,6 +2073,7 @@ function NetworkCoveragePage({
           onAddType2={onAddType2Antenna}
           onChange={onUpdateAntenna}
           onRemoveType2={onRemoveType2Antenna}
+          showEnabledToggle
         />
       </aside>
     </main>
@@ -2404,6 +2420,7 @@ function applySimulationSettings(antenna, settings = {}, type) {
     ...base,
     _type: type,
     azimuth: settings.azimuth ?? base.azimuth,
+    enabled: settings.enabled ?? true,
     tilt: {
       ...base.tilt,
       current: settings.tilt_current ?? base.tilt.current,
@@ -2418,9 +2435,14 @@ function applySimulationSettings(antenna, settings = {}, type) {
 function simulationSettingsForAntenna(antenna) {
   return {
     azimuth: antenna.azimuth,
+    enabled: antenna.enabled ?? true,
     tilt_current: antenna.tilt?.current,
     tx_power_current: antenna.tx_power?.current,
   };
+}
+
+function isAntennaEnabled(antenna) {
+  return antenna?.enabled !== false;
 }
 
 function validateNetworkCoverageSimulationAntennas(
@@ -2429,11 +2451,11 @@ function validateNetworkCoverageSimulationAntennas(
   maxAntennas = MAX_NETWORK_COVERAGE_ANTENNAS,
 ) {
   if (!Array.isArray(antennas) || antennas.length === 0) {
-    return "Add at least one antenna for Network Coverage.";
+    return "Add or check at least one antenna for Network Coverage.";
   }
 
   if (antennas.length > maxAntennas) {
-    return `Network Coverage supports up to ${maxAntennas} antennas. The selected scene currently has ${antennas.length}.`;
+    return `Network Coverage supports up to ${maxAntennas} active antennas. The selected scene currently has ${antennas.length}.`;
   }
 
   const seenIds = new Set();
@@ -2711,6 +2733,7 @@ function normalizeStoredAntennaSettings(settings) {
     const azimuth = Number(value?.azimuth);
     const tiltCurrent = Number(value?.tilt_current);
     const txPowerCurrent = Number(value?.tx_power_current);
+    const enabled = value?.enabled === undefined ? true : Boolean(value.enabled);
 
     if (
       !antennaId
@@ -2723,6 +2746,7 @@ function normalizeStoredAntennaSettings(settings) {
 
     normalized[antennaId] = {
       azimuth,
+      enabled,
       tilt_current: tiltCurrent,
       tx_power_current: txPowerCurrent,
     };
