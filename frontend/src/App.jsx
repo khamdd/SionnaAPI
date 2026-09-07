@@ -1854,7 +1854,13 @@ export default function App() {
     : route;
 
   if (authStatus === "checking") {
-    return <p>Checking session...</p>
+    return (
+      <main className="session-check" role="status">
+        <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>
+        <strong>Opening Sionna Planner</strong>
+        <p>Checking your workspace session...</p>
+      </main>
+    );
   }
 
   if (!currentUser || authStatus === "unauthenticated") {
@@ -2068,6 +2074,7 @@ export default function App() {
 }
 
 function Navbar({
+  activeScene,
   currentUser,
   hasWorkScene,
   isBusy,
@@ -2082,18 +2089,25 @@ function Navbar({
   const simulationRoutes = visibleRoutes.filter((item) => (
     item.path !== "/queue" && item.path !== "/history"
   ));
-  const queueRoutes = visibleRoutes.filter((item) => item.path === "/queue");
-  const historyRoutes = visibleRoutes.filter((item) => item.path === "/history");
+  const resultRoutes = visibleRoutes.filter((item) => (
+    item.path === "/queue" || item.path === "/history"
+  ));
 
   return (
     <header className="app-navbar">
-      <div>
-        <strong>Sionna Planner</strong>
+      <div className="brand-block">
+        <span className="brand-mark" aria-hidden="true">
+          <i /><i /><i />
+        </span>
+        <div>
+          <strong>Sionna Planner</strong>
+          <span>Radio network workspace</span>
+        </div>
       </div>
       <nav aria-label="Primary navigation">
         {simulationRoutes.length > 0 && (
           <div className="nav-group simulation-nav" aria-label="Simulation tools">
-            <span>Simulations</span>
+            <span>Planning tools</span>
             <div>
               {simulationRoutes.map((item) => (
                 <button
@@ -2101,67 +2115,104 @@ function Navbar({
                   className={route === item.path || (item.path === SIMULATION_ENTRY_ROUTE && route === NETWORK_OPTIMIZATION_ROUTE) ? "active" : ""}
                   type="button"
                   disabled={isBusy}
+                  aria-current={route === item.path ? "page" : undefined}
+                  title={item.label}
                   onClick={() => onNavigate(item.path)}
                 >
+                  <NavIcon path={item.path} />
                   {item.label}
                 </button>
               ))}
             </div>
           </div>
         )}
-        {queueRoutes.length > 0 && (
-          <div className="nav-group records-nav queue-nav" aria-label="Simulation queue">
+        {resultRoutes.length > 0 && (
+          <div className="nav-group records-nav records-section" aria-label="Simulation results">
+            <span>Results</span>
             <div>
-              {queueRoutes.map((item) => (
+              {resultRoutes.map((item) => (
                 <button
                   key={item.path}
                   className={route === item.path ? "active" : ""}
                   type="button"
                   disabled={isBusy}
+                  aria-current={route === item.path ? "page" : undefined}
+                  title={item.label}
                   onClick={() => onNavigate(item.path)}
                 >
+                  <NavIcon path={item.path} />
                   {item.label}
                 </button>
               ))}
             </div>
           </div>
         )}
-        {historyRoutes.length > 0 && (
-          <div className="nav-group records-nav history-nav" aria-label="Saved simulation history">
-            <div>
-              {historyRoutes.map((item) => (
+        <div className="nav-context">
+          {hasWorkScene && (
+            <div className="scene-context">
+              <span>Active work scene</span>
+              <strong title={activeScene?.name}>{activeScene?.name || "Loading scene"}</strong>
+              <button type="button" disabled={isBusy} onClick={onChangeScene}>
+                Change scene
+              </button>
+            </div>
+          )}
+          <div className="user-menu">
+            <div className="user-identity">
+              <span className="user-avatar" aria-hidden="true">
+                {(currentUser?.username || "U").slice(0, 1).toUpperCase()}
+              </span>
+              <span>
+                <small>Signed in as</small>
+                <strong>{currentUser?.username || "User"}</strong>
+              </span>
+            </div>
+            <div className="user-menu-panel">
+              {!hasWorkScene && (
                 <button
-                  key={item.path}
-                  className={route === item.path ? "active" : ""}
                   type="button"
                   disabled={isBusy}
-                  onClick={() => onNavigate(item.path)}
+                  onClick={() => onNavigate(SCENE_SELECTION_ROUTE)}
                 >
-                  {item.label}
+                  Select scene
                 </button>
-              ))}
+              )}
+              {hasWorkScene && (
+                <button
+                  className="mobile-change-scene"
+                  type="button"
+                  disabled={isBusy}
+                  onClick={onChangeScene}
+                >
+                  Change scene
+                </button>
+              )}
+              <button className="logout-button" type="button" onClick={onLogout}>
+                Sign out
+              </button>
             </div>
-          </div>
-        )}
-        <div className="user-menu">
-          <button className="user-menu-trigger" type="button">
-            {currentUser?.username || "User"}
-          </button>
-          <div className="user-menu-panel">
-            <button
-              type="button"
-              disabled={isBusy}
-              onClick={onChangeScene}
-            >
-              Change scene
-            </button>
-            <button type="button" onClick={onLogout}>
-              Logout
-            </button>
           </div>
         </div>
       </nav>
     </header>
+  );
+}
+
+function NavIcon({ path }) {
+  const paths = {
+    "/network": "M4 16v4m5-8v8m5-13v13m5-17v17M2 20h20",
+    "/coverage": "M3 6.5 12 2l9 4.5-9 4.5-9-4.5Zm0 5L12 16l9-4.5M3 16.5 12 21l9-4.5",
+    "/rsrp": "M4.9 19.1a10 10 0 0 1 14.2 0M8 16a5.7 5.7 0 0 1 8 0m-5.4-3a2 2 0 0 1 2.8 0M12 21h.01",
+    "/sinr": "M4 18V9m5 9V5m5 13v-7m5 7V3M2 21h20",
+    "/throughput": "M3 17 8 12l4 4 8-9m-5 0h5v5",
+    "/queue": "M5 4h14v4H5V4Zm0 6h14v4H5v-4Zm0 6h14v4H5v-4Z",
+    "/history": "M12 8v5l3 2m6-3a9 9 0 1 1-3-6.7M21 3v6h-6",
+  };
+
+  return (
+    <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d={paths[path] || paths["/network"]} />
+    </svg>
   );
 }
 

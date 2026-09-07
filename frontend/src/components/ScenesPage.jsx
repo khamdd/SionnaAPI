@@ -56,8 +56,8 @@ export default function ScenesPage({
     <main className="route-page">
       <div className="page-title with-action">
         <div>
-          <h1>Select Work Scene</h1>
-          <p>Choose the 3D scene used by Network Coverage, RSRP, SINR, throughput, and history workflows.</p>
+          <h1>Choose a work scene</h1>
+          <p>Select the geographic model used by every simulation and saved result in this workspace.</p>
         </div>
         <div className="page-title-actions">
           <button className="primary-button" type="button" disabled={isLoading} onClick={onCreateScene}>

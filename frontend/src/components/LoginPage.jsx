@@ -47,11 +47,26 @@ export default function LoginPage({ onAuthenticated }) {
 
   return (
     <main className="login-page">
-      <section className="login-panel">
+      <section className="login-intro" aria-label="Sionna Planner overview">
+        <div className="login-intro-mark" aria-hidden="true">
+          <span /><span /><span /><i />
+        </div>
         <div>
           <strong>Sionna Planner</strong>
+          <h1>Plan radio networks with traceable simulation inputs.</h1>
+          <p>Configure scenes, antennas, solver parameters, and result history in one engineering workspace.</p>
+        </div>
+        <dl>
+          <div><dt>Workspace</dt><dd>Scene-based</dd></div>
+          <div><dt>Analysis</dt><dd>Coverage · RSRP · SINR</dd></div>
+          <div><dt>Results</dt><dd>Queued and auditable</dd></div>
+        </dl>
+      </section>
+      <section className="login-panel">
+        <div>
+          <strong>Secure workspace access</strong>
           <h1>{isRegistering ? "Create account" : "Sign in"}</h1>
-          <p>Use a project account to access simulations, scenes, and history.</p>
+          <p>{isRegistering ? "Create a project account to start planning." : "Enter your project account credentials."}</p>
         </div>
 
         <div className="login-tabs" role="tablist" aria-label="Authentication mode">
@@ -61,7 +76,7 @@ export default function LoginPage({ onAuthenticated }) {
             disabled={isLoading}
             onClick={() => switchMode("login")}
           >
-            Login
+            Sign in
           </button>
           <button
             className={mode === "register" ? "active" : ""}
@@ -69,7 +84,7 @@ export default function LoginPage({ onAuthenticated }) {
             disabled={isLoading}
             onClick={() => switchMode("register")}
           >
-            Register
+            Create account
           </button>
         </div>
 
