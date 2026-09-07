@@ -26,12 +26,14 @@ export function formatMaybeNumber(value) {
   return numericValue.toFixed(Number.isInteger(numericValue) ? 0 : 1);
 }
 
-export function formatRange(range) {
+export function formatRange(range, unit = "") {
   if (!range) {
     return "--";
   }
 
-  return `${formatMaybeNumber(range.min)} / ${formatMaybeNumber(range.current)} / ${formatMaybeNumber(range.max)}`;
+  const suffix = unit ? ` ${unit}` : "";
+
+  return `${formatMaybeNumber(range.current)}${suffix} (range ${formatMaybeNumber(range.min)}–${formatMaybeNumber(range.max)}${suffix})`;
 }
 
 export function formatNeighborDelta(value) {

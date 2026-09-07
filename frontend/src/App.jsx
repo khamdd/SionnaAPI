@@ -62,6 +62,7 @@ import {
 import {
   lngLatBoundsError,
   lngLatInsideBounds,
+  lngLatToScenePosition,
   solverForScene,
 } from "./utils/scene";
 
@@ -2638,19 +2639,21 @@ function simulationJobToHistoryItem(job, result = null) {
     solver: response.solver || request.solver,
     request_json: request,
     response_json: response,
-    antennas: antennaSnapshotsForJob(request),
+    antennas: antennaSnapshotsForJob(request, scene.bounds),
     artifacts: [],
   };
 }
 
-function antennaSnapshotsForJob(request) {
+function antennaSnapshotsForJob(request, sceneBounds) {
   if (!Array.isArray(request.antennas)) {
     return [];
   }
 
   return request.antennas.map((antenna) => ({
     antenna_code: antenna.id,
-    position: antenna.position,
+    position: Array.isArray(antenna.position)
+      ? antenna.position
+      : lngLatToScenePosition(antenna, sceneBounds),
     azimuth_deg: antenna.azimuth,
     tilt: antenna.tilt,
     tx_power: antenna.tx_power,

@@ -45,7 +45,9 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   until the user saves them. Simulation Queue supports selecting individual
   deletable entries, selecting all non-running entries, and deleting the selected
   entries after confirmation. Running entries cannot be selected; saved History
-  results remain when their queue entries are removed.
+  results remain when their queue entries are removed. Network Coverage result
+  antenna snapshots derive scene positions from the request's geographic
+  coordinates and label tilt/power as the current value plus its allowed range.
 - History UI supports viewing details, preview loading state, deleting one or
   many saved runs, and comparing compatible successful runs. The history list is
   scoped to the currently selected work scene.

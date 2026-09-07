@@ -140,8 +140,8 @@ function NetworkCoverageHistory({ item, onPreviewLoadingChange }) {
             <dt>Antenna</dt><dd>{formatText(antenna.antenna_code)}</dd>
             <dt>Position</dt><dd>{formatPositionValue(antenna.position)}</dd>
             <dt>Azimuth</dt><dd>{formatMaybeNumber(antenna.azimuth_deg)} deg</dd>
-            <dt>Tilt</dt><dd>{formatRange(antenna.tilt)} deg</dd>
-            <dt>Power</dt><dd>{formatRange(antenna.tx_power)} dBm</dd>
+            <dt>Tilt</dt><dd>{formatRange(antenna.tilt, "deg")}</dd>
+            <dt>Power</dt><dd>{formatRange(antenna.tx_power, "dBm")}</dd>
           </dl>
         ))
       ) : (
