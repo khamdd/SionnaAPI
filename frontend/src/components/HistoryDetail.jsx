@@ -11,6 +11,10 @@ import {
   formatDateTime,
 } from "../utils/format";
 import { RsrpUserDialog } from "./ApiPages";
+import {
+  CoverageColorLegend,
+  CoverageMapControls,
+} from "./CoverageMapPresentation";
 import Scene3DPreview from "./Scene3DPreview";
 
 export default function HistoryDetail({ item, onPreviewLoadingChange }) {
@@ -159,31 +163,49 @@ function HistoryCoveragePreview({
     response_json: fullResult,
   } : item);
   const [selectedCell, setSelectedCell] = useState(null);
+  const [coverageDisplayMode, setCoverageDisplayMode] = useState("quality");
+
+  useEffect(() => {
+    setCoverageDisplayMode("quality");
+    setSelectedCell(null);
+  }, [item.id]);
 
   if (item.scene_bounds) {
     return (
-      <div className="history-coverage-preview">
-        <Scene3DPreview
-          antennas={historyPreviewAntennas(item, mode)}
-          bounds={item.scene_bounds}
-          className="history-scene-3d"
-          coverageGrid={grid}
-          coverageImageUrl={grid ? "" : fallbackImageUrl}
-          onCoverageCellSelect={setSelectedCell}
-          onLoadingChange={onPreviewLoadingChange}
-          sceneName={item.scene_name}
-          selectedCoverageCell={selectedCell}
-          showOverlay={false}
-          solver={historyPreviewSolver(item)}
-          viewMode="top"
-        />
-        {selectedCell && (
-          <HistoryCoverageCellDialog
-            cell={selectedCell}
-            onClose={() => setSelectedCell(null)}
+      <>
+        <div className="history-coverage-preview">
+          <Scene3DPreview
+            antennas={historyPreviewAntennas(item, mode)}
+            bounds={item.scene_bounds}
+            className="history-scene-3d"
+            coverageDisplayMode={coverageDisplayMode}
+            coverageGrid={grid}
+            coverageImageUrl={grid ? "" : fallbackImageUrl}
+            onCoverageCellSelect={setSelectedCell}
+            onLoadingChange={onPreviewLoadingChange}
+            sceneName={item.scene_name}
+            selectedCoverageCell={selectedCell}
+            showOverlay={false}
+            solver={historyPreviewSolver(item)}
+            viewMode="top"
           />
+          {selectedCell && (
+            <HistoryCoverageCellDialog
+              cell={selectedCell}
+              onClose={() => setSelectedCell(null)}
+            />
+          )}
+        </div>
+        {mode === "network_coverage" && grid && (
+          <>
+            <CoverageMapControls
+              mode={coverageDisplayMode}
+              onModeChange={setCoverageDisplayMode}
+            />
+            <CoverageColorLegend mode={coverageDisplayMode} />
+          </>
         )}
-      </div>
+      </>
     );
   }
 
