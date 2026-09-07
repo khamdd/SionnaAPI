@@ -42,7 +42,7 @@ import {
 import ComparisonResult from "./components/ComparisonResult";
 import HistoryDetail from "./components/HistoryDetail";
 import HistoryModal, { HistoryModalBody } from "./components/HistoryModal";
-import HistoryPanel from "./components/HistoryPanel";
+import HistoryPanel, { BulkDeletePanel } from "./components/HistoryPanel";
 import { TrashIcon } from "./components/Icons";
 import LoginPage from "./components/LoginPage";
 import MapPanel from "./components/MapPanel";
@@ -124,6 +124,7 @@ export default function App() {
   const [jobProgressLabel, setJobProgressLabel] = useState("");
   const [simulationJobs, setSimulationJobs] = useState([]);
   const [selectedJobId, setSelectedJobId] = useState(null);
+  const [selectedJobDeleteIds, setSelectedJobDeleteIds] = useState(() => new Set());
   const [queuedPrompt, setQueuedPrompt] = useState(null);
   const [apiProgressLabel, setApiProgressLabel] = useState("");
   const [historyProgressLabel, setHistoryProgressLabel] = useState("");
@@ -342,6 +343,7 @@ export default function App() {
       if (!result.database_configured) {
         setSimulationJobs([]);
         setSelectedJobId(null);
+        setSelectedJobDeleteIds(new Set());
         setJobStatus("Database is not configured. Set DATABASE_URL to use the simulation queue.");
         setJobError(true);
         return;
@@ -355,6 +357,11 @@ export default function App() {
       setSimulationJobs(items);
       setSelectedJobId((current) => (
         items.some((item) => item.id === current) ? current : null
+      ));
+      setSelectedJobDeleteIds((current) => new Set(
+        [...current].filter((id) => items.some((item) => (
+          item.id === id && String(item.status || "").toLowerCase() !== "running"
+        ))),
       ));
       setJobStatus(items.length ? `${items.length} simulation jobs recorded.` : "No simulation jobs recorded.");
     } catch (error) {
@@ -1730,6 +1737,72 @@ export default function App() {
     }
   }
 
+  function toggleJobDeleteSelection(jobId) {
+    const job = simulationJobs.find((item) => item.id === jobId);
+    if (!job || String(job.status || "").toLowerCase() === "running") {
+      return;
+    }
+    setSelectedJobDeleteIds((current) => toggleSetValue(current, jobId));
+  }
+
+  function toggleAllJobDeleteSelection() {
+    const deletableIds = simulationJobs
+      .filter((job) => String(job.status || "").toLowerCase() !== "running")
+      .map((job) => job.id);
+    setSelectedJobDeleteIds((current) => (
+      deletableIds.length > 0 && deletableIds.every((id) => current.has(id))
+        ? new Set()
+        : new Set(deletableIds)
+    ));
+  }
+
+  async function deleteSelectedJobs() {
+    if (jobProgressLabel || selectedJobDeleteIds.size === 0) {
+      return;
+    }
+
+    const selectedIds = [...selectedJobDeleteIds];
+    const confirmed = window.confirm(
+      `Delete ${selectedIds.length} selected simulation queue entries? Saved History results will remain.`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setJobProgressLabel("Deleting selected queue entries...");
+    setJobStatus(`Deleting ${selectedIds.length} selected queue entries...`);
+    setJobError(false);
+
+    try {
+      const results = await Promise.allSettled(
+        selectedIds.map((jobId) => deleteSimulationJob(jobId)),
+      );
+      const deletedIds = new Set(
+        selectedIds.filter((id, index) => (
+          results[index].status === "fulfilled" && results[index].value?.deleted
+        )),
+      );
+      const failedIds = selectedIds.filter((id) => !deletedIds.has(id));
+
+      if (selectedJobId && deletedIds.has(selectedJobId)) {
+        closeModal();
+      }
+
+      setSelectedJobDeleteIds(new Set(failedIds));
+      await loadJobs();
+
+      if (failedIds.length > 0) {
+        setJobStatus(`Deleted ${deletedIds.size}; ${failedIds.length} failed or started running.`);
+        setJobError(true);
+      } else {
+        setJobStatus(`Deleted ${deletedIds.size} selected queue entries.`);
+      }
+    } finally {
+      setJobProgressLabel("");
+    }
+  }
+
   function closeModal() {
     setModalContent(null);
     setSelectedHistoryId(null);
@@ -1917,10 +1990,14 @@ export default function App() {
           jobStatus={jobStatus}
           isLoading={Boolean(jobProgressLabel)}
           onDiscard={discardSimulationJob}
+          onDeleteSelected={deleteSelectedJobs}
           onOpen={openJobDetail}
           onOpenHistory={openHistoryDetail}
           onRefresh={loadJobs}
           onSave={saveSimulationJob}
+          onToggleDeleteSelection={toggleJobDeleteSelection}
+          onToggleSelectAll={toggleAllJobDeleteSelection}
+          selectedDeleteIds={selectedJobDeleteIds}
           selectedJobId={selectedJobId}
         />
       )}
@@ -2212,12 +2289,24 @@ function QueueRoutePage({
   jobs,
   jobStatus,
   onDiscard,
+  onDeleteSelected,
   onOpen,
   onOpenHistory,
   onRefresh,
   onSave,
+  onToggleDeleteSelection,
+  onToggleSelectAll,
+  selectedDeleteIds,
   selectedJobId,
 }) {
+  const deletableJobs = jobs.filter((job) => (
+    String(job.status || "").toLowerCase() !== "running"
+  ));
+  const allSelected = deletableJobs.length > 0 && deletableJobs.every((job) => (
+    selectedDeleteIds.has(job.id)
+  ));
+  const someSelected = selectedDeleteIds.size > 0 && !allSelected;
+
   return (
     <main className="route-page">
       <div className="page-title with-action">
@@ -2232,17 +2321,28 @@ function QueueRoutePage({
       <section className="history-page-panel queue-page-panel">
         <div className="history-view">
           <p className={`history-status ${jobError ? "error-text" : ""}`}>{jobStatus}</p>
+          <BulkDeletePanel
+            allSelected={allSelected}
+            isLoading={isLoading}
+            itemCount={deletableJobs.length}
+            onDeleteSelected={onDeleteSelected}
+            onToggleSelectAll={onToggleSelectAll}
+            selectedCount={selectedDeleteIds.size}
+            someSelected={someSelected}
+          />
           <div className="history-list">
             {jobs.map((job) => (
               <QueueRow
                 key={job.id}
                 isLoading={isLoading}
                 isSelected={job.id === selectedJobId}
+                isSelectedForDelete={selectedDeleteIds.has(job.id)}
                 job={job}
                 onDiscard={onDiscard}
                 onOpen={onOpen}
                 onOpenHistory={onOpenHistory}
                 onSave={onSave}
+                onToggleDeleteSelection={onToggleDeleteSelection}
               />
             ))}
           </div>
@@ -2255,11 +2355,13 @@ function QueueRoutePage({
 function QueueRow({
   isLoading,
   isSelected,
+  isSelectedForDelete,
   job,
   onDiscard,
   onOpen,
   onOpenHistory,
   onSave,
+  onToggleDeleteSelection,
 }) {
   const status = String(job.status || "").toLowerCase();
   const isSucceeded = status === "succeeded";
@@ -2271,6 +2373,18 @@ function QueueRow({
 
   return (
     <div className="queue-row">
+      <label
+        className="history-select"
+        title={isRunning ? "Running jobs cannot be deleted" : "Select queue entry for bulk deletion"}
+      >
+        <input
+          type="checkbox"
+          checked={isSelectedForDelete}
+          disabled={isLoading || isRunning}
+          aria-label={`Select ${formatSimulationType(job.simulation_type)} queue entry`}
+          onChange={() => onToggleDeleteSelection(job.id)}
+        />
+      </label>
       <button
         className={`history-item ${isSelected ? "active" : ""}`}
         type="button"

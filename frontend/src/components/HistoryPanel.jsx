@@ -152,7 +152,7 @@ function HistoryRow({
   );
 }
 
-function BulkDeletePanel({
+export function BulkDeletePanel({
   allSelected,
   isLoading,
   itemCount,

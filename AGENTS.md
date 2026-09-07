@@ -42,7 +42,10 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 - Simulation queue results are stored through
   `backend/services/simulation_job_store.py`. Heavy queued results are written as
   temporary JSON files under `static/simulation-job-results/` and are not history
-  until the user saves them.
+  until the user saves them. Simulation Queue supports selecting individual
+  deletable entries, selecting all non-running entries, and deleting the selected
+  entries after confirmation. Running entries cannot be selected; saved History
+  results remain when their queue entries are removed.
 - History UI supports viewing details, preview loading state, deleting one or
   many saved runs, and comparing compatible successful runs. The history list is
   scoped to the currently selected work scene.

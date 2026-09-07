@@ -2227,7 +2227,7 @@ textarea:disabled {
 
 .queue-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 82px 82px 38px;
+  grid-template-columns: 28px minmax(0, 1fr) 82px 82px 38px;
   gap: 8px;
   align-items: stretch;
 }
@@ -3410,7 +3410,7 @@ textarea:disabled {
   }
 
   .queue-row {
-    grid-template-columns: minmax(0, 1fr) 72px 72px 38px;
+    grid-template-columns: 28px minmax(0, 1fr) 72px 72px 38px;
   }
 
   .history-bulk-panel {
