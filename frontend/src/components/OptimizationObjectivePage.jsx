@@ -157,40 +157,106 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
   const valid = objectives.length > 0 && new Set(objectives.map((o) => o.metric)).size === objectives.length;
   return (
     <main className="route-page optimization-page">
-      <div className="page-header">
-        <div><h1>Network Coverage Optimization</h1><p>Search tilt, power, and azimuth to find a setup that meets your targets.</p></div>
+      <div className="page-title with-action">
+        <div><h1>Network Coverage Optimization</h1><p>Search antenna tilt, power, and azimuth combinations against measurable coverage targets.</p></div>
         <button className="ghost-button" onClick={onBack}>Back to Network Coverage</button>
       </div>
-      <form className="optimization-panel" onSubmit={start}>
-        <h2>Targets</h2>
-        <fieldset disabled={busy || saving} className="optimization-run-fields">
-          {objectives.map((objective, index) => (
-            <div className="optimization-target-row" key={index}>
-              <label>Metric<select value={objective.metric} onChange={(e) => update(index, "metric", e.target.value)}>
-                {METRICS.map(([id, label]) => <option key={id} value={id} disabled={objectives.some((o, i) => i !== index && o.metric === id)}>{label}</option>)}
-              </select></label>
-              <label>Condition<select value={objective.operator} onChange={(e) => update(index, "operator", e.target.value)}>
-                {["<=", ">=", "<", ">", "="].map((operator) => <option key={operator}>{operator}</option>)}
-              </select></label>
-              <label>Target ({METRICS.find(([id]) => id === objective.metric)?.[2]})<input type="number" required min="0" max={objective.metric === "average_overlap_count" ? 10 : 100} step="any" value={objective.target} onChange={(e) => update(index, "target", e.target.value)} /></label>
-              {index > 0 && <button type="button" className="ghost-button" onClick={() => setObjectives((current) => current.filter((_, i) => i !== index))}>Remove target</button>}
-            </div>
-          ))}
-          {objectives.length < 2 && <button className="ghost-button" type="button" onClick={() => {
-            const metric = METRICS.find(([id]) => !objectives.some((o) => o.metric === id) && id === "overlap_area_percent") || METRICS.find(([id]) => id !== objectives[0].metric);
-            setObjectives([...objectives, { metric: metric[0], operator: metric[3], target: metric[4] }]);
-          }}>Add second target</button>}
-          <div className="optimization-target-row">
-            <label>Tilt step (degrees)<input type="number" required min="0.1" max="20" step="0.1" value={step} onChange={(e) => setStep(e.target.value)} /></label>
-            <label>Power step (dBm)<input type="number" required min="0.1" max="20" step="0.1" value={powerStep} onChange={(e) => setPowerStep(e.target.value)} /></label>
-            <label>Azimuth step (degrees)<input type="number" required min="1" max="180" step="1" value={azimuthStep} onChange={(e) => setAzimuthStep(e.target.value)} /></label>
-            <label>Maximum simulations<input type="number" required min="1" max="5000" step="1" value={limit} onChange={(e) => setLimit(e.target.value)} /></label>
+      <form className="optimization-panel optimization-config-panel" onSubmit={start}>
+        <header className="optimization-config-header">
+          <div>
+            <h2>Optimization setup</h2>
+            <p>Define success criteria and the resolution of the search.</p>
           </div>
-          <p>The limit includes the starting setup. The search first tests full-range combinations, keeps strong configurations from different regions, then refines them with smaller changes.</p>
-          <button className="primary-button" disabled={!valid || !baseRequest?.antennas?.length || baseRequest.antennas.length > 10}>Start optimization</button>
+          <span>{baseRequest?.antennas?.length || 0} active antennas</span>
+        </header>
+        <fieldset disabled={busy || saving} className="optimization-run-fields">
+          <section className="optimization-form-section">
+            <div className="optimization-form-heading">
+              <div>
+                <h3>Performance targets</h3>
+                <p>Add up to two conditions. Every target must be met for the search to finish early.</p>
+              </div>
+              <span>{objectives.length} of 2 configured</span>
+            </div>
+            <div className="optimization-objective-list">
+              {objectives.map((objective, index) => {
+                const unit = METRICS.find(([id]) => id === objective.metric)?.[2];
+                return (
+                  <div className="optimization-target-row" key={index}>
+                    <span className="optimization-target-index">Target {index + 1}</span>
+                    <label className="optimization-metric-field">
+                      <span>Metric</span>
+                      <select value={objective.metric} onChange={(e) => update(index, "metric", e.target.value)}>
+                        {METRICS.map(([id, label]) => <option key={id} value={id} disabled={objectives.some((o, i) => i !== index && o.metric === id)}>{label}</option>)}
+                      </select>
+                    </label>
+                    <label className="optimization-condition-field">
+                      <span>Condition</span>
+                      <select value={objective.operator} onChange={(e) => update(index, "operator", e.target.value)}>
+                        {["<=", ">=", "<", ">", "="].map((operator) => <option key={operator}>{operator}</option>)}
+                      </select>
+                    </label>
+                    <label className="optimization-target-field">
+                      <span>Target</span>
+                      <span className="optimization-input-unit">
+                        <input type="number" required min="0" max={objective.metric === "average_overlap_count" ? 10 : 100} step="any" value={objective.target} onChange={(e) => update(index, "target", e.target.value)} />
+                        <small>{unit}</small>
+                      </span>
+                    </label>
+                    {index > 0 && <button type="button" className="ghost-button optimization-remove-target" onClick={() => setObjectives((current) => current.filter((_, i) => i !== index))}>Remove</button>}
+                  </div>
+                );
+              })}
+            </div>
+            {objectives.length < 2 && <button className="ghost-button optimization-add-target" type="button" onClick={() => {
+              const metric = METRICS.find(([id]) => !objectives.some((o) => o.metric === id) && id === "overlap_area_percent") || METRICS.find(([id]) => id !== objectives[0].metric);
+              setObjectives([...objectives, { metric: metric[0], operator: metric[3], target: metric[4] }]);
+            }}>Add another target</button>}
+          </section>
+
+          <section className="optimization-form-section optimization-search-section">
+            <div className="optimization-form-heading">
+              <div>
+                <h3>Search resolution</h3>
+                <p>Smaller increments search more precisely but require more simulations.</p>
+              </div>
+            </div>
+            <div className="optimization-parameter-grid">
+              <label>
+                <span>Tilt increment</span>
+                <span className="optimization-input-unit"><input type="number" required min="0.1" max="20" step="0.1" value={step} onChange={(e) => setStep(e.target.value)} /><small>deg</small></span>
+              </label>
+              <label>
+                <span>Power increment</span>
+                <span className="optimization-input-unit"><input type="number" required min="0.1" max="20" step="0.1" value={powerStep} onChange={(e) => setPowerStep(e.target.value)} /><small>dBm</small></span>
+              </label>
+              <label>
+                <span>Azimuth increment</span>
+                <span className="optimization-input-unit"><input type="number" required min="1" max="180" step="1" value={azimuthStep} onChange={(e) => setAzimuthStep(e.target.value)} /><small>deg</small></span>
+              </label>
+              <label>
+                <span>Simulation budget</span>
+                <span className="optimization-input-unit"><input type="number" required min="1" max="5000" step="1" value={limit} onChange={(e) => setLimit(e.target.value)} /><small>runs</small></span>
+              </label>
+            </div>
+            <p className="optimization-method-note">The budget includes the starting setup. The search explores the full range first, retains strong diverse configurations, then refines them with smaller changes.</p>
+          </section>
+
+          <div className="optimization-run-bar">
+            <div>
+              <strong>Ready to evaluate</strong>
+              <span>{objectives.length} target{objectives.length === 1 ? "" : "s"}, up to {limit} simulations</span>
+            </div>
+            <button className="primary-button" disabled={!valid || !baseRequest?.antennas?.length || baseRequest.antennas.length > 10}>Start optimization</button>
+          </div>
         </fieldset>
-        <p role="status">{status}</p>
-        {busy && <p>{jobId ? "You can leave this page and return to check the run." : "Keep this page open while the request is starting."}</p>}
+        <div className={`optimization-status ${busy ? "running" : ""}`}>
+          <span aria-hidden="true" />
+          <div>
+            <p role="status">{status}</p>
+            {busy && <p>{jobId ? "You can leave this page and return to check the run." : "Keep this page open while the request is starting."}</p>}
+          </div>
+        </div>
         {error && <p className="error-text" role="alert">{error}</p>}
       </form>
       {optimization && <section className="optimization-panel">
