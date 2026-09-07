@@ -45,7 +45,7 @@ def test_worker_converts_each_candidate_and_reports_progress(monkeypatch):
     assert not failures
     assert len(calls) == 2
     assert progress[-1]["completed"] == 2
-    assert results[0]["optimization"]["best_request"]["antennas"][0]["tilt"]["current"] == 7
+    assert results[0]["optimization"]["best_request"]["antennas"][0]["tilt"]["current"] == 0
 
 
 def test_save_uses_winning_request_as_network_coverage(monkeypatch):

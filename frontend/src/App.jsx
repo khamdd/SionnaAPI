@@ -1836,11 +1836,19 @@ export default function App() {
           baseRequest={buildNetworkCoveragePayload(activeNetworkAntennas, activeScene)}
           storageKey={NETWORK_OPTIMIZATION_OBJECTIVES_STORAGE_KEY}
           onBack={() => navigate(SIMULATION_ENTRY_ROUTE)}
-          onApply={(tilts) => {
-            Object.entries(tilts).forEach(([id, tilt]) => updateAntenna(id, "tilt", tilt));
+          onApply={(settings) => {
+            Object.entries(settings).forEach(([id, values]) => {
+              if (values && typeof values === "object") {
+                updateAntenna(id, "tilt", values.tilt);
+                updateAntenna(id, "tx_power", values.tx_power);
+                updateAntenna(id, "azimuth", values.azimuth);
+                return;
+              }
+              updateAntenna(id, "tilt", values);
+            });
             setLatestGrid(null);
             setCoverageImageUrl("");
-            setRunStatus("Optimized tilts applied. Run Network Coverage to view the updated map.");
+            setRunStatus("Optimized antenna settings applied. Run Network Coverage to view the updated map.");
           }}
         />
       )}

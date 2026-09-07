@@ -160,7 +160,7 @@ class OptimizationObjective(BaseModel):
 class OptimizationVariable(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    field: Literal["tilt"] = "tilt"
+    field: Literal["tilt", "tx_power", "azimuth"]
     scope: Literal["enabled_antennas"] = "enabled_antennas"
 
 
@@ -174,7 +174,9 @@ class NetworkCoverageOptimizationRequest(BaseModel):
 
     base_request: NetworkCoverageRequest
     tilt_step: float = Field(default=2.0, gt=0, le=20, allow_inf_nan=False)
-    max_candidates: int = Field(default=10, ge=1, le=30)
+    power_step: float = Field(default=2.0, gt=0, le=20, allow_inf_nan=False)
+    azimuth_step: float = Field(default=30.0, gt=0, le=180, allow_inf_nan=False)
+    max_candidates: int = Field(default=300, ge=1, le=5000)
 
     objectives: List[OptimizationObjective] = Field(
         min_length=1,
@@ -182,9 +184,13 @@ class NetworkCoverageOptimizationRequest(BaseModel):
     )
 
     variables: List[OptimizationVariable] = Field(
-        default_factory=lambda: [OptimizationVariable()],
+        default_factory=lambda: [
+            OptimizationVariable(field="tilt"),
+            OptimizationVariable(field="tx_power"),
+            OptimizationVariable(field="azimuth"),
+        ],
         min_length=1,
-        max_length=1,
+        max_length=3,
     )
 
     @model_validator(mode="after")

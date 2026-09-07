@@ -20,16 +20,19 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
     { metric: "uncovered_area_percent", operator: "<=", target: 2 },
   ]);
   const [step, setStep] = useState(2);
-  const [limit, setLimit] = useState(10);
+  const [powerStep, setPowerStep] = useState(2);
+  const [azimuthStep, setAzimuthStep] = useState(30);
+  const [limit, setLimit] = useState(300);
   const [jobId, setJobId] = useState(() => read(runKey)?.jobId || null);
   const [sourceSignature, setSourceSignature] = useState(() => read(runKey)?.signature || "");
   const [busy, setBusy] = useState(() => Boolean(read(runKey)?.jobId));
   const [result, setResult] = useState(null);
-  const [status, setStatus] = useState("Ready to test nearby antenna tilt settings.");
+  const [status, setStatus] = useState("Ready to search antenna tilt, power, and azimuth combinations.");
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [applied, setApplied] = useState(false);
+  const [showTestedSetups, setShowTestedSetups] = useState(false);
   const signature = JSON.stringify(baseRequest);
 
   useEffect(() => {
@@ -67,6 +70,7 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
             setBusy(false);
             return;
           }
+          setShowTestedSetups(false);
           setResult(full);
           setSaved(Boolean(job.result_run_id));
           setBusy(false);
@@ -108,12 +112,21 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
     setError("");
     setSaved(false);
     setApplied(false);
+    setShowTestedSetups(false);
     setSourceSignature(signature);
     write(runKey, null);
     write(storageKey, { ...(read(storageKey) || {}), [activeScene.id]: { simulation_type: "network_coverage", objectives: targets } });
     setStatus("Starting optimization. The current setup will be simulated first...");
     try {
-      const response = await runNetworkCoverageOptimization({ scene_id: activeScene.id, base_request: baseRequest, objectives: targets, tilt_step: Number(step), max_candidates: Number(limit) });
+      const response = await runNetworkCoverageOptimization({
+        scene_id: activeScene.id,
+        base_request: baseRequest,
+        objectives: targets,
+        tilt_step: Number(step),
+        power_step: Number(powerStep),
+        azimuth_step: Number(azimuthStep),
+        max_candidates: Number(limit),
+      });
       if (response.job_id) {
         write(runKey, { jobId: response.job_id, signature });
         setJobId(response.job_id);
@@ -145,7 +158,7 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
   return (
     <main className="route-page optimization-page">
       <div className="page-header">
-        <div><h1>Network Coverage Optimization</h1><p>Try nearby antenna tilts and find a setup that meets your targets.</p></div>
+        <div><h1>Network Coverage Optimization</h1><p>Search tilt, power, and azimuth to find a setup that meets your targets.</p></div>
         <button className="ghost-button" onClick={onBack}>Back to Network Coverage</button>
       </div>
       <form className="optimization-panel" onSubmit={start}>
@@ -169,9 +182,11 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
           }}>Add second target</button>}
           <div className="optimization-target-row">
             <label>Tilt step (degrees)<input type="number" required min="0.1" max="20" step="0.1" value={step} onChange={(e) => setStep(e.target.value)} /></label>
-            <label>Maximum simulations<input type="number" required min="1" max="30" step="1" value={limit} onChange={(e) => setLimit(e.target.value)} /></label>
+            <label>Power step (dBm)<input type="number" required min="0.1" max="20" step="0.1" value={powerStep} onChange={(e) => setPowerStep(e.target.value)} /></label>
+            <label>Azimuth step (degrees)<input type="number" required min="1" max="180" step="1" value={azimuthStep} onChange={(e) => setAzimuthStep(e.target.value)} /></label>
+            <label>Maximum simulations<input type="number" required min="1" max="5000" step="1" value={limit} onChange={(e) => setLimit(e.target.value)} /></label>
           </div>
-          <p>The limit includes the starting setup. The search keeps stepping farther within each antenna's tilt range. Power and horizontal direction stay unchanged.</p>
+          <p>The limit includes the starting setup. The search first tests full-range combinations, keeps strong configurations from different regions, then refines them with smaller changes.</p>
           <button className="primary-button" disabled={!valid || !baseRequest?.antennas?.length || baseRequest.antennas.length > 10}>Start optimization</button>
         </fieldset>
         <p role="status">{status}</p>
@@ -180,7 +195,8 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
       </form>
       {optimization && <section className="optimization-panel">
         <h2>Best setup found</h2>
-        <p>{optimization.best.evaluation.passed ? "All targets met." : "Targets not fully met. Showing the closest setup found."} Tested {optimization.tested_count} setups.</p>
+        <p>{optimizationResultSummary(optimization)}</p>
+        {Number.isFinite(Number(optimization.global_tested)) && <p>Global exploration: {formatInteger(optimization.global_tested)} setups. Local refinement: {formatInteger(optimization.local_tested)} setups.</p>}
         <table className="optimization-results-table"><thead><tr><th>Metric</th><th>Before</th><th>After</th><th>Target</th></tr></thead>
           <tbody>{METRICS.map(([id, label, unit]) => {
             const target = optimization.objectives.find((o) => o.metric === id);
@@ -188,23 +204,33 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
           })}</tbody>
         </table>
         <p>Covered cells: {formatInteger(optimization.baseline.evaluation.kpis.covered_cells)} → {formatInteger(optimization.best.evaluation.kpis.covered_cells)} of {formatInteger(optimization.best.evaluation.kpis.total_cells)}.</p>
-        <h3>Tested setups</h3>
-        <table className="optimization-results-table"><thead><tr><th>Setup</th><th>Tilt</th><th>Covered cells</th><th>Covered area</th></tr></thead>
-          <tbody>{optimization.trials.map((trial) => (
-            <tr key={trial.id}>
-              <td>{trial.label}</td>
-              <td>{formatTiltMap(trial.tilts)}</td>
-              <td>{trial.error ? "Failed" : `${formatInteger(trial.evaluation.kpis.covered_cells)} / ${formatInteger(trial.evaluation.kpis.total_cells)}`}</td>
-              <td>{trial.error ? trial.error : formatMetric(trial.evaluation.kpis.covered_area_percent, "%", 4)}</td>
-            </tr>
-          ))}</tbody>
-        </table>
+        <button
+          type="button"
+          className="ghost-button"
+          aria-expanded={showTestedSetups}
+          onClick={() => setShowTestedSetups((current) => !current)}
+        >
+          {showTestedSetups ? "Minimize tested setups" : `Expand tested setups (${optimization.tested_count})`}
+        </button>
+        {showTestedSetups && <>
+          <h3>Tested setups</h3>
+          <table className="optimization-results-table"><thead><tr><th>Setup</th><th>Settings</th><th>Covered cells</th><th>Covered area</th></tr></thead>
+            <tbody>{optimization.trials.map((trial) => (
+              <tr key={trial.id}>
+                <td>{trial.label}</td>
+                <td>{formatSettingsMap(trial.settings, trial.tilts)}</td>
+                <td>{trial.error ? "Failed" : `${formatInteger(trial.evaluation.kpis.covered_cells)} / ${formatInteger(trial.evaluation.kpis.total_cells)}`}</td>
+                <td>{trial.error ? trial.error : formatMetric(trial.evaluation.kpis.covered_area_percent, "%", 4)}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </>}
         <p>When targets conflict, results are ranked by the combined shortfall, adjusted for each metric’s scale. Ties keep the earlier setup.</p>
-        {optimization.best.changes.length ? <ul>{optimization.best.changes.map((change) => <li key={change.antenna_id}>{change.antenna_id}: {change.from}° → {change.to}°</li>)}</ul> : <p>The starting setup remains the best found. No tilt changes suggested.</p>}
+        {optimization.best.changes.length ? <ul>{optimization.best.changes.map((change) => <li key={`${change.antenna_id}-${change.field || "tilt"}`}>{change.antenna_id} {formatField(change.field)}: {formatMetric(change.from)} → {formatMetric(change.to)}</li>)}</ul> : <p>The starting setup remains the best found. No changes suggested.</p>}
         {optimization.trials.some((trial) => trial.error) && <p className="error-text">Some setups failed: {optimization.trials.filter((trial) => trial.error).map((trial) => `${trial.label}: ${trial.error}`).join("; ")}</p>}
         {stale && !applied && <p className="error-text">Your antenna settings changed. Run optimization again before applying.</p>}
         <div className="panel-actions">
-          <button className="primary-button" disabled={busy || stale || applied || !optimization.best.changes.length} onClick={() => { onApply(optimization.best.tilts); setApplied(true); }}>{applied ? "Tilts applied" : "Apply suggested tilts"}</button>
+          <button className="primary-button" disabled={busy || stale || applied || !optimization.best.changes.length} onClick={() => { onApply(optimization.best.settings || optimization.best.tilts); setApplied(true); }}>{applied ? "Settings applied" : "Apply suggested settings"}</button>
           {jobId && <button className="ghost-button" disabled={saved || saving || busy} onClick={save}>{saved ? "Saved to history" : saving ? "Saving..." : "Save best result to history"}</button>}
         </div>
       </section>}
@@ -228,8 +254,25 @@ function formatInteger(value) {
   return Math.round(number).toLocaleString();
 }
 
-function formatTiltMap(tilts = {}) {
-  return Object.entries(tilts)
-    .map(([antennaId, tilt]) => `${antennaId}: ${formatMetric(tilt, "deg", 2)}`)
+function formatSettingsMap(settings = {}, tilts = {}) {
+  const entries = Object.keys(settings).length ? Object.entries(settings) : Object.entries(tilts).map(([id, tilt]) => [id, { tilt }]);
+  return entries
+    .map(([antennaId, values]) => `${antennaId}: tilt ${formatMetric(values.tilt, "deg", 2)}, power ${formatMetric(values.tx_power, "dBm", 2)}, az ${formatMetric(values.azimuth, "deg", 2)}`)
     .join(", ");
+}
+
+function formatField(field = "tilt") {
+  return { tilt: "tilt", tx_power: "power", azimuth: "azimuth" }[field] || field;
+}
+
+function optimizationResultSummary(optimization) {
+  const tested = optimization.tested_count;
+  const limit = optimization.budget_limit || tested;
+  if (optimization.stop_reason === "targets_met") {
+    return `All targets met after testing ${tested} of up to ${limit} setups.`;
+  }
+  if (optimization.stop_reason === "budget_exhausted") {
+    return `Targets not fully met after using the full ${limit}-simulation budget. Showing the closest setup found.`;
+  }
+  return `Targets not fully met. The search exhausted its remaining unique candidates after ${tested} of up to ${limit} simulations. Showing the closest setup found.`;
 }

@@ -152,28 +152,37 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   RSRP enforces the backend limit of 10 active checked antennas per simulation
   request. The RSRP page keeps antenna management on the right and places
   user/solver setup below the 3D scene/result on the left.
-- Network Coverage optimization now has a working bounded tilt search at
+- Network Coverage optimization now has a deterministic global-plus-local search at
   `/network/optimization`: set up to two coverage/overlap targets, choose tilt
-  step and maximum simulations (1–30, including baseline), and start a run.
+  step, power step, azimuth step, and maximum simulations (1–5000, including
+  baseline), and start a run.
   `POST /api/v1/optimizations/network-coverage/run` snapshots the active scene
   and current Network Coverage request. It creates one
   `network_coverage_optimization` job when a database is configured, or runs
-  inline without a database. The worker simulates a fresh baseline, then legal
-  all-antennas and individual-antenna tilt changes at progressively larger step
-  offsets within each antenna's tilt range, stopping at the first setup
-  satisfying all targets or after the bounded candidate list is exhausted.
-  Power, azimuth, and solver settings stay fixed. This searches nearby setups;
-  it does not promise a global optimum. Failed candidates are reported and
-  skipped; baseline failure aborts the run. Ranking prioritizes passing all
+  inline without a database. The worker simulates a fresh baseline. If the full
+  discrete space fits within the budget, it searches every combination. For a
+  larger space, it reserves about 40% of the budget for deterministic Halton
+  space-filling configurations plus full-range anchors; every global candidate
+  can change multiple fields across multiple antennas. It then selects up to 12
+  good configurations with explicit distance-based diversity and locally refines
+  that beam with nearby legal values. Candidate generation interleaves beam
+  parents and parameter dimensions to prevent one antenna or field from consuming
+  the remaining budget. The run stops at the
+  first setup satisfying all targets, when it uses the full simulation budget,
+  or when no unseen beam candidates remain. Solver settings stay fixed. Failed
+  candidates are reported and skipped; baseline failure aborts the run. Ranking prioritizes passing all
   targets, then summed target shortfall normalized by metric range (100 for
   percentages, 10 for overlap count), then fewer failed targets. KPI ranking
   uses unrounded cell-derived values so small coverage differences are not lost;
   exact ties preserve the earlier setup, including the baseline.
   The result includes the winning coverage grid, baseline/best KPI summaries,
-  tested setup summaries, and original/winning requests under `optimization`.
+  tested setup summaries with full candidate settings, original/winning requests,
+  stop reason, budget, search-space size, global/local trial counts, beam width,
+  and completed round count under `optimization`. The Tested setups table is
+  minimized by default and can be expanded from the result summary.
   Progress is stored in job result metadata between simulations. The page
   remembers the latest job per scene and resumes polling after navigation or
-  reload. Apply suggested tilts changes only the Network Coverage draft and
+  reload. Apply suggested settings changes only the Network Coverage draft and
   rejects a draft changed since submission. Saving a completed optimization
   stores the winning request/result as normal `network_coverage` history.
   Targets remain under `sionna_network_optimization_objectives`; latest job IDs

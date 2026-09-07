@@ -43,11 +43,12 @@ def test_search_runs_fresh_baseline_stops_at_target_and_preserves_request():
     result = run_network_coverage_optimization(req, simulate, progress.append)
     assert len(calls) == 2
     assert calls[0].antennas[0].tilt.current == 5
-    assert calls[1].antennas[0].tilt.current == 7
-    assert calls[1].antennas[0].tx_power == calls[0].antennas[0].tx_power
+    assert calls[1].antennas[0].tilt.current == 0
+    assert calls[1].antennas[0].tx_power.current == 20
+    assert calls[1].antennas[0].azimuth == 0
     assert req.model_dump() == original
     assert result["optimization"]["stop_reason"] == "targets_met"
-    assert result["optimization"]["best"]["id"] == "all_up"
+    assert result["optimization"]["best"]["settings"]["A1"]["tilt"] == 0
     assert progress[-1]["completed"] == 2
 
 
@@ -66,7 +67,8 @@ def test_search_baseline_failure_aborts_but_candidate_failure_is_reported():
     outputs = iter([coverage_result(5), {"status": "failure", "error": "bad candidate"}, coverage_result(9)])
     result = run_network_coverage_optimization(req, lambda _: next(outputs))
     assert result["optimization"]["trials"][1]["error"] == "bad candidate"
-    assert result["optimization"]["best"]["id"] == "all_down"
+    assert result["optimization"]["best"]["id"] != "baseline"
+    assert result["optimization"]["best"]["evaluation"]["kpis"]["covered_cells"] == 9
 
 
 def test_search_limit_includes_baseline_and_rejects_empty_grid():
@@ -83,7 +85,7 @@ def test_optimization_rejects_invalid_target_and_unbounded_search():
     with pytest.raises(ValidationError):
         NetworkCoverageOptimizationRequest(**req)
     with pytest.raises(ValidationError):
-        optimization_request(max_candidates=31)
+        optimization_request(max_candidates=5001)
 
 
 def test_search_normalizes_conflicting_objectives_and_does_not_claim_success():
@@ -136,17 +138,127 @@ def test_search_uses_unrounded_coverage_percent_for_ranking():
 
     result = run_network_coverage_optimization(req, lambda _: next(outputs))
 
-    assert result["optimization"]["best"]["id"] == "all_up"
-    assert result["optimization"]["best"]["tilts"] == {"A1": 10.0}
+    assert result["optimization"]["best"]["evaluation"]["kpis"]["covered_cells"] == 8265
     assert result["optimization"]["baseline"]["evaluation"]["kpis"]["covered_area_percent"] == pytest.approx(27.9457521645)
     assert result["optimization"]["best"]["evaluation"]["kpis"]["covered_area_percent"] == pytest.approx(27.9525162340)
+
+
+def test_search_can_optimize_power_and_azimuth():
+    payload = optimization_request(max_candidates=20).model_dump()
+    payload["tilt_step"] = 5
+    payload["power_step"] = 5
+    payload["azimuth_step"] = 45
+    payload["variables"] = [
+        {"field": "tx_power", "scope": "enabled_antennas"},
+        {"field": "azimuth", "scope": "enabled_antennas"},
+    ]
+    payload["objectives"] = [
+        {"metric": "covered_area_percent", "operator": ">=", "target": 100},
+    ]
+    req = NetworkCoverageOptimizationRequest(**payload)
+    calls = []
+
+    def simulate(candidate):
+        calls.append(candidate)
+        antenna = candidate.antennas[0]
+        if antenna.tx_power.current == 35:
+            return coverage_result(9)
+        if antenna.azimuth == 90:
+            return coverage_result(10)
+        return coverage_result(5)
+
+    result = run_network_coverage_optimization(req, simulate)
+
+    assert result["optimization"]["best"]["settings"]["A1"]["azimuth"] == 90
+    assert result["optimization"]["best_request"]["antennas"][0]["azimuth"] == 90
+
+
+def test_beam_search_builds_a_combination_across_rounds():
+    payload = optimization_request(max_candidates=30).model_dump()
+    payload["power_step"] = 5
+    payload["azimuth_step"] = 45
+    payload["variables"] = [
+        {"field": "tx_power", "scope": "enabled_antennas"},
+        {"field": "azimuth", "scope": "enabled_antennas"},
+    ]
+    payload["objectives"] = [
+        {"metric": "covered_area_percent", "operator": ">=", "target": 100},
+    ]
+    req = NetworkCoverageOptimizationRequest(**payload)
+    calls = []
+
+    def simulate(candidate):
+        calls.append(candidate)
+        antenna = candidate.antennas[0]
+        if antenna.tx_power.current == 35 and antenna.azimuth == 90:
+            return coverage_result(10)
+        if antenna.tx_power.current == 35:
+            return coverage_result(8)
+        if antenna.azimuth == 90:
+            return coverage_result(7)
+        return coverage_result(5)
+
+    result = run_network_coverage_optimization(req, simulate)
+
+    assert result["optimization"]["stop_reason"] == "targets_met"
+    assert result["optimization"]["search_strategy"] == "deterministic_global_beam_search"
+    assert result["optimization"]["rounds_completed"] >= 1
+    assert result["optimization"]["best"]["settings"]["A1"]["tx_power"] == 35
+    assert result["optimization"]["best"]["settings"]["A1"]["azimuth"] == 90
+    assert any(
+        call.antennas[0].tx_power.current == 35 and call.antennas[0].azimuth == 90
+        for call in calls
+    )
+
+
+def test_beam_search_uses_full_budget_when_combinations_remain():
+    req = optimization_request(max_candidates=50)
+
+    result = run_network_coverage_optimization(req, lambda _: coverage_result(5))
+
+    assert result["optimization"]["tested_count"] == 50
+    assert result["optimization"]["budget_limit"] == 50
+    assert result["optimization"]["stop_reason"] == "budget_exhausted"
+    assert result["optimization"]["global_tested"] > 1
+    assert result["optimization"]["local_tested"] > 0
+    assert any(
+        len(trial.get("changes", [])) >= 2
+        for trial in result["optimization"]["trials"]
+    )
+
+
+def test_global_exploration_finds_distant_mixed_range_combination():
+    payload = optimization_request(max_candidates=30).model_dump()
+    payload["power_step"] = 5
+    payload["azimuth_step"] = 45
+    payload["variables"] = [
+        {"field": "tx_power", "scope": "enabled_antennas"},
+        {"field": "azimuth", "scope": "enabled_antennas"},
+    ]
+    payload["objectives"] = [
+        {"metric": "covered_area_percent", "operator": ">=", "target": 100},
+    ]
+    req = NetworkCoverageOptimizationRequest(**payload)
+
+    def simulate(candidate):
+        antenna = candidate.antennas[0]
+        if antenna.tx_power.current == 20 and antenna.azimuth == 315:
+            return coverage_result(10)
+        return coverage_result(5)
+
+    result = run_network_coverage_optimization(req, simulate)
+
+    assert result["optimization"]["stop_reason"] == "targets_met"
+    assert result["optimization"]["rounds_completed"] == 0
+    assert result["optimization"]["best"]["settings"]["A1"]["tx_power"] == 20
+    assert result["optimization"]["best"]["settings"]["A1"]["azimuth"] == 315
 
 
 def test_search_strict_target_equality_is_not_success():
     payload = optimization_request(max_candidates=1).model_dump()
     payload["objectives"] = [{"metric": "uncovered_area_percent", "operator": "<", "target": 20}]
     result = run_network_coverage_optimization(NetworkCoverageOptimizationRequest(**payload), lambda _: coverage_result(8))
-    assert result["optimization"]["stop_reason"] == "search_complete"
+    assert result["optimization"]["stop_reason"] == "budget_exhausted"
     assert not result["optimization"]["best"]["evaluation"]["passed"]
 
 
