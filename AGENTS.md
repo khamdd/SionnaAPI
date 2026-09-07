@@ -46,8 +46,9 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   deletable entries, selecting all non-running entries, and deleting the selected
   entries after confirmation. Running entries cannot be selected; saved History
   results remain when their queue entries are removed. Network Coverage result
-  antenna snapshots derive scene positions from the request's geographic
-  coordinates and label tilt/power as the current value plus its allowed range.
+  antenna snapshots show request longitude/latitude to four decimal places and
+  label tilt/power as the current value plus its allowed range; internal scene
+  positions remain available for Sionna and 3D rendering.
 - History UI supports viewing details, preview loading state, deleting one or
   many saved runs, and comparing compatible successful runs. The history list is
   scoped to the currently selected work scene.
@@ -114,7 +115,8 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   enforces a maximum of 10 active checked antennas per simulation request.
   Network Coverage antenna cards include an enabled checkbox; unchecked antennas
   remain in the sidebar draft but are hidden from the 3D scene and excluded from
-  the simulation payload.
+  the simulation payload. Antenna-card longitude/latitude values are displayed
+  with four decimal places across the shared antenna-management pages.
 - Coverage API uses exactly one transmitter. If the selected scene has no fixed
   antennas, users enter one type 2 transmitter with antenna ID, longitude,
   latitude, and height. If fixed antennas exist, users can choose one fixed

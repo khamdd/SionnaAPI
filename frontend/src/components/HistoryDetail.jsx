@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { fetchArtifactJson } from "../api";
 import {
   firstArtifactUrl,
+  formatLngLatPosition,
   formatMaybeNumber,
   formatNeighborDelta,
   formatPositionValue,
@@ -109,10 +110,14 @@ function CoverageMapHistory({ item, onPreviewLoadingChange }) {
 }
 
 function NetworkCoverageHistory({ item, onPreviewLoadingChange }) {
+  const request = item.request_json || {};
   const response = item.response_json || {};
   const grid = response.grid || {};
   const imageUrl = item.coverage_map_image_url || firstArtifactUrl(item.artifacts);
   const overlapSummary = grid.overlap_summary || {};
+  const requestAntennas = new Map(
+    (request.antennas || []).map((antenna) => [antenna.id, antenna]),
+  );
 
   return (
     <>
@@ -135,15 +140,19 @@ function NetworkCoverageHistory({ item, onPreviewLoadingChange }) {
       />
       <h3>Antenna snapshot</h3>
       {(item.antennas || []).length ? (
-        item.antennas.map((antenna) => (
-          <dl className="antenna-snapshot" key={antenna.antenna_code}>
-            <dt>Antenna</dt><dd>{formatText(antenna.antenna_code)}</dd>
-            <dt>Position</dt><dd>{formatPositionValue(antenna.position)}</dd>
-            <dt>Azimuth</dt><dd>{formatMaybeNumber(antenna.azimuth_deg)} deg</dd>
-            <dt>Tilt</dt><dd>{formatRange(antenna.tilt, "deg")}</dd>
-            <dt>Power</dt><dd>{formatRange(antenna.tx_power, "dBm")}</dd>
-          </dl>
-        ))
+        item.antennas.map((antenna) => {
+          const requestAntenna = requestAntennas.get(antenna.antenna_code) || antenna;
+
+          return (
+            <dl className="antenna-snapshot" key={antenna.antenna_code}>
+              <dt>Antenna</dt><dd>{formatText(antenna.antenna_code)}</dd>
+              <dt>Position (lng, lat)</dt><dd>{formatLngLatPosition(requestAntenna)}</dd>
+              <dt>Azimuth</dt><dd>{formatMaybeNumber(antenna.azimuth_deg)} deg</dd>
+              <dt>Tilt</dt><dd>{formatRange(antenna.tilt, "deg")}</dd>
+              <dt>Power</dt><dd>{formatRange(antenna.tx_power, "dBm")}</dd>
+            </dl>
+          );
+        })
       ) : (
         <p className="history-status">No antenna snapshot for this simulation type.</p>
       )}

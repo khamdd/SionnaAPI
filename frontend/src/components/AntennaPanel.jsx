@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { lngLatBoundsError } from "../utils/scene";
-import { formatMaybeNumber } from "../utils/format";
+import { formatLngLatPosition, formatMaybeNumber } from "../utils/format";
 
 const TYPE_1 = "type1";
 const TYPE_2 = "type2";
@@ -264,7 +264,7 @@ function AntennaCard({
         <small>{isType2 ? "Added antenna" : "Fixed antenna"}</small>
       </h3>
       <div className="antenna-meta">
-        <span>{formatAntennaLocation(antenna)}</span>
+        <span>{formatLngLatPosition(antenna)}</span>
         <span>Height {formatMaybeNumber(antenna.height_m)} m</span>
       </div>
       <div className="control-row">
@@ -536,17 +536,6 @@ function suggestedType2Id(antennas) {
   }
 
   return id;
-}
-
-function formatAntennaLocation(antenna) {
-  if (
-    Number.isFinite(Number(antenna.longitude)) &&
-    Number.isFinite(Number(antenna.latitude))
-  ) {
-    return `${formatMaybeNumber(antenna.longitude)}, ${formatMaybeNumber(antenna.latitude)}`;
-  }
-
-  return "--";
 }
 
 function parseNumericInput(value) {

@@ -62,6 +62,17 @@ export function formatPositionValue(value) {
   return value.map(formatMaybeNumber).join(", ");
 }
 
+export function formatLngLatPosition(value) {
+  const longitude = Number(value?.longitude);
+  const latitude = Number(value?.latitude);
+
+  if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
+    return "--";
+  }
+
+  return `${longitude.toFixed(4)}, ${latitude.toFixed(4)}`;
+}
+
 export function formatText(value) {
   if (value === null || value === undefined || value === "") {
     return "--";
