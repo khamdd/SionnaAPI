@@ -1,1062 +1,235 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-  evaluateNetworkCoverageOptimization,
-  previewNetworkCoverageOptimizationCandidateRequest,
-  previewNetworkCoverageOptimizationCandidates,
-} from "../api";
+import { useEffect, useState } from "react";
+import { getSimulationJob, getSimulationJobResult, runNetworkCoverageOptimization, saveSimulationJobResult } from "../api";
 
-const MAX_OBJECTIVES = 2;
-const OPERATORS = ["<=", ">=", "<", ">", "="];
-
-const NETWORK_COVERAGE_OBJECTIVES = [
-  {
-    id: "uncovered_area_percent",
-    label: "Uncovered area",
-    unit: "%",
-    defaultOperator: "<=",
-    defaultValue: 2,
-    description: "Limit cells where the coverage map has no usable serving signal.",
-  },
-  {
-    id: "covered_area_percent",
-    label: "Covered area",
-    unit: "%",
-    defaultOperator: ">=",
-    defaultValue: 98,
-    description: "Require a minimum share of the selected scene to be covered.",
-  },
-  {
-    id: "overlap_area_percent",
-    label: "Overlap area",
-    unit: "%",
-    defaultOperator: "<=",
-    defaultValue: 25,
-    description: "Control cells affected by multiple antennas and possible interference.",
-  },
-  {
-    id: "average_overlap_count",
-    label: "Average overlap",
-    unit: "antennas",
-    defaultOperator: "<=",
-    defaultValue: 2,
-    description: "Keep the average number of influential antennas per cell manageable.",
-  },
+const METRICS = [
+  ["uncovered_area_percent", "Uncovered area", "%", "<=", 2],
+  ["covered_area_percent", "Covered area", "%", ">=", 98],
+  ["overlap_area_percent", "Overlap area", "%", "<=", 25],
+  ["average_overlap_count", "Average overlap", "antennas", "<=", 2],
 ];
+function read(key) {
+  try { return JSON.parse(localStorage.getItem(key) || "null"); } catch { return null; }
+}
+function write(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Runs work without storage. */ }
+}
 
-const DEFAULT_OBJECTIVE_VALUES = Object.fromEntries(
-  NETWORK_COVERAGE_OBJECTIVES.map((objective) => [
-    objective.id,
-    {
-      operator: objective.defaultOperator,
-      value: String(objective.defaultValue),
-    },
-  ]),
-);
-
-export default function OptimizationObjectivePage({
-  activeAntennas = [],
-  activeScene,
-  baseRequest,
-  latestGrid,
-  onBack,
-  onLoadLatestResult,
-  storageKey,
-}) {
-  const [selectedIds, setSelectedIds] = useState(() => new Set(["uncovered_area_percent"]));
-  const [objectiveValues, setObjectiveValues] = useState(() => DEFAULT_OBJECTIVE_VALUES);
-  const [confirmedContract, setConfirmedContract] = useState(null);
-  const [evaluationPreview, setEvaluationPreview] = useState(null);
-  const [evaluationStatus, setEvaluationStatus] = useState("Run a Network Coverage simulation, confirm objectives, then evaluate the latest result.");
-  const [evaluationError, setEvaluationError] = useState(false);
-  const [isEvaluating, setIsEvaluating] = useState(false);
-  const [tiltStep, setTiltStep] = useState("2");
-  const [maxCandidates, setMaxCandidates] = useState("20");
-  const [candidatePreview, setCandidatePreview] = useState(null);
-  const [candidateStatus, setCandidateStatus] = useState("Confirm objectives to preview candidate tilt setups.");
-  const [candidateError, setCandidateError] = useState(false);
-  const [isGeneratingCandidates, setIsGeneratingCandidates] = useState(false);
-  const [selectedCandidateId, setSelectedCandidateId] = useState(null);
-  const [candidateRequestPreview, setCandidateRequestPreview] = useState(null);
-  const [candidateRequestStatus, setCandidateRequestStatus] = useState("Generate candidate tilt setups, then select one to preview its request.");
-  const [candidateRequestError, setCandidateRequestError] = useState(false);
-  const [isPreviewingCandidateRequest, setIsPreviewingCandidateRequest] = useState(false);
-
-  const selectedObjectives = useMemo(
-    () => NETWORK_COVERAGE_OBJECTIVES.filter((objective) => selectedIds.has(objective.id)),
-    [selectedIds],
-  );
-  const selectedCount = selectedIds.size;
-  const hasInvalidObjective = selectedObjectives.some((objective) => {
-    const rawValue = String(objectiveValues[objective.id]?.value ?? "").trim();
-    const value = Number(rawValue);
-    return rawValue === "" || !Number.isFinite(value);
-  });
-  const hasLatestGrid = Array.isArray(latestGrid?.cells) && latestGrid.cells.length > 0;
-  const candidateRequest = confirmedContract?.base_request || baseRequest;
-  const canPreviewCandidates = Boolean(confirmedContract && candidateRequest);
-  const hasInvalidCandidateSettings = (
-    !Number.isFinite(Number(tiltStep))
-    || Number(tiltStep) <= 0
-    || !Number.isFinite(Number(maxCandidates))
-    || Number(maxCandidates) < 1
-  );
+export default function OptimizationObjectivePage({ activeScene, baseRequest, onBack, onApply, storageKey }) {
+  const runKey = `${storageKey}:run:${activeScene.id}`;
+  const [objectives, setObjectives] = useState(() => read(storageKey)?.[activeScene.id]?.objectives?.map(({ metric, operator, target }) => ({ metric, operator, target })) || [
+    { metric: "uncovered_area_percent", operator: "<=", target: 2 },
+  ]);
+  const [step, setStep] = useState(2);
+  const [limit, setLimit] = useState(10);
+  const [jobId, setJobId] = useState(() => read(runKey)?.jobId || null);
+  const [sourceSignature, setSourceSignature] = useState(() => read(runKey)?.signature || "");
+  const [busy, setBusy] = useState(() => Boolean(read(runKey)?.jobId));
+  const [result, setResult] = useState(null);
+  const [status, setStatus] = useState("Ready to test nearby antenna tilt settings.");
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [applied, setApplied] = useState(false);
+  const signature = JSON.stringify(baseRequest);
 
   useEffect(() => {
-    const storedContract = readStoredOptimizationContract(storageKey, activeScene?.id);
-
-    if (!storedContract) {
-      setSelectedIds(new Set(["uncovered_area_percent"]));
-      setObjectiveValues(DEFAULT_OBJECTIVE_VALUES);
-      setConfirmedContract(null);
-      setEvaluationPreview(null);
-      setEvaluationStatus("Run a Network Coverage simulation, confirm objectives, then evaluate the latest result.");
-      setEvaluationError(false);
-      resetCandidatePreview("Confirm objectives to preview candidate tilt setups.");
-      return;
+    if (!jobId) return undefined;
+    let disposed = false;
+    let timer;
+    async function poll() {
+      try {
+        const response = await getSimulationJob(jobId);
+        if (disposed) return;
+        const job = response.item;
+        if (!job) {
+          if (response.error) throw new Error(response.error);
+          setError("This optimization job is no longer available. Start a new run.");
+          setBusy(false);
+          write(runKey, null);
+          return;
+        }
+        if (job.scene?.id !== activeScene.id || job.simulation_type !== "network_coverage_optimization") {
+          setError("This job does not belong to the selected scene.");
+          setBusy(false);
+          write(runKey, null);
+          return;
+        }
+        if (job.status === "failed") {
+          setError(job.error_message || "Optimization failed.");
+          setBusy(false);
+          return;
+        }
+        if (job.status === "succeeded") {
+          const full = await getSimulationJobResult(jobId);
+          if (disposed) return;
+          if (!full.optimization) {
+            setError(full.error || "Optimization result is unavailable. Start a new run.");
+            setBusy(false);
+            return;
+          }
+          setResult(full);
+          setSaved(Boolean(job.result_run_id));
+          setBusy(false);
+          setError("");
+          setStatus("Optimization finished.");
+          return;
+        }
+        const progress = job.result?.optimization_progress;
+        setStatus(progress ? `Tested ${progress.completed} of ${progress.total} setups. Running: ${progress.current}.` : "Waiting in the simulation queue...");
+        setError("");
+      } catch (err) {
+        if (disposed) return;
+        setError(`Cannot check progress: ${err.message}. Retrying automatically.`);
+      }
+      if (!disposed) timer = setTimeout(poll, 3000);
     }
+    poll();
+    return () => { disposed = true; clearTimeout(timer); };
+  }, [jobId, activeScene.id, runKey]);
 
-    setSelectedIds(new Set(storedContract.objectives.map((objective) => objective.metric)));
-    setObjectiveValues(valuesFromStoredContract(storedContract));
-    setConfirmedContract(storedContract);
-    setEvaluationPreview(null);
-    setEvaluationStatus(hasLatestGrid
-      ? "Ready to evaluate the latest Network Coverage result."
-      : "Run a Network Coverage simulation before evaluating.");
-    setEvaluationError(false);
-    resetCandidatePreview("Ready to preview candidate tilt setups.");
-  }, [activeScene?.id, storageKey]);
-
-  useEffect(() => {
-    setEvaluationPreview(null);
-    setEvaluationStatus(hasLatestGrid
-      ? "Ready to evaluate the latest Network Coverage result."
-      : "Run a Network Coverage simulation before evaluating.");
-    setEvaluationError(false);
-  }, [latestGrid]);
-
-  function toggleObjective(objectiveId) {
-    setConfirmedContract(null);
-    setEvaluationPreview(null);
-    resetCandidatePreview("Confirm objectives to preview candidate tilt setups.");
-    setSelectedIds((current) => {
-      const next = new Set(current);
-
-      if (next.has(objectiveId)) {
-        next.delete(objectiveId);
-        return next;
+  function update(index, field, value) {
+    setObjectives((current) => current.map((item, i) => {
+      if (i !== index) return item;
+      if (field === "metric") {
+        const metric = METRICS.find(([id]) => id === value);
+        return { metric: value, operator: metric[3], target: metric[4] };
       }
-
-      if (next.size >= MAX_OBJECTIVES) {
-        return next;
-      }
-
-      next.add(objectiveId);
-      return next;
-    });
-  }
-
-  function updateObjectiveValue(objectiveId, field, value) {
-    setConfirmedContract(null);
-    setEvaluationPreview(null);
-    resetCandidatePreview("Confirm objectives to preview candidate tilt setups.");
-    setObjectiveValues((current) => ({
-      ...current,
-      [objectiveId]: {
-        ...current[objectiveId],
-        [field]: value,
-      },
+      return { ...item, [field]: value };
     }));
   }
 
-  function confirmObjectives(event) {
+  async function start(event) {
     event.preventDefault();
-
-    if (selectedCount === 0 || hasInvalidObjective) {
-      return;
-    }
-
-    const contract = {
-      id: `${activeScene?.id || "scene"}:network_coverage`,
-      simulation_type: "network_coverage",
-      base_request: baseRequest || null,
-      scene: {
-        id: activeScene?.id || null,
-        name: activeScene?.name || "",
-      },
-      objectives: selectedObjectives.map((objective) => ({
-        metric: objective.id,
-        label: objective.label,
-        operator: objectiveValues[objective.id].operator,
-        target: Number(objectiveValues[objective.id].value),
-        unit: objective.unit,
-      })),
-      variables: [
-        {
-          field: "tilt",
-          scope: "enabled_antennas",
-        },
-      ],
-      constraints: {
-        max_objectives: MAX_OBJECTIVES,
-        max_antennas: 10,
-        active_antennas: activeAntennas.length,
-      },
-    };
-
-    saveConfirmedContract(contract);
-  }
-
-  function saveConfirmedContract(contract) {
-    setConfirmedContract(contract);
-    setEvaluationPreview(null);
-    setEvaluationStatus(hasLatestGrid
-      ? "Objectives confirmed. Evaluate the latest result when ready."
-      : "Objectives confirmed. Run a Network Coverage simulation before evaluating.");
-    setEvaluationError(false);
-    resetCandidatePreview("Objectives confirmed. Preview candidate tilt setups when ready.");
-    persistOptimizationContract(storageKey, activeScene?.id, contract);
-  }
-
-  function resetCandidatePreview(status) {
-    setCandidatePreview(null);
-    setCandidateStatus(status);
-    setCandidateError(false);
-    resetCandidateRequestPreview("Generate candidate tilt setups, then select one to preview its request.");
-  }
-
-  function resetCandidateRequestPreview(status) {
-    setSelectedCandidateId(null);
-    setCandidateRequestPreview(null);
-    setCandidateRequestStatus(status);
-    setCandidateRequestError(false);
-  }
-
-  async function generateCandidatePreview() {
-    if (!canPreviewCandidates || hasInvalidCandidateSettings || isGeneratingCandidates) {
-      return;
-    }
-
-    setIsGeneratingCandidates(true);
-    setCandidateError(false);
-    setCandidateStatus("Generating candidate tilt setups...");
-
+    if (busy) return;
+    const targets = objectives.map((item) => ({ ...item, target: Number(item.target) }));
+    setBusy(true);
+    setJobId(null);
+    setResult(null);
+    setError("");
+    setSaved(false);
+    setApplied(false);
+    setSourceSignature(signature);
+    write(runKey, null);
+    write(storageKey, { ...(read(storageKey) || {}), [activeScene.id]: { simulation_type: "network_coverage", objectives: targets } });
+    setStatus("Starting optimization. The current setup will be simulated first...");
     try {
-      const payload = {
-        base_request: candidateRequest,
-        tilt_step: Number(tiltStep),
-        max_candidates: Number(maxCandidates),
-      };
-      const result = await previewCandidatesWithBackendOrLocalFallback(payload);
-
-      setCandidatePreview(result);
-      setCandidateStatus(`Generated ${result.generated_count || 0} candidate tilt setup(s).`);
-      resetCandidateRequestPreview("Select a generated candidate to preview its Network Coverage request.");
-    } catch (error) {
-      setCandidatePreview(null);
-      setCandidateStatus(`Candidate preview failed: ${error.message}`);
-      setCandidateError(true);
-      resetCandidateRequestPreview("Generate candidate tilt setups, then select one to preview its request.");
-    } finally {
-      setIsGeneratingCandidates(false);
-    }
-  }
-
-  async function previewCandidatesWithBackendOrLocalFallback(payload) {
-    try {
-      return await previewNetworkCoverageOptimizationCandidates(payload);
-    } catch {
-      return {
-        status: "success",
-        source: "local",
-        ...generateNetworkCoverageTiltCandidates(
-          payload.base_request,
-          payload.tilt_step,
-          payload.max_candidates,
-        ),
-      };
-    }
-  }
-
-  async function selectCandidate(candidate) {
-    if (!candidateRequest || !candidate || isPreviewingCandidateRequest) {
-      return;
-    }
-
-    setSelectedCandidateId(candidate.id);
-    setIsPreviewingCandidateRequest(true);
-    setCandidateRequestError(false);
-    setCandidateRequestStatus(`Building request preview for ${candidate.label}...`);
-
-    try {
-      const payload = {
-        base_request: candidateRequest,
-        candidate_tilts: candidate.tilts || {},
-      };
-      const result = await previewCandidateRequestWithBackendOrLocalFallback(payload);
-
-      setCandidateRequestPreview({
-        ...result,
-        candidate,
-      });
-      setCandidateRequestStatus("Candidate request preview ready.");
-    } catch (error) {
-      setCandidateRequestPreview(null);
-      setCandidateRequestStatus(`Candidate request preview failed: ${error.message}`);
-      setCandidateRequestError(true);
-    } finally {
-      setIsPreviewingCandidateRequest(false);
-    }
-  }
-
-  async function previewCandidateRequestWithBackendOrLocalFallback(payload) {
-    try {
-      return await previewNetworkCoverageOptimizationCandidateRequest(payload);
-    } catch {
-      return {
-        status: "success",
-        source: "local",
-        ...buildNetworkCoverageCandidateRequest(
-          payload.base_request,
-          payload.candidate_tilts,
-        ),
-      };
-    }
-  }
-
-  async function evaluateLatestResult() {
-    if (!confirmedContract || isEvaluating) {
-      return;
-    }
-
-    setIsEvaluating(true);
-    setEvaluationError(false);
-    setEvaluationStatus(hasLatestGrid
-      ? "Evaluating latest Network Coverage result..."
-      : "Looking for the latest completed Network Coverage result...");
-
-    try {
-      const latestResult = hasLatestGrid
-        ? { grid: latestGrid }
-        : await onLoadLatestResult?.();
-      const grid = latestResult?.grid;
-
-      if (!Array.isArray(grid?.cells) || grid.cells.length === 0) {
-        setEvaluationPreview(null);
-        setEvaluationStatus("No completed Network Coverage result is available for this scene yet. If the run was queued, wait for it to finish in Simulation Queue.");
-        setEvaluationError(true);
-        return;
+      const response = await runNetworkCoverageOptimization({ scene_id: activeScene.id, base_request: baseRequest, objectives: targets, tilt_step: Number(step), max_candidates: Number(limit) });
+      if (response.job_id) {
+        write(runKey, { jobId: response.job_id, signature });
+        setJobId(response.job_id);
+      } else {
+        if (!response.optimization) throw new Error(response.error || "No optimization result returned.");
+        setResult(response);
+        setBusy(false);
+        setStatus("Optimization finished.");
       }
-
-      const objectives = confirmedContract.objectives.map((objective) => ({
-        metric: objective.metric,
-        operator: objective.operator,
-        target: objective.target,
-      }));
-      const result = await evaluateWithBackendOrLocalFallback(grid, objectives);
-
-      setEvaluationPreview(result);
-      setEvaluationStatus(result.passed
-        ? "Latest result satisfies the confirmed objectives."
-        : "Latest result does not satisfy every confirmed objective.");
-    } catch (error) {
-      setEvaluationPreview(null);
-      setEvaluationStatus(`Evaluation failed: ${error.message}`);
-      setEvaluationError(true);
-    } finally {
-      setIsEvaluating(false);
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
     }
   }
 
-  async function evaluateWithBackendOrLocalFallback(grid, objectives) {
+  async function save() {
+    setSaving(true);
     try {
-      return await evaluateNetworkCoverageOptimization({
-        result: {
-          grid,
-        },
-        objectives,
-      });
-    } catch {
-      return {
-        status: "success",
-        source: "local",
-        ...evaluateNetworkCoverageGrid(grid, objectives),
-      };
-    }
+      const response = await saveSimulationJobResult(jobId);
+      if (!response.saved) throw new Error(response.error || "Could not save the result.");
+      setSaved(true);
+    } catch (err) { setError(err.message); }
+    finally { setSaving(false); }
   }
 
+  const optimization = result?.optimization;
+  const stale = sourceSignature !== signature;
+  const valid = objectives.length > 0 && new Set(objectives.map((o) => o.metric)).size === objectives.length;
   return (
     <main className="route-page optimization-page">
-      <div className="page-title with-action">
-        <div>
-          <h1>Network Coverage Optimization</h1>
-          <p>Set the target result the optimizer should search for when antenna tilt optimization is enabled.</p>
-        </div>
-        <button className="ghost-button" type="button" onClick={onBack}>
-          Back to Network Coverage
-        </button>
+      <div className="page-header">
+        <div><h1>Network Coverage Optimization</h1><p>Try nearby antenna tilts and find a setup that meets your targets.</p></div>
+        <button className="ghost-button" onClick={onBack}>Back to Network Coverage</button>
       </div>
-
-      <form className="optimization-layout" onSubmit={confirmObjectives}>
-        <section className="optimization-panel">
-          <div className="optimization-section-header">
-            <div>
-              <h2>Optimization objectives</h2>
-              <p>Choose up to {MAX_OBJECTIVES} target metrics for this phase.</p>
+      <form className="optimization-panel" onSubmit={start}>
+        <h2>Targets</h2>
+        <fieldset disabled={busy || saving} className="optimization-run-fields">
+          {objectives.map((objective, index) => (
+            <div className="optimization-target-row" key={index}>
+              <label>Metric<select value={objective.metric} onChange={(e) => update(index, "metric", e.target.value)}>
+                {METRICS.map(([id, label]) => <option key={id} value={id} disabled={objectives.some((o, i) => i !== index && o.metric === id)}>{label}</option>)}
+              </select></label>
+              <label>Condition<select value={objective.operator} onChange={(e) => update(index, "operator", e.target.value)}>
+                {["<=", ">=", "<", ">", "="].map((operator) => <option key={operator}>{operator}</option>)}
+              </select></label>
+              <label>Target ({METRICS.find(([id]) => id === objective.metric)?.[2]})<input type="number" required min="0" max={objective.metric === "average_overlap_count" ? 10 : 100} step="any" value={objective.target} onChange={(e) => update(index, "target", e.target.value)} /></label>
+              {index > 0 && <button type="button" className="ghost-button" onClick={() => setObjectives((current) => current.filter((_, i) => i !== index))}>Remove target</button>}
             </div>
-            <strong>{selectedCount}/{MAX_OBJECTIVES}</strong>
+          ))}
+          {objectives.length < 2 && <button className="ghost-button" type="button" onClick={() => {
+            const metric = METRICS.find(([id]) => !objectives.some((o) => o.metric === id) && id === "overlap_area_percent") || METRICS.find(([id]) => id !== objectives[0].metric);
+            setObjectives([...objectives, { metric: metric[0], operator: metric[3], target: metric[4] }]);
+          }}>Add second target</button>}
+          <div className="optimization-target-row">
+            <label>Tilt step (degrees)<input type="number" required min="0.1" max="20" step="0.1" value={step} onChange={(e) => setStep(e.target.value)} /></label>
+            <label>Maximum simulations<input type="number" required min="1" max="30" step="1" value={limit} onChange={(e) => setLimit(e.target.value)} /></label>
           </div>
-
-          <div className="objective-grid">
-            {NETWORK_COVERAGE_OBJECTIVES.map((objective) => {
-              const isSelected = selectedIds.has(objective.id);
-              const isLocked = !isSelected && selectedCount >= MAX_OBJECTIVES;
-              const values = objectiveValues[objective.id];
-
-              return (
-                <article
-                  className={`objective-card ${isSelected ? "selected" : ""}`}
-                  key={objective.id}
-                >
-                  <label className="objective-card-header">
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      disabled={isLocked}
-                      onChange={() => toggleObjective(objective.id)}
-                    />
-                    <span>
-                      <strong>{objective.label}</strong>
-                      <small>{objective.description}</small>
-                    </span>
-                  </label>
-                  <div className="objective-target-row">
-                    <label>
-                      <span>Operator</span>
-                      <select
-                        value={values.operator}
-                        disabled={!isSelected}
-                        onChange={(event) => updateObjectiveValue(objective.id, "operator", event.target.value)}
-                      >
-                        {OPERATORS.map((operator) => (
-                          <option key={operator} value={operator}>{operator}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      <span>Value</span>
-                      <div className="objective-value-input">
-                        <input
-                          type="number"
-                          step="any"
-                          value={values.value}
-                          disabled={!isSelected}
-                          aria-invalid={isSelected && (String(values.value).trim() === "" || !Number.isFinite(Number(values.value)))}
-                          onChange={(event) => updateObjectiveValue(objective.id, "value", event.target.value)}
-                        />
-                        <small>{objective.unit}</small>
-                      </div>
-                    </label>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </section>
-
-        <aside className="optimization-panel optimization-summary-panel">
-          <div className="optimization-section-header">
-            <div>
-              <h2>Optimization input</h2>
-              <p>Confirmed objectives become the data contract for the next optimization phase.</p>
-            </div>
-          </div>
-
-          <dl className="optimization-context">
-            <dt>Scene</dt>
-            <dd>{activeScene?.name || "No scene selected"}</dd>
-            <dt>Active antennas</dt>
-            <dd>{activeAntennas.length}</dd>
-            <dt>Variable</dt>
-            <dd>Antenna tilt</dd>
-          </dl>
-
-          <div className="selected-objective-list">
-            {selectedObjectives.length > 0 ? selectedObjectives.map((objective) => (
-              <div key={objective.id}>
-                <span>{objective.label}</span>
-                <strong>
-                  {objectiveValues[objective.id].operator} {objectiveValues[objective.id].value || "--"} {objective.unit}
-                </strong>
-              </div>
-            )) : (
-              <p>Select at least one objective.</p>
-            )}
-          </div>
-
-          <button
-            className="primary-button"
-            type="submit"
-            disabled={selectedCount === 0 || hasInvalidObjective}
-          >
-            Confirm
-          </button>
-
-          <button
-            className="ghost-button"
-            type="button"
-            disabled={!confirmedContract || isEvaluating}
-            onClick={evaluateLatestResult}
-          >
-            {isEvaluating ? "Evaluating..." : "Evaluate latest result"}
-          </button>
-
-          <p className={`optimization-preview-status ${evaluationError ? "error-text" : ""}`}>
-            {evaluationStatus}
-          </p>
-
-          <div className="candidate-preview-controls">
-            <strong>Candidate tilt preview</strong>
-            <div>
-              <label>
-                <span>Tilt step</span>
-                <input
-                  type="number"
-                  min="0.1"
-                  max="20"
-                  step="0.1"
-                  value={tiltStep}
-                  aria-invalid={!Number.isFinite(Number(tiltStep)) || Number(tiltStep) <= 0}
-                  onChange={(event) => {
-                    setTiltStep(event.target.value);
-                    resetCandidatePreview("Preview settings changed.");
-                  }}
-                />
-              </label>
-              <label>
-                <span>Max candidates</span>
-                <input
-                  type="number"
-                  min="1"
-                  max="100"
-                  step="1"
-                  value={maxCandidates}
-                  aria-invalid={!Number.isFinite(Number(maxCandidates)) || Number(maxCandidates) < 1}
-                  onChange={(event) => {
-                    setMaxCandidates(event.target.value);
-                    resetCandidatePreview("Preview settings changed.");
-                  }}
-                />
-              </label>
-            </div>
-            <button
-              className="ghost-button"
-              type="button"
-              disabled={!canPreviewCandidates || hasInvalidCandidateSettings || isGeneratingCandidates}
-              onClick={generateCandidatePreview}
-            >
-              {isGeneratingCandidates ? "Generating..." : "Generate candidate preview"}
-            </button>
-            <p className={`optimization-preview-status ${candidateError ? "error-text" : ""}`}>
-              {candidateStatus}
-            </p>
-          </div>
-
-          {confirmedContract && (
-            <div className="optimization-contract">
-              <strong>Confirmed best-result data</strong>
-              <pre>{JSON.stringify(confirmedContract, null, 2)}</pre>
-            </div>
-          )}
-
-          {evaluationPreview && (
-            <EvaluationPreview
-              evaluation={evaluationPreview}
-              objectives={confirmedContract?.objectives || []}
-            />
-          )}
-
-          {candidatePreview && (
-            <CandidatePreview
-              preview={candidatePreview}
-              selectedCandidateId={selectedCandidateId}
-              isPreviewingCandidateRequest={isPreviewingCandidateRequest}
-              onSelectCandidate={selectCandidate}
-            />
-          )}
-
-          {candidatePreview && (
-            <p className={`optimization-preview-status ${candidateRequestError ? "error-text" : ""}`}>
-              {candidateRequestStatus}
-            </p>
-          )}
-
-          {candidateRequestPreview && (
-            <CandidateRequestPreview preview={candidateRequestPreview} />
-          )}
-        </aside>
+          <p>The limit includes the starting setup. The search keeps stepping farther within each antenna's tilt range. Power and horizontal direction stay unchanged.</p>
+          <button className="primary-button" disabled={!valid || !baseRequest?.antennas?.length || baseRequest.antennas.length > 10}>Start optimization</button>
+        </fieldset>
+        <p role="status">{status}</p>
+        {busy && <p>{jobId ? "You can leave this page and return to check the run." : "Keep this page open while the request is starting."}</p>}
+        {error && <p className="error-text" role="alert">{error}</p>}
       </form>
+      {optimization && <section className="optimization-panel">
+        <h2>Best setup found</h2>
+        <p>{optimization.best.evaluation.passed ? "All targets met." : "Targets not fully met. Showing the closest setup found."} Tested {optimization.tested_count} setups.</p>
+        <table className="optimization-results-table"><thead><tr><th>Metric</th><th>Before</th><th>After</th><th>Target</th></tr></thead>
+          <tbody>{METRICS.map(([id, label, unit]) => {
+            const target = optimization.objectives.find((o) => o.metric === id);
+            return <tr key={id}><td>{label}</td><td>{formatMetric(optimization.baseline.evaluation.kpis[id], unit)}</td><td>{formatMetric(optimization.best.evaluation.kpis[id], unit)}</td><td>{target ? `${target.operator} ${formatMetric(target.target, unit)}` : "—"}</td></tr>;
+          })}</tbody>
+        </table>
+        <p>Covered cells: {formatInteger(optimization.baseline.evaluation.kpis.covered_cells)} → {formatInteger(optimization.best.evaluation.kpis.covered_cells)} of {formatInteger(optimization.best.evaluation.kpis.total_cells)}.</p>
+        <h3>Tested setups</h3>
+        <table className="optimization-results-table"><thead><tr><th>Setup</th><th>Tilt</th><th>Covered cells</th><th>Covered area</th></tr></thead>
+          <tbody>{optimization.trials.map((trial) => (
+            <tr key={trial.id}>
+              <td>{trial.label}</td>
+              <td>{formatTiltMap(trial.tilts)}</td>
+              <td>{trial.error ? "Failed" : `${formatInteger(trial.evaluation.kpis.covered_cells)} / ${formatInteger(trial.evaluation.kpis.total_cells)}`}</td>
+              <td>{trial.error ? trial.error : formatMetric(trial.evaluation.kpis.covered_area_percent, "%", 4)}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+        <p>When targets conflict, results are ranked by the combined shortfall, adjusted for each metric’s scale. Ties keep the earlier setup.</p>
+        {optimization.best.changes.length ? <ul>{optimization.best.changes.map((change) => <li key={change.antenna_id}>{change.antenna_id}: {change.from}° → {change.to}°</li>)}</ul> : <p>The starting setup remains the best found. No tilt changes suggested.</p>}
+        {optimization.trials.some((trial) => trial.error) && <p className="error-text">Some setups failed: {optimization.trials.filter((trial) => trial.error).map((trial) => `${trial.label}: ${trial.error}`).join("; ")}</p>}
+        {stale && !applied && <p className="error-text">Your antenna settings changed. Run optimization again before applying.</p>}
+        <div className="panel-actions">
+          <button className="primary-button" disabled={busy || stale || applied || !optimization.best.changes.length} onClick={() => { onApply(optimization.best.tilts); setApplied(true); }}>{applied ? "Tilts applied" : "Apply suggested tilts"}</button>
+          {jobId && <button className="ghost-button" disabled={saved || saving || busy} onClick={save}>{saved ? "Saved to history" : saving ? "Saving..." : "Save best result to history"}</button>}
+        </div>
+      </section>}
     </main>
   );
 }
 
-function CandidatePreview({
-  preview,
-  selectedCandidateId,
-  isPreviewingCandidateRequest,
-  onSelectCandidate,
-}) {
-  return (
-    <div className="candidate-preview-list">
-      <div>
-        <strong>Candidate setups</strong>
-        <span>{preview.generated_count || 0}/{preview.max_candidates || 0}</span>
-      </div>
-      {(preview.candidates || []).map((candidate) => (
-        <button
-          className={candidate.id === selectedCandidateId ? "active" : ""}
-          disabled={isPreviewingCandidateRequest}
-          key={candidate.id}
-          type="button"
-          onClick={() => onSelectCandidate(candidate)}
-        >
-          <div>
-            <strong>{candidate.label}</strong>
-            <span>{candidate.changes?.length ? `${candidate.changes.length} change(s)` : "Baseline"}</span>
-          </div>
-          <p>{formatTiltMap(candidate.tilts)}</p>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function CandidateRequestPreview({ preview }) {
-  const changes = preview.changes || [];
-
-  return (
-    <div className="candidate-request-preview">
-      <div>
-        <strong>Candidate request preview</strong>
-        <span>{preview.candidate?.label || "Selected candidate"}</span>
-      </div>
-      {changes.length > 0 ? (
-        <div className="candidate-change-list">
-          {changes.map((change) => (
-            <div key={change.antenna_id}>
-              <span>{change.antenna_id}</span>
-              <strong>
-                {formatNumber(change.from)} deg to {formatNumber(change.to)} deg
-              </strong>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p>No tilt changes. This is the current baseline request.</p>
-      )}
-      <pre>{JSON.stringify(preview.request, null, 2)}</pre>
-    </div>
-  );
-}
-
-function EvaluationPreview({ evaluation, objectives }) {
-  const objectiveByMetric = new Map(
-    objectives.map((objective) => [objective.metric, objective]),
-  );
-
-  return (
-    <div className="optimization-evaluation-preview">
-      <div>
-        <strong>Latest result preview</strong>
-        <span>{evaluation.passed ? "Passed" : "Needs improvement"}</span>
-      </div>
-      <dl className="optimization-context">
-        <dt>Total score</dt>
-        <dd>{formatNumber(evaluation.score)}</dd>
-        <dt>Covered area</dt>
-        <dd>{formatMetric(evaluation.kpis?.covered_area_percent, "%")}</dd>
-        <dt>Uncovered area</dt>
-        <dd>{formatMetric(evaluation.kpis?.uncovered_area_percent, "%")}</dd>
-      </dl>
-      <div className="objective-evaluation-list">
-        {(evaluation.evaluations || []).map((item) => {
-          const objective = objectiveByMetric.get(item.metric);
-          return (
-            <div className={item.passed ? "passed" : "failed"} key={item.metric}>
-              <span>{objective?.label || item.metric}</span>
-              <strong>{item.passed ? "Pass" : "Fail"}</strong>
-              <small>
-                Actual {formatMetric(item.actual, objective?.unit)}
-                {" "}vs {item.operator} {formatMetric(item.target, objective?.unit)}
-              </small>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function valuesFromStoredContract(contract) {
-  const values = {
-    ...DEFAULT_OBJECTIVE_VALUES,
-  };
-
-  for (const objective of contract.objectives) {
-    values[objective.metric] = {
-      operator: objective.operator,
-      value: String(objective.target),
-    };
-  }
-
-  return values;
-}
-
-function readStoredOptimizationContract(storageKey, sceneId) {
-  if (!storageKey || !sceneId) {
-    return null;
-  }
-
-  try {
-    const saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
-    return normalizeStoredContract(saved[sceneId]);
-  } catch {
-    return null;
-  }
-}
-
-function persistOptimizationContract(storageKey, sceneId, contract) {
-  if (!storageKey || !sceneId || !contract) {
-    return;
-  }
-
-  try {
-    const saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
-    saved[sceneId] = contract;
-    localStorage.setItem(storageKey, JSON.stringify(saved));
-  } catch {
-    // Best-effort browser storage; the confirmed state remains visible in memory.
-  }
-}
-
-function normalizeStoredContract(contract) {
-  if (!contract || contract.simulation_type !== "network_coverage") {
-    return null;
-  }
-
-  if (!Array.isArray(contract.objectives)) {
-    return null;
-  }
-
-  const objectives = contract.objectives
-    .filter((objective) => (
-      NETWORK_COVERAGE_OBJECTIVES.some((candidate) => candidate.id === objective?.metric)
-      && OPERATORS.includes(objective?.operator)
-      && Number.isFinite(Number(objective?.target))
-    ))
-    .slice(0, MAX_OBJECTIVES);
-
-  if (objectives.length === 0) {
-    return null;
-  }
-
-  return {
-    ...contract,
-    objectives,
-  };
-}
-
-function generateNetworkCoverageTiltCandidates(baseRequest, tiltStep, maxCandidates) {
-  const antennas = Array.isArray(baseRequest?.antennas) ? baseRequest.antennas : [];
-  const step = Number(tiltStep);
-  const limit = Math.max(1, Math.floor(Number(maxCandidates)));
-  const baselineTilts = Object.fromEntries(
-    antennas.map((antenna) => [antenna.id, Number(antenna.tilt?.current)]),
-  );
-  const candidates = [];
-  const seen = new Set();
-
-  addCandidate(candidates, seen, "baseline", "Current setup", baselineTilts, baselineTilts, limit);
-
-  [
-    [step, "all_up", `All antennas +${formatCandidateStep(step)} deg`],
-    [-step, "all_down", `All antennas -${formatCandidateStep(step)} deg`],
-  ].forEach(([direction, id, label]) => {
-    const tilts = Object.fromEntries(
-      antennas.map((antenna) => [
-        antenna.id,
-        clampTilt(Number(antenna.tilt?.current) + direction, antenna.tilt),
-      ]),
-    );
-    addCandidate(candidates, seen, id, label, tilts, baselineTilts, limit);
-  });
-
-  antennas.forEach((antenna) => {
-    [
-      [step, "up", `${antenna.id} +${formatCandidateStep(step)} deg`],
-      [-step, "down", `${antenna.id} -${formatCandidateStep(step)} deg`],
-    ].forEach(([direction, suffix, label]) => {
-      const tilts = {
-        ...baselineTilts,
-        [antenna.id]: clampTilt(Number(antenna.tilt?.current) + direction, antenna.tilt),
-      };
-
-      addCandidate(candidates, seen, `${antenna.id}_${suffix}`, label, tilts, baselineTilts, limit);
-    });
-  });
-
-  return {
-    tilt_step: step,
-    max_candidates: limit,
-    generated_count: candidates.length,
-    antenna_count: antennas.length,
-    candidates,
-  };
-}
-
-function addCandidate(candidates, seen, id, label, tilts, baselineTilts, limit) {
-  if (candidates.length >= limit) {
-    return;
-  }
-
-  const key = Object.keys(tilts)
-    .sort()
-    .map((antennaId) => `${antennaId}:${tilts[antennaId]}`)
-    .join("|");
-
-  if (seen.has(key)) {
-    return;
-  }
-
-  seen.add(key);
-  candidates.push({
-    id,
-    label,
-    tilts,
-    changes: Object.keys(tilts)
-      .sort()
-      .filter((antennaId) => Math.abs(tilts[antennaId] - baselineTilts[antennaId]) > Number.EPSILON)
-      .map((antennaId) => ({
-        antenna_id: antennaId,
-        from: baselineTilts[antennaId],
-        to: tilts[antennaId],
-        delta: roundCandidateNumber(tilts[antennaId] - baselineTilts[antennaId]),
-      })),
-  });
-}
-
-function buildNetworkCoverageCandidateRequest(baseRequest, candidateTilts) {
-  const antennas = Array.isArray(baseRequest?.antennas) ? baseRequest.antennas : [];
-  const antennaIds = new Set(antennas.map((antenna) => antenna.id));
-  const changes = [];
-
-  Object.keys(candidateTilts || {}).forEach((antennaId) => {
-    if (!antennaIds.has(antennaId)) {
-      throw new Error(`Unknown antenna in candidate tilts: ${antennaId}`);
-    }
-  });
-
-  const updatedAntennas = antennas.map((antenna) => {
-    if (!Object.prototype.hasOwnProperty.call(candidateTilts || {}, antenna.id)) {
-      return antenna;
-    }
-
-    const nextTilt = Number(candidateTilts[antenna.id]);
-    const minTilt = Number(antenna.tilt?.min);
-    const maxTilt = Number(antenna.tilt?.max);
-    const currentTilt = Number(antenna.tilt?.current);
-
-    if (!Number.isFinite(nextTilt)) {
-      throw new Error(`Candidate tilt for ${antenna.id} must be numeric.`);
-    }
-
-    if (nextTilt < minTilt || nextTilt > maxTilt) {
-      throw new Error(`Candidate tilt for ${antenna.id} must be between ${minTilt} and ${maxTilt}.`);
-    }
-
-    if (Math.abs(nextTilt - currentTilt) > Number.EPSILON) {
-      changes.push({
-        antenna_id: antenna.id,
-        from: currentTilt,
-        to: nextTilt,
-        delta: roundCandidateNumber(nextTilt - currentTilt),
-      });
-    }
-
-    return {
-      ...antenna,
-      tilt: {
-        ...antenna.tilt,
-        current: nextTilt,
-      },
-    };
-  });
-
-  return {
-    request: {
-      ...baseRequest,
-      antennas: updatedAntennas,
-    },
-    changes,
-  };
-}
-
-function clampTilt(value, tilt) {
-  return roundCandidateNumber(Math.min(
-    Math.max(value, Number(tilt?.min)),
-    Number(tilt?.max),
-  ));
-}
-
-function formatTiltMap(tilts) {
-  return Object.entries(tilts || {})
-    .map(([antennaId, tilt]) => `${antennaId}: ${formatNumber(tilt)} deg`)
-    .join(" | ");
-}
-
-function formatCandidateStep(step) {
-  return Number(step).toFixed(2).replace(/\.?0+$/, "");
-}
-
-function roundCandidateNumber(value) {
-  return Math.round(Number(value) * 1000000) / 1000000;
-}
-
-function evaluateNetworkCoverageGrid(grid, objectives) {
-  const kpis = extractNetworkCoverageKpis(grid);
-  const evaluations = objectives.map((objective) => evaluateObjective(kpis, objective));
-  const scores = evaluations.map((evaluation) => evaluation.score);
-
-  return {
-    passed: evaluations.every((evaluation) => evaluation.passed),
-    score: scores.some((score) => !Number.isFinite(score))
-      ? Infinity
-      : scores.reduce((total, score) => total + score, 0),
-    kpis,
-    evaluations,
-  };
-}
-
-function extractNetworkCoverageKpis(grid) {
-  const cells = Array.isArray(grid?.cells) ? grid.cells : [];
-  const totalCells = cells.length;
-  const coveredCells = cells.filter((cell) => !isNoCoverageCell(cell));
-  const uncoveredCells = cells.length - coveredCells.length;
-  const overlapSummary = grid?.overlap_summary || {};
-
-  return {
-    total_cells: totalCells,
-    covered_cells: coveredCells.length,
-    uncovered_cells: uncoveredCells,
-    uncovered_area_percent: percent(uncoveredCells, totalCells),
-    covered_area_percent: percent(coveredCells.length, totalCells),
-    overlap_area_percent: numericValue(overlapSummary.overlap_percent) ?? percent(
-      cells.filter((cell) => numericValue(cell.overlap_count) >= 2).length,
-      totalCells,
-    ),
-    average_overlap_count: numericValue(overlapSummary.average_overlap_count) ?? averageOverlapCount(coveredCells),
-  };
-}
-
-function evaluateObjective(kpis, objective) {
-  const actual = numericValue(kpis[objective.metric]);
-  const target = numericValue(objective.target);
-
-  return {
-    metric: objective.metric,
-    operator: objective.operator,
-    target,
-    actual,
-    passed: actual !== null && target !== null && compareMetric(actual, objective.operator, target),
-    score: actual === null || target === null ? Infinity : objectiveScore(actual, objective.operator, target),
-  };
-}
-
-function compareMetric(actual, operator, target) {
-  if (operator === "<") {
-    return actual < target;
-  }
-  if (operator === "<=") {
-    return actual <= target;
-  }
-  if (operator === ">") {
-    return actual > target;
-  }
-  if (operator === ">=") {
-    return actual >= target;
-  }
-  if (operator === "=") {
-    return Math.abs(actual - target) <= Number.EPSILON;
-  }
-  return false;
-}
-
-function objectiveScore(actual, operator, target) {
-  if (operator === "<" || operator === "<=") {
-    return Math.max(0, actual - target);
-  }
-  if (operator === ">" || operator === ">=") {
-    return Math.max(0, target - actual);
-  }
-  if (operator === "=") {
-    return Math.abs(actual - target);
-  }
-  return Infinity;
-}
-
-function isNoCoverageCell(cell) {
-  if (!cell || typeof cell !== "object") {
-    return true;
-  }
-
-  if (cell.overlap_level === "no_coverage") {
-    return true;
-  }
-
-  const overlapCount = numericValue(cell.overlap_count);
-  if (overlapCount !== null) {
-    return overlapCount <= 0;
-  }
-
-  return numericValue(cell.sinr_db) === null;
-}
-
-function averageOverlapCount(cells) {
-  const counts = cells
-    .map((cell) => numericValue(cell.overlap_count))
-    .filter((value) => value !== null && value > 0);
-
-  if (!counts.length) {
-    return 0;
-  }
-
-  return Math.round((counts.reduce((total, value) => total + value, 0) / counts.length) * 100) / 100;
-}
-
-function percent(part, total) {
-  if (!total) {
-    return 0;
-  }
-
-  return Math.round((part / total) * 10000) / 100;
-}
-
-function numericValue(value) {
+function formatMetric(value, unit = "", decimals = 2) {
   const number = Number(value);
-  return Number.isFinite(number) ? number : null;
+  if (!Number.isFinite(number)) return "--";
+  const text = number.toLocaleString(undefined, {
+    maximumFractionDigits: decimals,
+    minimumFractionDigits: 0,
+  });
+  return unit ? `${text} ${unit}` : text;
 }
 
-function formatMetric(value, unit = "") {
-  if (!Number.isFinite(Number(value))) {
-    return "--";
-  }
-
-  return `${formatNumber(value)}${unit ? ` ${unit}` : ""}`;
+function formatInteger(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "--";
+  return Math.round(number).toLocaleString();
 }
 
-function formatNumber(value) {
-  if (!Number.isFinite(Number(value))) {
-    return "--";
-  }
-
-  return Number(value).toFixed(2).replace(/\.00$/, "");
+function formatTiltMap(tilts = {}) {
+  return Object.entries(tilts)
+    .map(([antennaId, tilt]) => `${antennaId}: ${formatMetric(tilt, "deg", 2)}`)
+    .join(", ");
 }

@@ -11,6 +11,7 @@ from backend.schemas.requests import (
     NetworkCoverageOptimizationCandidatePreviewRequest,
     NetworkCoverageOptimizationEvaluationRequest,
     NetworkCoverageRequest,
+    NetworkCoverageOptimizationRequest,
     RSRPRequest,
     SceneBoundsRequest,
     SINRRequest,
@@ -62,6 +63,7 @@ from backend.services.optimization_service import (
     build_network_coverage_candidate_request,
     evaluate_network_coverage_objectives,
     generate_network_coverage_tilt_candidates,
+    run_network_coverage_optimization,
 )
 
 from backend.simulations.sionna_engine import engine
@@ -447,6 +449,27 @@ def network_coverage(req: NetworkCoverageRequest, request: Request):
         ),
         base_url=str(request.base_url),
     )
+
+
+@router.post("/optimizations/network-coverage/run")
+def optimize_network_coverage(req: NetworkCoverageOptimizationRequest, request: Request):
+    with engine.lock:
+        scene_info = get_engine_scene_info()
+        if req.scene_id != scene_info.get("id"):
+            raise HTTPException(status_code=409, detail="Selected scene changed. Reload optimization.")
+        align_request_solver_to_scene(req.base_request, scene_info)
+        validate_request_positions_inside_solver(prepare_runtime_request(req.base_request, scene_info))
+        if is_database_configured():
+            job_id = create_simulation_job(
+                "network_coverage_optimization", req, scene_info, base_url=str(request.base_url),
+            )
+            return {"status": "queued", "job_id": job_id, "simulation_type": "network_coverage_optimization"}
+        scene = engine.get_scene()
+        return run_network_coverage_optimization(
+            req, lambda candidate: calculate_network_coverage_service(
+                prepare_runtime_request(candidate, scene_info), request.base_url, scene,
+            ),
+        )
 
 
 @router.post("/optimizations/network-coverage/evaluate")

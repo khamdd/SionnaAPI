@@ -152,39 +152,35 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   RSRP enforces the backend limit of 10 active checked antennas per simulation
   request. The RSRP page keeps antenna management on the right and places
   user/solver setup below the 3D scene/result on the left.
-- Network Coverage optimization phase 1 has a frontend-only objective input
-  flow. The Network Coverage top bar includes an Auto optimize input button that
-  opens `/network/optimization`. The optimization page lets engineers choose up
-  to two target objectives from Network Coverage-specific coverage and overlap
-  metrics, set an operator (`<`, `>`, `<=`, `>=`, `=`) and target value,
-  then confirm a structured best-result contract. Phase 2 persists that
-  contract per scene in localStorage under
-  `sionna_network_optimization_objectives`, includes the current Network
-  Coverage `base_request`, and adds backend schema support through
-  `NetworkCoverageOptimizationRequest`. KPI extraction and objective evaluation
-  live in `backend/services/optimization_service.py`. The "Add optimization
-  preview" slice adds
-  `POST /api/v1/optimizations/network-coverage/evaluate`, which evaluates a
-  provided Network Coverage result grid against confirmed objectives without
-  running Sionna, creating jobs, or touching the database. The optimization page
-  can evaluate the latest in-memory Network Coverage result after objectives are
-  confirmed, or fetch the latest completed queued Network Coverage result for the
-  active scene when no in-memory grid is present. If queue artifacts are missing,
-  it falls back to the latest saved Network Coverage history result for the same
-  scene. The frontend also has a local KPI evaluation fallback so preview still
-  works when the running backend has not been restarted with the preview
-  endpoint. The "Add optimization candidate preview" slice adds
-  `POST /api/v1/optimizations/network-coverage/candidates` and candidate UI
-  controls for tilt step and max candidates. It previews deterministic legal
-  tilt setups only: current baseline, all-antennas step up/down, then individual
-  antenna step up/down, clipped to each antenna's tilt range. The frontend also
-  has a local candidate-generation fallback for stale backends. The "Add
-  candidate request preview" slice adds
-  `POST /api/v1/optimizations/network-coverage/candidate-request`, allowing the
-  page to select one generated candidate and preview the exact Network Coverage
-  request payload with that candidate's tilt values applied. This is still
-  preview-only and does not run Sionna, create jobs, or store results. No
-  optimization execution API exists yet.
+- Network Coverage optimization now has a working bounded tilt search at
+  `/network/optimization`: set up to two coverage/overlap targets, choose tilt
+  step and maximum simulations (1–30, including baseline), and start a run.
+  `POST /api/v1/optimizations/network-coverage/run` snapshots the active scene
+  and current Network Coverage request. It creates one
+  `network_coverage_optimization` job when a database is configured, or runs
+  inline without a database. The worker simulates a fresh baseline, then legal
+  all-antennas and individual-antenna tilt changes at progressively larger step
+  offsets within each antenna's tilt range, stopping at the first setup
+  satisfying all targets or after the bounded candidate list is exhausted.
+  Power, azimuth, and solver settings stay fixed. This searches nearby setups;
+  it does not promise a global optimum. Failed candidates are reported and
+  skipped; baseline failure aborts the run. Ranking prioritizes passing all
+  targets, then summed target shortfall normalized by metric range (100 for
+  percentages, 10 for overlap count), then fewer failed targets. KPI ranking
+  uses unrounded cell-derived values so small coverage differences are not lost;
+  exact ties preserve the earlier setup, including the baseline.
+  The result includes the winning coverage grid, baseline/best KPI summaries,
+  tested setup summaries, and original/winning requests under `optimization`.
+  Progress is stored in job result metadata between simulations. The page
+  remembers the latest job per scene and resumes polling after navigation or
+  reload. Apply suggested tilts changes only the Network Coverage draft and
+  rejects a draft changed since submission. Saving a completed optimization
+  stores the winning request/result as normal `network_coverage` history.
+  Targets remain under `sionna_network_optimization_objectives`; latest job IDs
+  and draft signatures use its `:run:<scene-id>` suffix. The older evaluate,
+  candidates, and candidate-request preview endpoints remain available, but
+  the UI no longer exposes their separate stages or frontend calculation
+  fallbacks. Core search logic lives in `backend/services/optimization_service.py`.
 
 ## Important Files
 
@@ -221,7 +217,7 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 ## Current UI Routes
 
 - `/network`: main network coverage planner.
-- `/network/optimization`: Network Coverage optimization objective input.
+- `/network/optimization`: Network Coverage tilt optimization, progress, comparison, and apply.
 - `/queue`: submitted simulation jobs, status tracking, result review, save to
   history, and discard actions.
 - `/coverage`: coverage map API tool.

@@ -6,6 +6,7 @@ from backend.database import is_database_configured
 from backend.schemas.requests import (
     CoverageRequest,
     NetworkCoverageRequest,
+    NetworkCoverageOptimizationRequest,
     RSRPRequest,
     SINRRequest,
     ThroughputRequest,
@@ -20,6 +21,7 @@ from backend.services.simulation_job_store import (
     claim_next_simulation_job,
     mark_simulation_job_failed,
     mark_simulation_job_succeeded,
+    update_optimization_progress,
 )
 from backend.services.sinr_service import calculate_sinr_service
 from backend.services.throughput_service import compare_throughput_service
@@ -28,6 +30,7 @@ from backend.services.throughput_service import compare_throughput_service
 logger = logging.getLogger(__name__)
 
 REQUEST_MODELS = {
+    "network_coverage_optimization": NetworkCoverageOptimizationRequest,
     "coverage_map": CoverageRequest,
     "network_coverage": NetworkCoverageRequest,
     "rsrp_simulation": RSRPRequest,
@@ -90,14 +93,19 @@ def run_simulation_job(job):
     request_json = job.get("request_json") or {}
     try:
         req = build_request(simulation_type, request_json)
-        runtime_req = with_runtime_antenna_positions(req, scene_info)
         scene = get_worker_scene(scene_info)
-        result = execute_simulation(
-            simulation_type,
-            runtime_req,
-            scene,
-            job.get("base_url"),
-        )
+        if simulation_type == "network_coverage_optimization":
+            from backend.services.optimization_service import run_network_coverage_optimization
+            result = run_network_coverage_optimization(
+                req,
+                lambda candidate: calculate_network_coverage_service(
+                    with_runtime_antenna_positions(candidate, scene_info), job.get("base_url"), scene,
+                ),
+                progress=lambda value: update_optimization_progress(job_id, value),
+            )
+        else:
+            runtime_req = with_runtime_antenna_positions(req, scene_info)
+            result = execute_simulation(simulation_type, runtime_req, scene, job.get("base_url"))
         if is_failure_result(result):
             mark_simulation_job_failed(
                 job_id,

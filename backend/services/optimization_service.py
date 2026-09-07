@@ -5,6 +5,61 @@ NO_COVERAGE_LEVEL = "no_coverage"
 OVERLAP_MIN_COUNT = 2
 
 
+def run_network_coverage_optimization(req, simulate, progress=None):
+    """Bounded search using a fresh baseline and identical solver settings."""
+    candidates = generate_network_coverage_tilt_candidates(
+        req.base_request, req.tilt_step, req.max_candidates,
+    )["candidates"]
+    trials = []
+    baseline = best = best_result = best_request = best_rank = None
+    stop_reason = "search_complete"
+    for candidate in candidates:
+        candidate_request = build_network_coverage_candidate_request(
+            req.base_request, candidate["tilts"],
+        )["request"]
+        if progress:
+            progress({"completed": len(trials), "total": len(candidates), "current": candidate["label"]})
+        try:
+            result = simulate(candidate_request)
+            if result.get("status") != "success" or not result.get("grid", {}).get("cells"):
+                raise ValueError(result.get("error") or "Simulation returned no coverage cells")
+            evaluation = evaluate_network_coverage_objectives(result, req.objectives)
+        except Exception as exc:
+            if candidate["id"] == "baseline":
+                raise ValueError(f"Starting setup failed: {exc}") from exc
+            trials.append({"id": candidate["id"], "label": candidate["label"], "error": str(exc)})
+            continue
+        trial = {**candidate, "evaluation": evaluation}
+        trials.append(trial)
+        if baseline is None:
+            baseline = trial
+        # Percent metrics span 0..100; overlap count spans 0..10.
+        # Passing targets takes priority; ties retain the earlier setup (baseline first).
+        normalized_gap = sum(
+            item["score"] / (10 if item["metric"] == "average_overlap_count" else 100)
+            for item in evaluation["evaluations"]
+        )
+        rank = (not evaluation["passed"], normalized_gap,
+                sum(not item["passed"] for item in evaluation["evaluations"]))
+        if best_rank is None or rank < best_rank:
+            best, best_result, best_request, best_rank = trial, result, candidate_request, rank
+        if evaluation["passed"]:
+            stop_reason = "targets_met"
+            break
+    if progress:
+        progress({"completed": len(trials), "total": len(candidates), "current": "Finished"})
+    return {
+        **best_result,
+        "optimization": {
+            "baseline": baseline, "best": best, "trials": trials,
+            "stop_reason": stop_reason, "tested_count": len(trials),
+            "best_request": best_request.model_dump(mode="json"),
+            "base_request": req.base_request.model_dump(mode="json"),
+            "objectives": [objective.model_dump() for objective in req.objectives],
+        },
+    }
+
+
 def extract_network_coverage_kpis(result_or_grid):
     grid = network_coverage_grid(result_or_grid)
     cells = grid.get("cells") if isinstance(grid, dict) else None
@@ -86,43 +141,61 @@ def generate_network_coverage_tilt_candidates(
         max_candidates,
     )
 
-    for direction, suffix, label in (
-        (step, "all_up", f"All antennas +{format_step(step)} deg"),
-        (-step, "all_down", f"All antennas -{format_step(step)} deg"),
-    ):
-        tilts = {
-            antenna.id: clamp_tilt(antenna.tilt.current + direction, antenna.tilt)
-            for antenna in antennas
-        }
-        add_candidate(
-            candidates,
-            seen,
-            suffix,
-            label,
-            tilts,
-            baseline_tilts,
-            max_candidates,
-        )
-
-    for antenna in antennas:
-        for direction, suffix, label in (
-            (step, "up", f"{antenna.id} +{format_step(step)} deg"),
-            (-step, "down", f"{antenna.id} -{format_step(step)} deg"),
-        ):
-            tilts = dict(baseline_tilts)
-            tilts[antenna.id] = clamp_tilt(
-                antenna.tilt.current + direction,
-                antenna.tilt,
+    max_rings = max(
+        (
+            math.ceil(
+                max(
+                    abs(float(antenna.tilt.current) - float(antenna.tilt.min)),
+                    abs(float(antenna.tilt.max) - float(antenna.tilt.current)),
+                ) / step
             )
+            for antenna in antennas
+        ),
+        default=0,
+    )
+
+    for ring in range(1, max_rings + 1):
+        if len(candidates) >= max_candidates:
+            break
+
+        offset = step * ring
+        for direction, suffix, label in (
+            (offset, "all_up", f"All antennas +{format_step(offset)} deg"),
+            (-offset, "all_down", f"All antennas -{format_step(offset)} deg"),
+        ):
+            tilts = {
+                antenna.id: clamp_tilt(antenna.tilt.current + direction, antenna.tilt)
+                for antenna in antennas
+            }
             add_candidate(
                 candidates,
                 seen,
-                f"{antenna.id}_{suffix}",
+                suffix if ring == 1 else f"{suffix}_{ring}",
                 label,
                 tilts,
                 baseline_tilts,
                 max_candidates,
             )
+
+        for antenna in antennas:
+            for direction, suffix, label in (
+                (offset, "up", f"{antenna.id} +{format_step(offset)} deg"),
+                (-offset, "down", f"{antenna.id} -{format_step(offset)} deg"),
+            ):
+                tilts = dict(baseline_tilts)
+                tilts[antenna.id] = clamp_tilt(
+                    antenna.tilt.current + direction,
+                    antenna.tilt,
+                )
+                add_candidate(
+                    candidates,
+                    seen,
+                    f"{antenna.id}_{suffix}" if ring == 1 else f"{antenna.id}_{suffix}_{ring}",
+                    label,
+                    tilts,
+                    baseline_tilts,
+                    max_candidates,
+                )
 
     return {
         "tilt_step": step,
@@ -335,24 +408,20 @@ def is_no_coverage_cell(cell):
 
 
 def overlap_percent(cells, overlap_summary, total_cells):
-    summary_value = numeric_value((overlap_summary or {}).get("overlap_percent"))
-    if summary_value is not None:
-        return summary_value
-
     overlap_cells = [
         cell
         for cell in cells
         if numeric_value(cell.get("overlap_count")) is not None
         and numeric_value(cell.get("overlap_count")) >= OVERLAP_MIN_COUNT
     ]
-    return percent(len(overlap_cells), total_cells)
+    if cells:
+        return percent(len(overlap_cells), total_cells)
+
+    summary_value = numeric_value((overlap_summary or {}).get("overlap_percent"))
+    return summary_value if summary_value is not None else 0.0
 
 
 def average_overlap_count(cells, overlap_summary, covered_cells):
-    summary_value = numeric_value((overlap_summary or {}).get("average_overlap_count"))
-    if summary_value is not None:
-        return summary_value
-
     counts = [
         numeric_value(cell.get("overlap_count"))
         for cell in covered_cells
@@ -362,15 +431,17 @@ def average_overlap_count(cells, overlap_summary, covered_cells):
         for count in counts
         if count is not None and count > 0
     ]
-    if not counts:
-        return 0.0
-    return round(sum(counts) / len(counts), 2)
+    if counts:
+        return sum(counts) / len(counts)
+
+    summary_value = numeric_value((overlap_summary or {}).get("average_overlap_count"))
+    return summary_value if summary_value is not None else 0.0
 
 
 def percent(part, total):
     if total <= 0:
         return 0.0
-    return round((part / total) * 100.0, 2)
+    return (part / total) * 100.0
 
 
 def numeric_value(value):

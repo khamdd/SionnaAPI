@@ -147,7 +147,14 @@ class OptimizationObjective(BaseModel):
         "average_overlap_count",
     ]
     operator: Literal["<", ">", "<=", ">=", "="]
-    target: float
+    target: float = Field(ge=0, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def validate_target_range(self):
+        limit = 10 if self.metric == "average_overlap_count" else 100
+        if self.target > limit:
+            raise ValueError(f"Target must not exceed {limit}")
+        return self
 
 
 class OptimizationVariable(BaseModel):
@@ -166,6 +173,8 @@ class NetworkCoverageOptimizationRequest(BaseModel):
     )
 
     base_request: NetworkCoverageRequest
+    tilt_step: float = Field(default=2.0, gt=0, le=20, allow_inf_nan=False)
+    max_candidates: int = Field(default=10, ge=1, le=30)
 
     objectives: List[OptimizationObjective] = Field(
         min_length=1,
@@ -180,6 +189,9 @@ class NetworkCoverageOptimizationRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_unique_objective_metrics(self):
+        antenna_ids = [antenna.id for antenna in self.base_request.antennas]
+        if len(antenna_ids) != len(set(antenna_ids)):
+            raise ValueError("Optimization antennas must have unique IDs")
         metrics = [
             objective.metric
             for objective in self.objectives

@@ -14,6 +14,7 @@ from backend.models import SimulationJob
 from backend.schemas.requests import (
     CoverageRequest,
     NetworkCoverageRequest,
+    NetworkCoverageOptimizationRequest,
     RSRPRequest,
     SINRRequest,
     ThroughputRequest,
@@ -35,6 +36,7 @@ from backend.services.simulation_store import (
 logger = logging.getLogger(__name__)
 
 REQUEST_MODELS = {
+    "network_coverage_optimization": NetworkCoverageOptimizationRequest,
     "coverage_map": CoverageRequest,
     "network_coverage": NetworkCoverageRequest,
     "rsrp_simulation": RSRPRequest,
@@ -211,6 +213,14 @@ def claim_next_simulation_job():
         }
 
 
+def update_optimization_progress(job_id, progress):
+    with db_session() as session:
+        row = session.get(SimulationJob, job_id)
+        if row is not None and row.status == "running":
+            row.result_json = {"optimization_progress": progress}
+            row.updated_at = datetime.now(timezone.utc)
+
+
 def mark_simulation_job_succeeded(job_id, result):
     update_simulation_job_finished(
         job_id,
@@ -301,8 +311,13 @@ def save_simulation_job_result(job_id):
             "error": "Failed to rebuild the simulation request.",
         }
 
+    saved_type = job["simulation_type"]
+    if saved_type == "network_coverage_optimization":
+        req = NetworkCoverageRequest(**result_response["result"]["optimization"]["best_request"])
+        saved_type = "network_coverage"
+
     run_id = store_simulation_result(
-        job["simulation_type"],
+        saved_type,
         req,
         result_response["result"],
         parse_datetime(job.get("started_at")) or parse_datetime(job.get("queued_at")) or utc_now(),

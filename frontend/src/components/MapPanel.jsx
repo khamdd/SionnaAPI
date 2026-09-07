@@ -54,7 +54,7 @@ export default function MapPanel({
             disabled={isBusy}
             onClick={onOptimize}
           >
-            Auto optimize input
+            Optimize tilts
           </button>
           <button
             className="primary-button"

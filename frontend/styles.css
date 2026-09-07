@@ -3510,3 +3510,33 @@ textarea:disabled {
     display: grid;
   }
 }
+.optimization-run-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.optimization-target-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 16px;
+  margin: 16px 0;
+}
+.optimization-target-row label {
+  display: grid;
+  gap: 6px;
+  flex: 1 1 150px;
+}
+.optimization-results-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.optimization-results-table th, .optimization-results-table td {
+  text-align: left;
+  padding: 12px 8px;
+  border-bottom: 1px solid #dce2e8;
+}
+.optimization-page > .optimization-panel {
+  margin-top: 20px;
+}

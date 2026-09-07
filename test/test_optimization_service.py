@@ -3,6 +3,7 @@ import math
 import pytest
 
 from backend.services.optimization_service import (
+    run_network_coverage_optimization,
     build_network_coverage_candidate_request,
     evaluate_network_coverage_objectives,
     evaluate_objective,
@@ -10,6 +11,143 @@ from backend.services.optimization_service import (
     generate_network_coverage_tilt_candidates,
 )
 from backend.schemas.requests import NetworkCoverageRequest
+from backend.schemas.requests import NetworkCoverageOptimizationRequest
+
+
+def optimization_request(**kwargs):
+    return NetworkCoverageOptimizationRequest(
+        base_request=NetworkCoverageRequest(antennas=[{
+            "id": "A1", "longitude": 105.8, "latitude": 21.0, "height_m": 30,
+            "tilt": {"min": 0, "current": 5, "max": 10}, "azimuth": 45,
+            "tx_power": {"min": 20, "current": 30, "max": 40},
+        }]),
+        objectives=[{"metric": "uncovered_area_percent", "operator": "<=", "target": 0}],
+        **kwargs,
+    )
+
+
+def coverage_result(covered):
+    return {"status": "success", "grid": {"cells": [
+        {"overlap_count": 1 if index < covered else 0} for index in range(10)
+    ]}}
+
+
+def test_search_runs_fresh_baseline_stops_at_target_and_preserves_request():
+    req = optimization_request()
+    original = req.model_dump()
+    calls = []
+    progress = []
+    def simulate(candidate):
+        calls.append(candidate)
+        return coverage_result(5 if len(calls) == 1 else 10)
+    result = run_network_coverage_optimization(req, simulate, progress.append)
+    assert len(calls) == 2
+    assert calls[0].antennas[0].tilt.current == 5
+    assert calls[1].antennas[0].tilt.current == 7
+    assert calls[1].antennas[0].tx_power == calls[0].antennas[0].tx_power
+    assert req.model_dump() == original
+    assert result["optimization"]["stop_reason"] == "targets_met"
+    assert result["optimization"]["best"]["id"] == "all_up"
+    assert progress[-1]["completed"] == 2
+
+
+def test_search_keeps_baseline_when_other_settings_are_worse_or_equal():
+    req = optimization_request(max_candidates=3)
+    outputs = iter([coverage_result(8), coverage_result(6), coverage_result(8)])
+    result = run_network_coverage_optimization(req, lambda _: next(outputs))
+    assert result["optimization"]["best"]["id"] == "baseline"
+    assert result["optimization"]["tested_count"] == 3
+
+
+def test_search_baseline_failure_aborts_but_candidate_failure_is_reported():
+    req = optimization_request(max_candidates=3)
+    with pytest.raises(ValueError, match="Starting setup failed"):
+        run_network_coverage_optimization(req, lambda _: {"status": "failure", "error": "solver failed"})
+    outputs = iter([coverage_result(5), {"status": "failure", "error": "bad candidate"}, coverage_result(9)])
+    result = run_network_coverage_optimization(req, lambda _: next(outputs))
+    assert result["optimization"]["trials"][1]["error"] == "bad candidate"
+    assert result["optimization"]["best"]["id"] == "all_down"
+
+
+def test_search_limit_includes_baseline_and_rejects_empty_grid():
+    result = run_network_coverage_optimization(optimization_request(max_candidates=1), lambda _: coverage_result(5))
+    assert result["optimization"]["tested_count"] == 1
+    with pytest.raises(ValueError, match="no coverage cells"):
+        run_network_coverage_optimization(optimization_request(), lambda _: {"status": "success", "grid": {"cells": []}})
+
+
+def test_optimization_rejects_invalid_target_and_unbounded_search():
+    from pydantic import ValidationError
+    req = optimization_request().model_dump()
+    req["objectives"][0]["target"] = float("nan")
+    with pytest.raises(ValidationError):
+        NetworkCoverageOptimizationRequest(**req)
+    with pytest.raises(ValidationError):
+        optimization_request(max_candidates=31)
+
+
+def test_search_normalizes_conflicting_objectives_and_does_not_claim_success():
+    payload = optimization_request().model_dump()
+    payload["objectives"] = [
+        {"metric": "covered_area_percent", "operator": ">=", "target": 100},
+        {"metric": "average_overlap_count", "operator": "<=", "target": 1},
+    ]
+    req = NetworkCoverageOptimizationRequest(**payload)
+    baseline = coverage_result(8)  # normalized shortfall .20
+    candidate = coverage_result(9)
+    for cell in candidate["grid"]["cells"]:
+        if cell["overlap_count"] > 0:
+            cell["overlap_count"] = 3
+    outputs = iter([baseline, candidate, coverage_result(7)])
+    result = run_network_coverage_optimization(req, lambda _: next(outputs))
+    assert result["optimization"]["best"]["id"] == "baseline"
+    assert not result["optimization"]["best"]["evaluation"]["passed"]
+
+
+def test_search_uses_unrounded_coverage_percent_for_ranking():
+    payload = optimization_request(max_candidates=3).model_dump()
+    payload["base_request"]["antennas"][0]["tilt"] = {
+        "min": 1,
+        "current": 8,
+        "max": 14,
+    }
+    payload["objectives"] = [
+        {"metric": "covered_area_percent", "operator": ">=", "target": 90},
+    ]
+    req = NetworkCoverageOptimizationRequest(**payload)
+
+    def result_with_covered_cells(covered):
+        total = 29568
+        return {
+            "status": "success",
+            "grid": {
+                "cells": [
+                    {"overlap_count": 1 if index < covered else 0}
+                    for index in range(total)
+                ],
+            },
+        }
+
+    outputs = iter([
+        result_with_covered_cells(8263),
+        result_with_covered_cells(8265),
+        result_with_covered_cells(8260),
+    ])
+
+    result = run_network_coverage_optimization(req, lambda _: next(outputs))
+
+    assert result["optimization"]["best"]["id"] == "all_up"
+    assert result["optimization"]["best"]["tilts"] == {"A1": 10.0}
+    assert result["optimization"]["baseline"]["evaluation"]["kpis"]["covered_area_percent"] == pytest.approx(27.9457521645)
+    assert result["optimization"]["best"]["evaluation"]["kpis"]["covered_area_percent"] == pytest.approx(27.9525162340)
+
+
+def test_search_strict_target_equality_is_not_success():
+    payload = optimization_request(max_candidates=1).model_dump()
+    payload["objectives"] = [{"metric": "uncovered_area_percent", "operator": "<", "target": 20}]
+    result = run_network_coverage_optimization(NetworkCoverageOptimizationRequest(**payload), lambda _: coverage_result(8))
+    assert result["optimization"]["stop_reason"] == "search_complete"
+    assert not result["optimization"]["best"]["evaluation"]["passed"]
 
 
 def test_extract_network_coverage_kpis_summarizes_grid_metrics():
@@ -250,6 +388,47 @@ def test_generate_network_coverage_tilt_candidates_applies_max_candidates():
     assert [candidate["id"] for candidate in preview["candidates"]] == [
         "baseline",
         "all_up",
+    ]
+
+
+def test_generate_network_coverage_tilt_candidates_steps_until_range_or_limit():
+    request = NetworkCoverageRequest(
+        antennas=[
+            {
+                "id": "A1",
+                "longitude": 105.8,
+                "latitude": 21.0,
+                "height_m": 30.0,
+                "tilt": {
+                    "min": 1.0,
+                    "current": 8.0,
+                    "max": 14.0,
+                },
+                "azimuth": 45.0,
+                "tx_power": {
+                    "min": 20.0,
+                    "current": 30.0,
+                    "max": 40.0,
+                },
+            }
+        ],
+    )
+
+    preview = generate_network_coverage_tilt_candidates(
+        request,
+        tilt_step=2.0,
+        max_candidates=10,
+    )
+
+    assert [candidate["tilts"]["A1"] for candidate in preview["candidates"]] == [
+        8.0,
+        10.0,
+        6.0,
+        12.0,
+        4.0,
+        14.0,
+        2.0,
+        1.0,
     ]
 
 

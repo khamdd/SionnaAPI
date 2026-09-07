@@ -1829,15 +1829,19 @@ export default function App() {
           summary={summary}
         />
       )}
-      {visibleRoute === NETWORK_OPTIMIZATION_ROUTE && (
+      {visibleRoute === NETWORK_OPTIMIZATION_ROUTE && activeScene && (
         <OptimizationObjectivePage
-          activeAntennas={activeNetworkAntennas}
+          key={activeScene.id}
           activeScene={activeScene}
           baseRequest={buildNetworkCoveragePayload(activeNetworkAntennas, activeScene)}
-          latestGrid={latestGrid}
-          onLoadLatestResult={loadLatestNetworkCoverageResult}
           storageKey={NETWORK_OPTIMIZATION_OBJECTIVES_STORAGE_KEY}
           onBack={() => navigate(SIMULATION_ENTRY_ROUTE)}
+          onApply={(tilts) => {
+            Object.entries(tilts).forEach(([id, tilt]) => updateAntenna(id, "tilt", tilt));
+            setLatestGrid(null);
+            setCoverageImageUrl("");
+            setRunStatus("Optimized tilts applied. Run Network Coverage to view the updated map.");
+          }}
         />
       )}
       {visibleRoute === "/coverage" && (
@@ -2435,13 +2439,16 @@ function buildNetworkCoveragePayload(antennas, activeScene) {
 }
 
 function simulationJobToHistoryItem(job, result = null) {
-  const request = job.request || {};
   const response = result || job.result || {};
+  const isOptimization = job.simulation_type === "network_coverage_optimization";
+  const request = isOptimization
+    ? response.optimization?.best_request || job.request?.base_request || {}
+    : job.request || {};
   const scene = job.scene || {};
 
   return {
     id: job.result_run_id || job.id,
-    simulation_type: job.simulation_type,
+    simulation_type: isOptimization ? "network_coverage" : job.simulation_type,
     status: response.status || (job.status === "succeeded" ? "success" : job.status),
     transmitter_pattern: request.transmitter_pattern || TRANSMITTER_PATTERN,
     scene_id: scene.id,

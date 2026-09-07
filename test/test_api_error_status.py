@@ -95,6 +95,9 @@ def test_coverage_map_failure_returns_http_500(monkeypatch):
 
 
 def test_network_coverage_failure_returns_http_500(monkeypatch):
+    scene = FakeEngine().get_active_scene_info()
+    scene["bounds"] = {"west": 105.7, "east": 105.9, "south": 20.9, "north": 21.1}
+    monkeypatch.setattr(api_module, "get_engine_scene_info", lambda: scene)
     monkeypatch.setattr(
         api_module,
         "calculate_network_coverage_service",
@@ -107,7 +110,9 @@ def test_network_coverage_failure_returns_http_500(monkeypatch):
             "antennas": [
                 {
                     "id": "A1",
-                    "position": [0.0, 0.0, 25.0],
+                    "longitude": 105.8,
+                    "latitude": 21.0,
+                    "height_m": 25.0,
                     "tilt": {
                         "min": 2.0,
                         "current": 8.0,

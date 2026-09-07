@@ -17,6 +17,10 @@ export function runNetworkCoverage(payload) {
   return runSimulationRequest("/api/v1/network-coverage", payload);
 }
 
+export function runNetworkCoverageOptimization(payload) {
+  return runSimulationRequest("/api/v1/optimizations/network-coverage/run", payload);
+}
+
 export function evaluateNetworkCoverageOptimization(payload) {
   return requestJson("/api/v1/optimizations/network-coverage/evaluate", {
     method: "POST",
