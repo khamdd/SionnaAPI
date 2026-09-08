@@ -69,10 +69,10 @@ Copy it to approved durable backup storage before a production migration.
 
 ## Legacy database adoption rule
 
-Do not run `alembic stamp` merely because these table names exist. Before stamping
-the future baseline revision, compare the target database with this inventory and
-the reviewed initial migration. Stamping records a revision but does not validate
-or repair the schema.
+Do not run `alembic stamp` merely because these table names exist. Use the guarded
+adoption command below to compare the target database with this inventory and the
+reviewed initial migration. Stamping records a revision but does not validate or
+repair the schema by itself.
 
 ## Baseline migration verification
 
@@ -88,6 +88,29 @@ tested on 2026-09-08 using an isolated database created from PostgreSQL
   PostGIS extension.
 - A second `alembic upgrade head` and `alembic check` succeeded.
 
-The temporary database was removed after verification. The live database
-remains unstamped and its application-table row counts are unchanged. Adopting
-that database into Alembic is a separate follow-up step.
+The temporary database was removed after verification.
+
+## Legacy database adoption
+
+Use the guarded adoption command for a database that was previously created by
+`Base.metadata.create_all()`:
+
+```text
+python -m backend.migrations.adopt_legacy_database --check-only
+python -m backend.migrations.adopt_legacy_database
+```
+
+The command restricts inspection to the `public` application schema, compares
+types, server defaults, keys, constraints, and tables, and refuses to stamp a
+mismatch. It is safe to rerun after a successful adoption.
+
+The Docker `sionna_simulation` database was validated and stamped at
+`0001_initial_schema` on 2026-09-08. Only Alembic's version table and revision
+row were added; the six application tables were not recreated and their row
+counts remained unchanged.
+
+A fresh backup was captured immediately before stamping:
+
+- File: `static/database-backups/pre-alembic-stamp-20260908-110934.dump`
+- Size: 151,161 bytes
+- SHA-256: `305354524F5E19D0D128FFCA458348657CDB752E9395423B9871FD4443E48F73`

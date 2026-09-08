@@ -94,9 +94,11 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   `Base.metadata`. Revision `0001_initial_schema` reproduces the six existing
   application tables and creates PostGIS when needed; it deliberately excludes
   PostGIS-owned tables from autogeneration. The baseline was verified on an
-  isolated clean database, but the existing application database has not yet
-  been stamped. FastAPI still calls `Base.metadata.create_all()` until the
-  legacy-database adoption and startup migration steps are completed.
+  isolated clean database. The legacy-schema adoption command validates types,
+  defaults, constraints, and application-owned tables before stamping; the
+  existing Docker database is stamped at `0001_initial_schema`. FastAPI still
+  calls `Base.metadata.create_all()` until the startup migration step is
+  completed.
 - RSRP work includes no-coverage rows for served/measured output and a legend UI
   update.
 - Antenna import work has started with a frontend download button that creates
