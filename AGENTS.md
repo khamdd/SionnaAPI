@@ -121,6 +121,16 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   antennas. Analytical SINR/Throughput profiles are skipped for tilt, azimuth,
   position, and height-only changes that their current formulas do not use.
   Automatic optimization remains disabled in policy v1.
+- Durable impact studies are stored through
+  `backend/services/impact_study_service.py`. Authenticated APIs create and list
+  studies, inspect one study, start it, and cancel it. Starting creates exactly
+  one baseline and one candidate child job per planned profile in the existing
+  simulation queue; row locking plus a database uniqueness constraint make start
+  idempotent. Child jobs carry their study, profile, scenario role, and a stable
+  input signature. Worker completion reconciles the parent summary and preserves
+  successful results when sibling jobs fail. Queued jobs can be cancelled;
+  already-running jobs finish while the study remains cancelled. The workflow is
+  backend-only for now and does not change manual simulation or frontend flows.
 - Alembic 1.19.2 is configured through `alembic.ini` and
   `backend/migrations/`, using the existing database URL resolver and
   `Base.metadata`. Revision `0001_initial_schema` reproduces the six existing
@@ -276,6 +286,8 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   comparison of network configuration versions.
 - `backend/services/impact_planner.py`: policy-versioned dry-run mapping from
   configuration changes to planned and skipped simulation profiles.
+- `backend/services/impact_study_service.py`: durable impact-study lifecycle,
+  linked child-job creation, status reconciliation, and partial-failure summary.
 - `backend/services/simulation_profile_service.py`: saved automation-profile CRUD,
   enable-time validation, antenna-role resolution, and request construction.
 - `backend/services/scene_service.py`: scene registry, preview lifecycle, activate

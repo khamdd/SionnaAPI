@@ -47,7 +47,7 @@ def test_database_revision_check_rejects_outdated_database(monkeypatch):
         database.ensure_database_is_current()
 
 
-def test_simulation_profile_migration_is_the_current_head():
+def test_impact_study_migration_is_the_current_head():
     assert database._get_expected_migration_heads() == (
-        "0003_simulation_profiles",
+        "0004_impact_studies",
     )

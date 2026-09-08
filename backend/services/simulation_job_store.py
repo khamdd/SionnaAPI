@@ -10,7 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from backend.constants import STATIC_DIR
 from backend.database import db_session, is_database_configured
-from backend.models import SimulationJob
+from backend.models import ImpactStudy, SimulationJob
 from backend.schemas.requests import (
     CoverageRequest,
     NetworkCoverageRequest,
@@ -57,21 +57,48 @@ def create_simulation_job(
     if not is_database_configured():
         return None
 
-    job_id = str(uuid4())
-
     with db_session() as session:
-        session.add(
-            SimulationJob(
-                id=job_id,
-                simulation_type=simulation_type,
-                status="queued",
-                scene_json=sanitize_json_value(scene_info or {}),
-                request_json=normalize_json_value(to_json_string(req)),
-                base_url=base_url,
-                created_by=created_by,
-            )
+        job_id = add_simulation_job(
+            session,
+            simulation_type,
+            req,
+            scene_info,
+            base_url=base_url,
+            created_by=created_by,
         )
 
+    return job_id
+
+
+def add_simulation_job(
+    session,
+    simulation_type,
+    req,
+    scene_info,
+    base_url=None,
+    created_by=None,
+    impact_study_id=None,
+    simulation_profile_id=None,
+    scenario_role=None,
+    input_signature=None,
+):
+    """Add a queued job to an existing transaction and return its ID."""
+    job_id = str(uuid4())
+    session.add(
+        SimulationJob(
+            id=job_id,
+            simulation_type=simulation_type,
+            status="queued",
+            scene_json=sanitize_json_value(scene_info or {}),
+            request_json=normalize_json_value(to_json_string(req)),
+            base_url=base_url,
+            created_by=created_by,
+            impact_study_id=impact_study_id,
+            simulation_profile_id=simulation_profile_id,
+            scenario_role=scenario_role,
+            input_signature=input_signature,
+        )
+    )
     return job_id
 
 
@@ -201,6 +228,10 @@ def claim_next_simulation_job():
         job.started_at = now
         job.updated_at = now
         job.attempts += 1
+        if job.impact_study_id:
+            study = session.get(ImpactStudy, job.impact_study_id)
+            if study is not None and study.status == "queued":
+                study.status = "running"
         session.flush()
 
         return {
@@ -245,11 +276,13 @@ def update_simulation_job_finished(
     result_run_id=None,
     error_message=None,
 ):
+    impact_study_id = None
     with db_session() as session:
         job = session.get(SimulationJob, job_id)
         if job is None:
             return
 
+        impact_study_id = job.impact_study_id
         now = datetime.now(timezone.utc)
         job.status = status
         job.result_json = sanitize_json_value(result) if result is not None else None
@@ -257,6 +290,11 @@ def update_simulation_job_finished(
         job.error_message = error_message
         job.finished_at = now
         job.updated_at = now
+
+    if impact_study_id:
+        from backend.services.impact_study_service import reconcile_impact_study
+
+        reconcile_impact_study(str(impact_study_id))
 
 
 def save_simulation_job_result(job_id):
@@ -479,6 +517,12 @@ def row_value(row, name):
     return getattr(row, name)
 
 
+def optional_row_value(row, name, default=None):
+    if isinstance(row, dict):
+        return row.get(name, default)
+    return getattr(row, name, default)
+
+
 def serialize_job(row):
     if row is None:
         return None
@@ -495,6 +539,16 @@ def serialize_job(row):
         else None,
         "error_message": row_value(row, "error_message"),
         "attempts": row_value(row, "attempts"),
+        "impact_study_id": str(optional_row_value(row, "impact_study_id"))
+        if optional_row_value(row, "impact_study_id")
+        else None,
+        "simulation_profile_id": str(
+            optional_row_value(row, "simulation_profile_id")
+        )
+        if optional_row_value(row, "simulation_profile_id")
+        else None,
+        "scenario_role": optional_row_value(row, "scenario_role"),
+        "input_signature": optional_row_value(row, "input_signature"),
         "queued_at": serialize_datetime(row_value(row, "queued_at")),
         "started_at": serialize_datetime(row_value(row, "started_at")),
         "finished_at": serialize_datetime(row_value(row, "finished_at")),

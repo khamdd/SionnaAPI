@@ -153,7 +153,7 @@ Docker Compose uses named volumes:
 
 | Volume | Contents |
 | --- | --- |
-| `postgres-data` | Users, network configurations, simulation profiles, jobs, scene references, and saved history |
+| `postgres-data` | Users, network configurations, simulation profiles, impact studies, jobs, scene references, and saved history |
 | `elasticsearch-data` | Application logs |
 | `application-static` | Imported scenes and generated simulation files |
 
@@ -220,6 +220,10 @@ configuration comparison API described in
 The policy-versioned dry-run planner maps those changes to applicable enabled
 simulation profiles without submitting jobs. See
 [`docs/impact-planning.md`](docs/impact-planning.md).
+
+Durable impact studies persist that plan and submit linked baseline/candidate
+jobs through the existing simulation queue. See
+[`docs/impact-studies.md`](docs/impact-studies.md).
 
 ## Database migrations
 

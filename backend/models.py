@@ -278,8 +278,75 @@ class SimulationArtifact(Base):
     simulation_run: Mapped[SimulationRun] = relationship(back_populates="artifacts")
 
 
+class ImpactStudy(Base):
+    __tablename__ = "impact_studies"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ("
+            "'planned', 'queued', 'running', 'aggregating', 'completed', "
+            "'completed_with_failures', 'cancelled', 'failed'"
+            ")",
+            name="ck_impact_studies_status",
+        ),
+        Index("ix_impact_studies_creator_created", "created_by", "created_at"),
+        Index("ix_impact_studies_scene_status", "scene_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    scene_id: Mapped[str] = mapped_column(
+        ForeignKey("scenes.id", ondelete="RESTRICT")
+    )
+    baseline_configuration_id: Mapped[str] = mapped_column(
+        ForeignKey("network_configurations.id", ondelete="RESTRICT")
+    )
+    candidate_configuration_id: Mapped[str] = mapped_column(
+        ForeignKey("network_configurations.id", ondelete="RESTRICT")
+    )
+    policy_version: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text, default="planned")
+    difference_json: Mapped[dict] = mapped_column(JSONB)
+    execution_plan_json: Mapped[dict] = mapped_column(JSONB)
+    summary_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    report_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[str] = mapped_column(
+        ForeignKey("app_users.id", ondelete="RESTRICT")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    jobs: Mapped[list["SimulationJob"]] = relationship(
+        back_populates="impact_study",
+        passive_deletes=True,
+    )
+
+
 class SimulationJob(Base):
     __tablename__ = "simulation_jobs"
+    __table_args__ = (
+        UniqueConstraint(
+            "impact_study_id",
+            "simulation_profile_id",
+            "scenario_role",
+            name="uq_simulation_jobs_impact_profile_role",
+        ),
+        CheckConstraint(
+            "scenario_role IS NULL OR scenario_role IN ("
+            "'baseline', 'candidate', 'optimization'"
+            ")",
+            name="ck_simulation_jobs_scenario_role",
+        ),
+        Index("ix_simulation_jobs_impact_status", "impact_study_id", "status"),
+        Index("ix_simulation_jobs_input_signature", "input_signature"),
+    )
 
     id: Mapped[str] = mapped_column(
         UUID(as_uuid=False), primary_key=True, server_default=func.gen_random_uuid()
@@ -297,6 +364,16 @@ class SimulationJob(Base):
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     base_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
+    impact_study_id: Mapped[str | None] = mapped_column(
+        ForeignKey("impact_studies.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    simulation_profile_id: Mapped[str | None] = mapped_column(
+        ForeignKey("simulation_profiles.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    scenario_role: Mapped[str | None] = mapped_column(Text, nullable=True)
+    input_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
     queued_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -311,3 +388,4 @@ class SimulationJob(Base):
     )
 
     result_run: Mapped[SimulationRun | None] = relationship(back_populates="jobs")
+    impact_study: Mapped[ImpactStudy | None] = relationship(back_populates="jobs")
