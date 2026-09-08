@@ -32,6 +32,7 @@ configuration per scene.
 ## Endpoints
 
 - `POST /api/v1/network-configurations`
+- `POST /api/v1/network-configurations/compare`
 - `GET /api/v1/network-configurations?scene_id=...&status=draft`
 - `GET /api/v1/network-configurations/{id}`
 - `POST /api/v1/network-configurations/{id}/publish`

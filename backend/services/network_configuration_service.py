@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from backend.database import db_session, is_database_configured
 from backend.models import NetworkConfiguration, Scene
 from backend.schemas.network_configurations import NetworkConfigurationCreateRequest
+from backend.services.configuration_diff_service import compare_configuration_snapshots
 from backend.services.scene_service import list_scenes
 from backend.services.simulation_store import ensure_scene_reference
 
@@ -257,6 +258,49 @@ def get_active_network_configuration(scene_id: str, user_id: str) -> dict:
         return _failure(500, "Failed to load the published network configuration.")
 
 
+def compare_network_configurations(
+    baseline_configuration_id: str,
+    candidate_configuration_id: str,
+    user_id: str,
+) -> dict:
+    unavailable = _database_unavailable()
+    if unavailable:
+        return unavailable
+
+    try:
+        with db_session() as session:
+            baseline = session.get(
+                NetworkConfiguration,
+                baseline_configuration_id,
+            )
+            candidate = session.get(
+                NetworkConfiguration,
+                candidate_configuration_id,
+            )
+            if baseline is None or not _can_read(baseline, user_id):
+                return _failure(404, "Baseline network configuration was not found.")
+            if candidate is None or not _can_read(candidate, user_id):
+                return _failure(404, "Candidate network configuration was not found.")
+            if baseline.scene_id != candidate.scene_id:
+                return _failure(400, "Configurations belong to different scenes.")
+
+            difference = compare_configuration_snapshots(
+                baseline.antennas_json,
+                candidate.antennas_json,
+            )
+            return {
+                "status": "success",
+                "scene_id": baseline.scene_id,
+                "baseline": _configuration_identity(baseline),
+                "candidate": _configuration_identity(candidate),
+                "hashes_equal": baseline.content_hash == candidate.content_hash,
+                **difference,
+            }
+    except (SQLAlchemyError, ValueError):
+        logger.exception("Failed to compare network configurations.")
+        return _failure(500, "Failed to compare network configurations.")
+
+
 def apply_publish_transition(
     configuration: NetworkConfiguration | None,
     current: NetworkConfiguration | None,
@@ -314,6 +358,15 @@ def serialize_configuration(configuration: NetworkConfiguration) -> dict:
         "created_by": str(configuration.created_by),
         "created_at": _serialize_datetime(configuration.created_at),
         "published_at": _serialize_datetime(configuration.published_at),
+    }
+
+
+def _configuration_identity(configuration: NetworkConfiguration) -> dict:
+    return {
+        "id": str(configuration.id),
+        "version": configuration.version,
+        "status": configuration.status,
+        "content_hash": configuration.content_hash,
     }
 
 

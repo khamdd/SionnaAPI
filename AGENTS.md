@@ -105,6 +105,13 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   resolve saved antenna role IDs. Invalid role profiles return an explicit skip
   reason. Existing manual simulation requests and frontend localStorage remain
   unchanged.
+- `backend/services/configuration_diff_service.py` compares two network
+  configuration snapshots deterministically. It reports antenna additions,
+  removals, and before/after changes for enabled status, geographic position,
+  height, tilt ranges, power ranges, and azimuth. Ordering and equivalent numeric
+  representations do not create false differences. The authenticated
+  `POST /api/v1/network-configurations/compare` endpoint enforces existing
+  configuration visibility and same-scene comparison.
 - Alembic 1.19.2 is configured through `alembic.ini` and
   `backend/migrations/`, using the existing database URL resolver and
   `Base.metadata`. Revision `0001_initial_schema` reproduces the six existing
@@ -256,6 +263,8 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   cleanup.
 - `backend/services/network_configuration_service.py`: immutable antenna snapshot
   normalization, hashing, version creation, access control, and publishing.
+- `backend/services/configuration_diff_service.py`: deterministic field-level
+  comparison of network configuration versions.
 - `backend/services/simulation_profile_service.py`: saved automation-profile CRUD,
   enable-time validation, antenna-role resolution, and request construction.
 - `backend/services/scene_service.py`: scene registry, preview lifecycle, activate

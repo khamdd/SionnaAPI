@@ -213,6 +213,10 @@ Saved simulation profiles provide repeatable solver, radio, and antenna-role
 settings for that automation. Their validation and API rules are documented in
 [`docs/simulation-profiles.md`](docs/simulation-profiles.md).
 
+Version-to-version antenna changes can be inspected through the authenticated
+configuration comparison API described in
+[`docs/configuration-differences.md`](docs/configuration-differences.md).
+
 ## Database migrations
 
 Database schema changes are managed only by Alembic. FastAPI checks the installed

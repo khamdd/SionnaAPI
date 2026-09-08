@@ -4,7 +4,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from backend.api.dependencies import require_current_user
-from backend.schemas.network_configurations import NetworkConfigurationCreateRequest
+from backend.schemas.network_configurations import (
+    NetworkConfigurationCompareRequest,
+    NetworkConfigurationCreateRequest,
+)
 from backend.services import network_configuration_service
 
 
@@ -52,6 +55,20 @@ def list_network_configurations(
             scene_id=scene_id,
             status=configuration_status,
             limit=limit,
+        )
+    )
+
+
+@router.post("/network-configurations/compare")
+def compare_network_configurations(
+    request: NetworkConfigurationCompareRequest,
+    user=Depends(require_current_user),
+):
+    return return_or_raise(
+        network_configuration_service.compare_network_configurations(
+            str(request.baseline_configuration_id),
+            str(request.candidate_configuration_id),
+            user_id=user["id"],
         )
     )
 
