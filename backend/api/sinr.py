@@ -187,6 +187,13 @@ def queue_or_run(
             "simulation_type": simulation_type,
         }
 
+    if getattr(req, "propagation_model", "sionna") != "sionna":
+        return run_and_store(
+            simulation_type,
+            req,
+            lambda runtime_req: simulation_fn(runtime_req, None),
+        )
+
     with engine.lock:
         scene = engine.get_scene()
         return run_and_store(

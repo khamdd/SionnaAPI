@@ -287,6 +287,14 @@ class RSRPRequest(BaseModel):
 
 
 class SINRRequest(BaseModel):
+    propagation_model: Literal["sionna", "uma", "ericsson", "friis"] = "sionna"
+
+    carrier_frequency_ghz: float = Field(default=3.5, gt=0.0, le=100.0)
+
+    bandwidth_mhz: float = Field(default=100.0, gt=0.0)
+
+    noise_figure_db: float = Field(default=7.0, ge=0.0, le=30.0)
+
     tilt: float
 
     transmitter_position: Tuple[
@@ -315,6 +323,8 @@ class SINRRequest(BaseModel):
 
     tx_power: float = 30.0
 
+    interferer_tx_power: float | None = None
+
     transmitter_pattern: str = DEFAULT_TRANSMITTER_PATTERN
 
     solver: SolverConfig = Field(
@@ -323,6 +333,12 @@ class SINRRequest(BaseModel):
 
 
 class ThroughputRequest(BaseModel):
+    propagation_model: Literal["sionna", "uma", "ericsson", "friis"] = "sionna"
+
+    carrier_frequency_ghz: float = Field(default=3.5, gt=0.0, le=100.0)
+
+    noise_figure_db: float = Field(default=7.0, ge=0.0, le=30.0)
+
     base_tilt: float
 
     target_tilt: float
@@ -352,6 +368,8 @@ class ThroughputRequest(BaseModel):
     interferer_tilt: float = 12.0
 
     tx_power: float = 30.0
+
+    interferer_tx_power: float | None = None
 
     transmitter_pattern: str = DEFAULT_TRANSMITTER_PATTERN
 

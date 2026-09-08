@@ -2,6 +2,7 @@ import numpy as np
 
 from backend.exceptions import ClientInputError
 from backend.schemas.requests import SINRRequest
+from backend.services.analytical_service import calculate_selected_analytical_link
 
 from backend.simulations.antenna_factory import (
     sync_transmitter,
@@ -20,6 +21,9 @@ from backend.simulations.radio_calculator import (
 
 def calculate_sinr_service(req: SINRRequest, scene):
 
+    if getattr(req, "propagation_model", "sionna") != "sionna":
+        return calculate_analytical_sinr_service(req)
+
     try:
 
         sync_transmitter(
@@ -36,7 +40,7 @@ def calculate_sinr_service(req: SINRRequest, scene):
             "tx_interferer",
             req.interferer_position,
             req.interferer_tilt,
-            req.tx_power,
+            interferer_power(req),
             pattern=req.transmitter_pattern,
         )
 
@@ -70,6 +74,7 @@ def calculate_sinr_service(req: SINRRequest, scene):
 
         return {
             "status": "success",
+            "propagation_model": "sionna",
             "sinr_db": round(
                 linear_to_db(linear_sinr),
                 2,
@@ -122,6 +127,43 @@ def calculate_sinr_service(req: SINRRequest, scene):
 
         remove_entity(scene, "tx0")
         remove_entity(scene, "tx_interferer")
+
+
+def calculate_analytical_sinr_service(req: SINRRequest):
+    try:
+        result = calculate_selected_analytical_link(req)
+
+        return {
+            "status": "success",
+            "propagation_model": req.propagation_model,
+            "sinr_db": result["sinr_db"],
+            "signal_power": result["signal_power_dbm"],
+            "interference_power": result["interference_power_dbm"],
+            "thermal_noise_power": result["thermal_noise_power_dbm"],
+            "noise_power": result["interference_plus_noise_power_dbm"],
+            "receiver_position": req.receiver_position,
+            "solver": solver_metadata(req.solver),
+            "antennas": result_antennas(req),
+        }
+    except Exception as exc:
+        return {
+            "status": "failure",
+            "status_code": 400,
+            "error": str(exc),
+        }
+
+
+def result_antennas(req):
+    return [
+        {"id": "TX", "position": req.transmitter_position, "azimuth": 0},
+        {"id": "INT", "position": req.interferer_position, "azimuth": 0},
+        {"id": "RX", "position": req.receiver_position, "azimuth": 0},
+    ]
+
+
+def interferer_power(req):
+    value = getattr(req, "interferer_tx_power", None)
+    return req.tx_power if value is None else value
 
 
 def solver_metadata(solver):

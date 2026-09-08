@@ -149,6 +149,12 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   Throughput page uses the same workspace layout pattern as SINR, with candidate
   antenna management on the right and role/tilt/solver setup below the 3D
   scene/result on the left.
+- SINR and Throughput now let users select Sionna, UMa, Ericsson, or Friis as
+  independent propagation models. Sionna keeps the existing scene-based
+  ray-tracing flow. UMa, Ericsson, and Friis bypass 3D scene loading and use the
+  selected transmitter, receiver, and interferer with carrier frequency,
+  bandwidth, and receiver noise figure. Those three formulas do not use antenna
+  tilt, so Throughput base and target tilt results are intentionally unchanged.
 - RSRP Simulation uses all configured transmit antennas for the run, with the
   same type 1/type 2 split as Network Coverage. Fixed type 1 antenna base data
   remains immutable, users can add/delete type 2 antennas from the XLSX-shaped

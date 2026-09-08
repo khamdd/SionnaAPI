@@ -93,8 +93,8 @@ def run_simulation_job(job):
     request_json = job.get("request_json") or {}
     try:
         req = build_request(simulation_type, request_json)
-        scene = get_worker_scene(scene_info)
         if simulation_type == "network_coverage_optimization":
+            scene = get_worker_scene(scene_info)
             from backend.services.optimization_service import run_network_coverage_optimization
             result = run_network_coverage_optimization(
                 req,
@@ -105,6 +105,11 @@ def run_simulation_job(job):
             )
         else:
             runtime_req = with_runtime_antenna_positions(req, scene_info)
+            scene = (
+                None
+                if getattr(req, "propagation_model", "sionna") != "sionna"
+                else get_worker_scene(scene_info)
+            )
             result = execute_simulation(simulation_type, runtime_req, scene, job.get("base_url"))
         if is_failure_result(result):
             mark_simulation_job_failed(

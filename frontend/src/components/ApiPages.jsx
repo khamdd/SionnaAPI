@@ -257,6 +257,10 @@ export function SinrApiPage({
   roleSelection = {},
 }) {
   const [form, setForm] = useState(() => ({
+    propagation_model: "sionna",
+    carrier_frequency_ghz: 3.5,
+    bandwidth_mhz: 100,
+    noise_figure_db: 7,
     solver: DEFAULT_SOLVER,
   }));
   const [resultState, setResultState] = useApiResult(
@@ -297,6 +301,8 @@ export function SinrApiPage({
     ]);
   const sinrError = roleValidation || firstPositionError(positionValidation.errors);
   const isFormValid = !sinrError && positionValidation.isValid;
+  const isAnalytical = form.propagation_model !== "sionna";
+  const isSimulationReady = isAnalytical || sceneStatus.isSceneReady;
 
   useEffect(() => {
     const cleanedRoles = cleanSinrRoleSelection(roleSelection, antennas);
@@ -320,7 +326,7 @@ export function SinrApiPage({
 
   async function submit(event) {
     event.preventDefault();
-    if (resultState.loading || !sceneStatus.isSceneReady || !isFormValid) {
+    if (resultState.loading || !isSimulationReady || !isFormValid) {
       return;
     }
 
@@ -331,6 +337,11 @@ export function SinrApiPage({
       interferer_position: rolePositions.interferer_position,
       interferer_tilt: selectedRoles.interferer.tilt.current,
       tx_power: selectedRoles.transmitter.tx_power.current,
+      interferer_tx_power: selectedRoles.interferer.tx_power.current,
+      propagation_model: form.propagation_model,
+      carrier_frequency_ghz: form.carrier_frequency_ghz,
+      bandwidth_mhz: form.bandwidth_mhz,
+      noise_figure_db: form.noise_figure_db,
       solver: sceneSolver,
       transmitter_pattern: TRANSMITTER_PATTERN,
     };
@@ -364,9 +375,9 @@ export function SinrApiPage({
             className="primary-button"
             type="submit"
             form="sinr-api-form"
-            disabled={resultState.loading || !sceneStatus.isSceneReady || !isFormValid}
+            disabled={resultState.loading || !isSimulationReady || !isFormValid}
           >
-            {runButtonLabel(resultState.loading, sceneStatus.isSceneReady, isFormValid, "Calculate SINR")}
+            {runButtonLabel(resultState.loading, isSimulationReady, isFormValid, "Calculate SINR")}
           </button>
         </div>
         <div className="api-workspace-stage">
@@ -406,7 +417,10 @@ export function SinrApiPage({
                     onChange={onRoleSelectionChange}
                   />
                 </FormSection>
-                <SolverFields solver={sceneSolver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
+                <PropagationFields form={form} onChange={setForm} includeBandwidth />
+                {!isAnalytical && (
+                  <SolverFields solver={sceneSolver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
+                )}
               </fieldset>
             </form>
             {!resultState.error && result && !isQueued && (
@@ -689,6 +703,9 @@ export function ThroughputApiPage({
   roleSelection = {},
 }) {
   const [form, setForm] = useState(() => ({
+    propagation_model: "sionna",
+    carrier_frequency_ghz: 3.5,
+    noise_figure_db: 7,
     base_tilt: 6,
     target_tilt: 12,
     bandwidth_mhz: 100,
@@ -733,9 +750,11 @@ export function ThroughputApiPage({
       },
     ]);
   const positionError = firstPositionError(positionValidation.errors);
-  const tiltError = validateThroughputTilts(form, selectedRoles.transmitter);
+  const isAnalytical = form.propagation_model !== "sionna";
+  const tiltError = isAnalytical ? "" : validateThroughputTilts(form, selectedRoles.transmitter);
   const throughputError = roleValidation || positionError || tiltError;
   const isFormValid = !throughputError && positionValidation.isValid;
+  const isSimulationReady = isAnalytical || sceneStatus.isSceneReady;
 
   useEffect(() => {
     const cleanedRoles = cleanSinrRoleSelection(roleSelection, antennas);
@@ -786,7 +805,7 @@ export function ThroughputApiPage({
 
   async function submit(event) {
     event.preventDefault();
-    if (resultState.loading || !sceneStatus.isSceneReady || !isFormValid) {
+    if (resultState.loading || !isSimulationReady || !isFormValid) {
       return;
     }
 
@@ -797,6 +816,7 @@ export function ThroughputApiPage({
       interferer_position: rolePositions.interferer_position,
       interferer_tilt: selectedRoles.interferer.tilt.current,
       tx_power: selectedRoles.transmitter.tx_power.current,
+      interferer_tx_power: selectedRoles.interferer.tx_power.current,
       solver: sceneSolver,
       transmitter_pattern: TRANSMITTER_PATTERN,
     };
@@ -831,9 +851,9 @@ export function ThroughputApiPage({
             className="primary-button"
             type="submit"
             form="throughput-api-form"
-            disabled={resultState.loading || !sceneStatus.isSceneReady || !isFormValid}
+            disabled={resultState.loading || !isSimulationReady || !isFormValid}
           >
-            {runButtonLabel(resultState.loading, sceneStatus.isSceneReady, isFormValid, "Compare throughput")}
+            {runButtonLabel(resultState.loading, isSimulationReady, isFormValid, "Compare throughput")}
           </button>
         </div>
         <div className="api-workspace-stage">
@@ -874,31 +894,37 @@ export function ThroughputApiPage({
                     simulationLabel="Throughput"
                   />
                 </FormSection>
+                <PropagationFields form={form} onChange={setForm} />
                 <FormSection title="Tilt comparison">
-                  <NumberField
-                    hint={tiltHint}
-                    label="Base tilt"
-                    unit="deg"
-                    value={form.base_tilt}
-                    min={selectedRoles.transmitter?.tilt?.min}
-                    max={selectedRoles.transmitter?.tilt?.max}
-                    onChange={(value) => updateForm(setForm, "base_tilt", value)}
-                  />
-                  <NumberField
-                    hint={tiltHint}
-                    label="Target tilt"
-                    unit="deg"
-                    value={form.target_tilt}
-                    min={selectedRoles.transmitter?.tilt?.min}
-                    max={selectedRoles.transmitter?.tilt?.max}
-                    onChange={(value) => updateForm(setForm, "target_tilt", value)}
-                  />
-                  {tiltError && <small className="field-error">{tiltError}</small>}
-                  {selectedRoles.transmitter && (
-                    <p className="form-help">
-                      Power uses the selected transmitter simulation setting: {formatMaybeNumber(selectedRoles.transmitter.tx_power.current)} dBm.
-                    </p>
-                  )}
+                    <NumberField
+                      hint={tiltHint}
+                      label="Base tilt"
+                      unit="deg"
+                      value={form.base_tilt}
+                      min={selectedRoles.transmitter?.tilt?.min}
+                      max={selectedRoles.transmitter?.tilt?.max}
+                      onChange={(value) => updateForm(setForm, "base_tilt", value)}
+                    />
+                    <NumberField
+                      hint={tiltHint}
+                      label="Target tilt"
+                      unit="deg"
+                      value={form.target_tilt}
+                      min={selectedRoles.transmitter?.tilt?.min}
+                      max={selectedRoles.transmitter?.tilt?.max}
+                      onChange={(value) => updateForm(setForm, "target_tilt", value)}
+                    />
+                    {tiltError && <small className="field-error">{tiltError}</small>}
+                    {isAnalytical && (
+                      <p className="form-help">
+                        {formatPropagationModel(form.propagation_model)} does not use tilt, so both settings will produce the same result.
+                      </p>
+                    )}
+                    {selectedRoles.transmitter && (
+                      <p className="form-help">
+                        Power uses the selected transmitter simulation setting: {formatMaybeNumber(selectedRoles.transmitter.tx_power.current)} dBm.
+                      </p>
+                    )}
                 </FormSection>
                 <FormSection title="Throughput assumptions">
                   <NumberField
@@ -918,7 +944,9 @@ export function ThroughputApiPage({
                     onChange={(value) => updateForm(setForm, "mimo_layers", value)}
                   />
                 </FormSection>
-                <SolverFields solver={sceneSolver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
+                {!isAnalytical && (
+                  <SolverFields solver={sceneSolver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
+                )}
               </fieldset>
             </form>
             {!resultState.error && result && !isQueued && (
@@ -1582,6 +1610,66 @@ function FormSection({ children, title }) {
   );
 }
 
+function PropagationFields({ form, includeBandwidth = false, onChange }) {
+  const isAnalytical = form.propagation_model !== "sionna";
+
+  return (
+    <FormSection title="Propagation">
+      <label className="form-field">
+        <span>Model</span>
+        <div>
+          <select
+            value={form.propagation_model}
+            onChange={(event) => updateForm(onChange, "propagation_model", event.target.value)}
+          >
+            <option value="sionna">Sionna 3D ray tracing</option>
+            <option value="uma">UMa</option>
+            <option value="ericsson">Ericsson</option>
+            <option value="friis">Friis</option>
+          </select>
+          <small className="input-hint">
+            {isAnalytical
+              ? `Uses only the ${formatPropagationModel(form.propagation_model)} formula without 3D ray tracing.`
+              : "Uses the selected 3D scene, antenna pattern, and tilt."}
+          </small>
+        </div>
+      </label>
+      {isAnalytical && (
+        <>
+          <NumberField
+            hint={`Carrier frequency used by the ${formatPropagationModel(form.propagation_model)} formula.`}
+            label="Frequency"
+            min={0.01}
+            max={100}
+            unit="GHz"
+            value={form.carrier_frequency_ghz}
+            onChange={(value) => updateForm(onChange, "carrier_frequency_ghz", value)}
+          />
+          {includeBandwidth && (
+            <NumberField
+              hint="Used to calculate thermal noise."
+              label="Bandwidth"
+              min={0.01}
+              unit="MHz"
+              value={form.bandwidth_mhz}
+              onChange={(value) => updateForm(onChange, "bandwidth_mhz", value)}
+            />
+          )}
+          <NumberField
+            hint="Receiver noise figure from 0 to 30 dB."
+            label="Noise figure"
+            min={0}
+            max={30}
+            unit="dB"
+            value={form.noise_figure_db}
+            onChange={(value) => updateForm(onChange, "noise_figure_db", value)}
+          />
+        </>
+      )}
+    </FormSection>
+  );
+}
+
 function SolverFields({ solver, onChange }) {
   return (
     <FormSection title="Solver">
@@ -1703,6 +1791,7 @@ function SinrResult({ activeScene, onSceneLoadingChange, result }) {
 
 function SinrResultDetails({ result }) {
   const request = result.request || {};
+  const isAnalytical = isFormulaPropagationModel(result.propagation_model);
 
   return (
     <>
@@ -1711,6 +1800,9 @@ function SinrResultDetails({ result }) {
         <dt>Position</dt><dd>{formatPositionValue(request.transmitter_position)}</dd>
         <dt>Tilt</dt><dd>{formatMaybeNumber(request.tilt)} deg</dd>
         <dt>Power</dt><dd>{formatMaybeNumber(request.tx_power)} dBm</dd>
+        <dt>Interferer power</dt><dd>{formatMaybeNumber(request.interferer_tx_power ?? request.tx_power)} dBm</dd>
+        <dt>Propagation</dt><dd>{formatPropagationModel(result.propagation_model)}</dd>
+        {isAnalytical && <><dt>Frequency</dt><dd>{formatMaybeNumber(request.carrier_frequency_ghz)} GHz</dd></>}
       </dl>
       <h3>Receiver result</h3>
       <dl className="detail-grid">
@@ -1718,7 +1810,7 @@ function SinrResultDetails({ result }) {
         <dt>Receiver</dt><dd>{formatPositionValue(result.receiver_position || request.receiver_position)}</dd>
         <dt>SINR</dt><dd>{formatMaybeNumber(result.sinr_db)} dB</dd>
         <dt>Signal power</dt><dd>{formatMaybeNumber(result.signal_power)} dBm</dd>
-        <dt>Noise power</dt><dd>{formatMaybeNumber(result.noise_power)} dBm</dd>
+        <dt>Interference + noise</dt><dd>{formatMaybeNumber(result.noise_power)} dBm</dd>
       </dl>
       <h3>Interferer</h3>
       <dl className="detail-grid">
@@ -1751,6 +1843,7 @@ function ThroughputResult({ activeScene, onSceneLoadingChange, result }) {
 function ThroughputResultDetails({ result }) {
   const request = result.request || {};
   const comparison = result.comparison || {};
+  const isAnalytical = isFormulaPropagationModel(result.propagation_model);
 
   return (
     <>
@@ -1761,7 +1854,10 @@ function ThroughputResultDetails({ result }) {
         <dt>Interferer</dt><dd>{formatPositionValue(request.interferer_position)}</dd>
         <dt>Power</dt><dd>{formatMaybeNumber(request.tx_power)} dBm</dd>
         <dt>Bandwidth</dt><dd>{formatMaybeNumber(request.bandwidth_mhz)} MHz</dd>
+        <dt>Interferer power</dt><dd>{formatMaybeNumber(request.interferer_tx_power ?? request.tx_power)} dBm</dd>
         <dt>MIMO layers</dt><dd>{request.mimo_layers || "--"}</dd>
+        <dt>Propagation</dt><dd>{formatPropagationModel(result.propagation_model)}</dd>
+        {isAnalytical && <><dt>Frequency</dt><dd>{formatMaybeNumber(request.carrier_frequency_ghz)} GHz</dd></>}
       </dl>
       <h3>Throughput comparison</h3>
       <dl className="detail-grid">
@@ -1774,6 +1870,7 @@ function ThroughputResultDetails({ result }) {
         <dt>Change</dt><dd>{formatMaybeNumber(comparison.percentage_change)}%</dd>
         <dt>Direction</dt><dd>{formatText(comparison.direction)}</dd>
       </dl>
+      {isAnalytical && <p className="form-help">{result.recommendation}</p>}
     </>
   );
 }
@@ -2338,6 +2435,21 @@ function updateForm(setForm, field, value) {
     ...current,
     [field]: value,
   }));
+}
+
+function isFormulaPropagationModel(value) {
+  return ["uma", "ericsson", "friis"].includes(value);
+}
+
+function formatPropagationModel(value) {
+  const labels = {
+    sionna: "Sionna 3D",
+    uma: "UMa",
+    ericsson: "Ericsson",
+    friis: "Friis",
+  };
+
+  return labels[value] || "Sionna 3D";
 }
 
 function updateObject(onChange, current, field, value) {
