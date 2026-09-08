@@ -34,7 +34,12 @@ RUN python -m pip install \
     psycopg-binary==3.3.4 \
     python-dotenv==1.2.2
 
+# Keep Alembic in its own layer so adding migration tooling does not invalidate
+# the much larger Sionna dependency layer in existing Docker build caches.
+RUN python -m pip install alembic==1.19.2
+
 COPY backend ./backend
+COPY alembic.ini ./alembic.ini
 
 RUN mkdir -p /app/static/scenes /app/static/generated /app/static/simulation-results
 
