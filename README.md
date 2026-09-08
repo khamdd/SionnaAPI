@@ -153,7 +153,7 @@ Docker Compose uses named volumes:
 
 | Volume | Contents |
 | --- | --- |
-| `postgres-data` | Users, simulation jobs, scene references, and saved simulation history |
+| `postgres-data` | Users, versioned network configurations, simulation jobs, scene references, and saved history |
 | `elasticsearch-data` | Application logs |
 | `application-static` | Imported scenes and generated simulation files |
 
@@ -203,6 +203,11 @@ python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 
 When no database is configured, Alembic is not required and the existing inline,
 manual simulation mode remains available.
+
+The backend also exposes immutable, versioned network configurations for future
+automation. Their lifecycle and API rules are documented in
+[`docs/network-configurations.md`](docs/network-configurations.md). Existing
+browser simulation drafts continue to use localStorage for now.
 
 ## Database migrations
 

@@ -45,3 +45,9 @@ def test_database_revision_check_rejects_outdated_database(monkeypatch):
 
     with pytest.raises(RuntimeError, match="Database schema is not current"):
         database.ensure_database_is_current()
+
+
+def test_network_configuration_migration_is_the_current_head():
+    assert database._get_expected_migration_heads() == (
+        "0002_network_configurations",
+    )

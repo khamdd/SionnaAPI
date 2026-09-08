@@ -89,6 +89,13 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   Docker Elasticsearch/Kibana services.
 - Dockerization and README setup instructions are already in place.
 - Raw SQL has been converted to SQLAlchemy ORM models in `backend/models.py`.
+- Immutable network configuration versions are stored in PostgreSQL through
+  `backend/services/network_configuration_service.py`. Authenticated APIs can
+  create/read drafts, publish them, list versions, and resolve a scene's active
+  published configuration. Publishing supersedes the prior version; identical
+  normalized content is rejected. Existing browser localStorage drafts remain
+  unchanged until a later frontend migration. Published versions are shared for
+  the project's shared scenes, while drafts are private to their creator.
 - Alembic 1.19.2 is configured through `alembic.ini` and
   `backend/migrations/`, using the existing database URL resolver and
   `Base.metadata`. Revision `0001_initial_schema` reproduces the six existing
@@ -238,6 +245,8 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 - `backend/services/simulation_worker.py`: background job polling and execution.
 - `backend/services/simulation_store.py`: result/history persistence and artifact
   cleanup.
+- `backend/services/network_configuration_service.py`: immutable antenna snapshot
+  normalization, hashing, version creation, access control, and publishing.
 - `backend/services/scene_service.py`: scene registry, preview lifecycle, activate
   and delete behavior.
 - `backend/services/osm_scene_builder.py`: OSM/Overpass to Sionna scene generation.

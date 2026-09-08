@@ -3,12 +3,16 @@ from datetime import datetime
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     Text,
+    UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -72,6 +76,66 @@ class Scene(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class NetworkConfiguration(Base):
+    __tablename__ = "network_configurations"
+    __table_args__ = (
+        UniqueConstraint(
+            "scene_id",
+            "version",
+            name="uq_network_configurations_scene_version",
+        ),
+        CheckConstraint(
+            "status IN ('draft', 'published', 'superseded')",
+            name="ck_network_configurations_status",
+        ),
+        CheckConstraint(
+            "source IN ('manual', 'file', 'external_api')",
+            name="ck_network_configurations_source",
+        ),
+        Index(
+            "ix_network_configurations_scene_status",
+            "scene_id",
+            "status",
+        ),
+        Index(
+            "ix_network_configurations_content_hash",
+            "content_hash",
+        ),
+        Index(
+            "uq_network_configurations_one_published_per_scene",
+            "scene_id",
+            unique=True,
+            postgresql_where=text("status = 'published'"),
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    scene_id: Mapped[str] = mapped_column(
+        ForeignKey("scenes.id", ondelete="RESTRICT")
+    )
+    version: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(Text, default="draft")
+    parent_configuration_id: Mapped[str | None] = mapped_column(
+        ForeignKey("network_configurations.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    source: Mapped[str] = mapped_column(Text, default="manual")
+    source_reference: Mapped[str | None] = mapped_column(Text, nullable=True)
+    antennas_json: Mapped[list[dict]] = mapped_column(JSONB)
+    content_hash: Mapped[str] = mapped_column(Text)
+    created_by: Mapped[str] = mapped_column(
+        ForeignKey("app_users.id", ondelete="RESTRICT")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    published_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
 
