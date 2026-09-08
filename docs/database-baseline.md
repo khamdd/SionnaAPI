@@ -73,3 +73,21 @@ Do not run `alembic stamp` merely because these table names exist. Before stampi
 the future baseline revision, compare the target database with this inventory and
 the reviewed initial migration. Stamping records a revision but does not validate
 or repair the schema.
+
+## Baseline migration verification
+
+Alembic revision `0001_initial_schema` now represents this baseline. It was
+tested on 2026-09-08 using an isolated database created from PostgreSQL
+`template0`:
+
+- `alembic upgrade head` created PostGIS and all six application tables.
+- Column types, nullability, defaults, primary keys, unique constraints, and
+  foreign keys matched the live schema.
+- `alembic check` reported no pending schema operations.
+- `alembic downgrade base` removed all six application tables but retained the
+  PostGIS extension.
+- A second `alembic upgrade head` and `alembic check` succeeded.
+
+The temporary database was removed after verification. The live database
+remains unstamped and its application-table row counts are unchanged. Adopting
+that database into Alembic is a separate follow-up step.

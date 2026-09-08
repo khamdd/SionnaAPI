@@ -89,11 +89,14 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   Docker Elasticsearch/Kibana services.
 - Dockerization and README setup instructions are already in place.
 - Raw SQL has been converted to SQLAlchemy ORM models in `backend/models.py`.
-- Alembic 1.19.2 migration scaffolding is configured through `alembic.ini` and
-  `backend/migrations/`. It uses the existing database URL resolver and
-  `Base.metadata`, but there is intentionally no baseline revision yet. FastAPI
-  still calls `Base.metadata.create_all()` until the baseline migration and
-  legacy-database adoption path are completed.
+- Alembic 1.19.2 is configured through `alembic.ini` and
+  `backend/migrations/`, using the existing database URL resolver and
+  `Base.metadata`. Revision `0001_initial_schema` reproduces the six existing
+  application tables and creates PostGIS when needed; it deliberately excludes
+  PostGIS-owned tables from autogeneration. The baseline was verified on an
+  isolated clean database, but the existing application database has not yet
+  been stamped. FastAPI still calls `Base.metadata.create_all()` until the
+  legacy-database adoption and startup migration steps are completed.
 - RSRP work includes no-coverage rows for served/measured output and a legend UI
   update.
 - Antenna import work has started with a frontend download button that creates
