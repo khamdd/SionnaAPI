@@ -129,8 +129,16 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   idempotent. Child jobs carry their study, profile, scenario role, and a stable
   input signature. Worker completion reconciles the parent summary and preserves
   successful results when sibling jobs fail. Queued jobs can be cancelled;
-  already-running jobs finish while the study remains cancelled. The workflow is
+  running jobs stop at a safe cancellation checkpoint. The workflow is
   backend-only for now and does not change manual simulation or frontend flows.
+- Database-backed simulation execution is hardened with bounded exponential
+  retries, permanent/transient failure categories, configurable per-attempt
+  timeouts, worker heartbeats and leases, expired-lease recovery, cooperative
+  cancellation, priority ordering, and lease-owner checks before finalization.
+  Docker runs `backend` as API-only and `simulation-worker` as a separate process
+  using the same PostgreSQL queue and shared `static/` storage. Host development
+  keeps the in-process worker by default. The cancellation API is
+  `POST /api/v1/simulation-jobs/{job_id}/cancel`.
 - Alembic 1.19.2 is configured through `alembic.ini` and
   `backend/migrations/`, using the existing database URL resolver and
   `Base.metadata`. Revision `0001_initial_schema` reproduces the six existing
@@ -277,7 +285,9 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 - `backend/services/sinr_service.py`: SINR calculations.
 - `backend/services/throughput_service.py`: throughput comparison calculations.
 - `backend/services/simulation_job_store.py`: queue/job persistence.
-- `backend/services/simulation_worker.py`: background job polling and execution.
+- `backend/services/simulation_worker.py`: leased job polling, heartbeat,
+  cancellation, timeout, retry classification, and simulation execution.
+- `backend/worker_main.py`: foreground entry point for the Docker worker service.
 - `backend/services/simulation_store.py`: result/history persistence and artifact
   cleanup.
 - `backend/services/network_configuration_service.py`: immutable antenna snapshot
@@ -319,10 +329,12 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 
 ## Runtime Behavior To Preserve
 
-- Docker runs Alembic migrations before the backend. Backend startup verifies a
-  configured database is at the current migration head, then starts the
-  Elasticsearch logger and simulation worker. No-database mode skips migration
-  validation and remains available for manual inline simulations.
+- Docker runs Alembic migrations before the API and worker. Backend startup
+  verifies a configured database is at the current migration head and starts the
+  Elasticsearch logger; Docker disables its in-process worker because the
+  dedicated `simulation-worker` service owns queue execution. No-database host
+  mode skips migration validation and remains available for manual inline
+  simulations.
 - Frontend redirects `/` and unknown paths to `/scenes`.
 - Frontend stores auth token/user in localStorage using constants from
   `frontend/src/constants`.

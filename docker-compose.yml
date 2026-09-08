@@ -112,6 +112,7 @@ services:
       ELASTICSEARCH_ENABLED: "true"
       ELASTICSEARCH_URL: http://elasticsearch:9200
       ELASTICSEARCH_INDEX: ${ELASTICSEARCH_INDEX:-sionna-logs-dev}
+      SIMULATION_WORKER_ENABLED: "false"
     depends_on:
       postgres:
         condition: service_healthy
@@ -134,6 +135,40 @@ services:
       interval: 10s
       timeout: 5s
       retries: 20
+
+  simulation-worker:
+    image: sionna-simulation-backend:local
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-sionna}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sionna-local-password}
+      POSTGRES_DB: ${POSTGRES_DB:-sionna_simulation}
+      SIMULATION_WORKER_ENABLED: "true"
+      SIMULATION_WORKER_POLL_SECONDS: ${SIMULATION_WORKER_POLL_SECONDS:-1}
+      SIMULATION_JOB_HEARTBEAT_SECONDS: ${SIMULATION_JOB_HEARTBEAT_SECONDS:-20}
+      SIMULATION_JOB_LEASE_SECONDS: ${SIMULATION_JOB_LEASE_SECONDS:-90}
+      SIMULATION_JOB_TIMEOUT_SECONDS: ${SIMULATION_JOB_TIMEOUT_SECONDS:-3600}
+      SIMULATION_JOB_MAX_ATTEMPTS: ${SIMULATION_JOB_MAX_ATTEMPTS:-3}
+      SIMULATION_JOB_RETRY_BASE_SECONDS: ${SIMULATION_JOB_RETRY_BASE_SECONDS:-5}
+      SIMULATION_JOB_RETRY_MAX_SECONDS: ${SIMULATION_JOB_RETRY_MAX_SECONDS:-300}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      database-migrate:
+        condition: service_completed_successfully
+    volumes:
+      - ./static:/app/static
+    command:
+      - python
+      - -m
+      - backend.worker_main
+    stop_grace_period: 30s
 
   frontend:
     build:

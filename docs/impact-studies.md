@@ -17,9 +17,9 @@ All endpoints require authentication.
 3. `GET /api/v1/impact-studies/{id}` returns the saved plan, summary, and linked
    child jobs. `GET /api/v1/impact-studies` lists the current user's studies and
    accepts optional `scene_id`, `status`, and `limit` filters.
-4. `POST /api/v1/impact-studies/{id}/cancel` cancels queued child jobs. A child
-   that is already running is allowed to finish, while the parent remains
-   cancelled.
+4. `POST /api/v1/impact-studies/{id}/cancel` cancels queued child jobs and marks
+   running children for cooperative cancellation at the next safe checkpoint.
+   The parent remains cancelled.
 
 The child jobs also remain visible through the normal `/api/v1/simulation-jobs`
 queue endpoints. Each carries `impact_study_id`, `simulation_profile_id`,

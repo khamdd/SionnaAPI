@@ -197,6 +197,26 @@ def test_save_simulation_job_returns_run_id(monkeypatch):
     assert response.json()["run_id"] == "22222222-2222-2222-2222-222222222222"
 
 
+def test_cancel_simulation_job_requests_cancellation(monkeypatch):
+    monkeypatch.setattr(
+        api_module,
+        "request_simulation_job_cancellation",
+        lambda job_id: {
+            "database_configured": True,
+            "cancelled": False,
+            "cancel_requested": True,
+            "item": {"id": job_id, "status": "running"},
+        },
+    )
+
+    response = client.post(
+        "/api/v1/simulation-jobs/11111111-1111-1111-1111-111111111111/cancel"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["cancel_requested"] is True
+
+
 def test_delete_simulation_job_returns_success(monkeypatch):
     monkeypatch.setattr(
         api_module,

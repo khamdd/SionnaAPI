@@ -344,8 +344,19 @@ class SimulationJob(Base):
             ")",
             name="ck_simulation_jobs_scenario_role",
         ),
+        CheckConstraint(
+            "max_attempts >= 1",
+            name="ck_simulation_jobs_max_attempts",
+        ),
         Index("ix_simulation_jobs_impact_status", "impact_study_id", "status"),
         Index("ix_simulation_jobs_input_signature", "input_signature"),
+        Index(
+            "ix_simulation_jobs_claimable",
+            "status",
+            "next_attempt_at",
+            "priority",
+        ),
+        Index("ix_simulation_jobs_expired_lease", "status", "lease_expires_at"),
     )
 
     id: Mapped[str] = mapped_column(
@@ -362,6 +373,20 @@ class SimulationJob(Base):
     )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     attempts: Mapped[int] = mapped_column(Integer, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, default=3)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    worker_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    heartbeat_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)
+    failure_type: Mapped[str | None] = mapped_column(Text, nullable=True)
+    priority: Mapped[int] = mapped_column(Integer, default=0)
     base_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     impact_study_id: Mapped[str | None] = mapped_column(

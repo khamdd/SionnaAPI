@@ -225,7 +225,21 @@ def cancel_impact_study(study_id: str, user_id: str) -> dict:
                     SimulationJob.impact_study_id == study.id,
                     SimulationJob.status == "queued",
                 )
-                .values(status="cancelled", finished_at=now, updated_at=now)
+                .values(
+                    status="cancelled",
+                    cancel_requested=True,
+                    failure_type="cancelled",
+                    finished_at=now,
+                    updated_at=now,
+                )
+            )
+            session.execute(
+                update(SimulationJob)
+                .where(
+                    SimulationJob.impact_study_id == study.id,
+                    SimulationJob.status == "running",
+                )
+                .values(cancel_requested=True, updated_at=now)
             )
             study.status = "cancelled"
             study.finished_at = now

@@ -48,6 +48,7 @@ from backend.services.simulation_job_store import (
     get_simulation_job,
     get_simulation_job_result,
     list_simulation_jobs,
+    request_simulation_job_cancellation,
     save_simulation_job_result,
 )
 from backend.services.scene_service import (
@@ -643,6 +644,18 @@ def save_simulation_job(job_id: str):
         already_saved=result.get("already_saved", False),
     )
 
+    return result
+
+
+@router.post("/simulation-jobs/{job_id}/cancel")
+def cancel_simulation_job(job_id: str):
+    result = request_simulation_job_cancellation(job_id)
+    if not result.get("database_configured"):
+        raise HTTPException(status_code=503, detail="Database is not configured.")
+    if result.get("not_found"):
+        raise HTTPException(status_code=404, detail="Simulation job not found.")
+    if result.get("error"):
+        raise HTTPException(status_code=500, detail=result)
     return result
 
 

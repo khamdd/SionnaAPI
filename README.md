@@ -12,7 +12,8 @@ history, and compare saved results.
 Docker Compose starts the complete application:
 
 - `frontend`: React application served by Nginx
-- `backend`: FastAPI and the Sionna simulation worker
+- `backend`: FastAPI API service
+- `simulation-worker`: leased, retrying Sionna background-job executor
 - `postgres`: users, jobs, scenes, and simulation history
 - `database-migrate`: applies pending Alembic database migrations, then exits
 - `elasticsearch`: application event logs
@@ -81,11 +82,12 @@ Rebuild after changing source code or dependencies:
 docker compose --env-file .env.docker up --build -d
 ```
 
-View status and backend logs:
+View status and API/worker logs:
 
 ```powershell
 docker compose ps
 docker compose logs -f backend
+docker compose logs -f simulation-worker
 ```
 
 Stop the application while preserving data:
@@ -225,6 +227,10 @@ Durable impact studies persist that plan and submit linked baseline/candidate
 jobs through the existing simulation queue. See
 [`docs/impact-studies.md`](docs/impact-studies.md).
 
+Production queue execution uses a separate leased worker with heartbeat, crash
+recovery, bounded retries, timeouts, and cancellation checkpoints. See
+[`docs/simulation-job-reliability.md`](docs/simulation-job-reliability.md).
+
 ## Database migrations
 
 Database schema changes are managed only by Alembic. FastAPI checks the installed
@@ -308,6 +314,7 @@ GET    /api/v1/simulation-jobs
 GET    /api/v1/simulation-jobs/{job_id}
 GET    /api/v1/simulation-jobs/{job_id}/result
 POST   /api/v1/simulation-jobs/{job_id}/save
+POST   /api/v1/simulation-jobs/{job_id}/cancel
 DELETE /api/v1/simulation-jobs/{job_id}
 GET    /api/v1/simulation-runs
 GET    /api/v1/simulation-runs/{run_id}
