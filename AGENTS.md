@@ -112,6 +112,15 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   representations do not create false differences. The authenticated
   `POST /api/v1/network-configurations/compare` endpoint enforces existing
   configuration visibility and same-scene comparison.
+- Impact policy `impact-policy-v1` is implemented in
+  `backend/services/impact_planner.py`. The authenticated
+  `POST /api/v1/configuration-impact/preview` endpoint performs a dry run only:
+  it combines a same-scene baseline/candidate pair with enabled simulation
+  profiles, returns paired validated requests, explicit skip reasons, and an
+  estimated job count, but never queues work. Role profiles run only for affected
+  antennas. Analytical SINR/Throughput profiles are skipped for tilt, azimuth,
+  position, and height-only changes that their current formulas do not use.
+  Automatic optimization remains disabled in policy v1.
 - Alembic 1.19.2 is configured through `alembic.ini` and
   `backend/migrations/`, using the existing database URL resolver and
   `Base.metadata`. Revision `0001_initial_schema` reproduces the six existing
@@ -265,6 +274,8 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   normalization, hashing, version creation, access control, and publishing.
 - `backend/services/configuration_diff_service.py`: deterministic field-level
   comparison of network configuration versions.
+- `backend/services/impact_planner.py`: policy-versioned dry-run mapping from
+  configuration changes to planned and skipped simulation profiles.
 - `backend/services/simulation_profile_service.py`: saved automation-profile CRUD,
   enable-time validation, antenna-role resolution, and request construction.
 - `backend/services/scene_service.py`: scene registry, preview lifecycle, activate

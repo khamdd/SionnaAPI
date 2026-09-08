@@ -217,6 +217,10 @@ Version-to-version antenna changes can be inspected through the authenticated
 configuration comparison API described in
 [`docs/configuration-differences.md`](docs/configuration-differences.md).
 
+The policy-versioned dry-run planner maps those changes to applicable enabled
+simulation profiles without submitting jobs. See
+[`docs/impact-planning.md`](docs/impact-planning.md).
+
 ## Database migrations
 
 Database schema changes are managed only by Alembic. FastAPI checks the installed

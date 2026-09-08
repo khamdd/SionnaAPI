@@ -109,6 +109,19 @@ def test_order_and_numeric_formatting_do_not_create_false_changes():
     assert result["changes"] == []
 
 
+def test_adding_then_removing_a_draft_change_restores_the_original_hash():
+    original = [antenna("A1")]
+    draft = [antenna("A1"), antenna("A2")]
+
+    _, original_hash = network_configuration_service.calculate_content_hash(original)
+    _, changed_hash = network_configuration_service.calculate_content_hash(draft)
+    draft.pop()
+    _, restored_hash = network_configuration_service.calculate_content_hash(draft)
+
+    assert changed_hash != original_hash
+    assert restored_hash == original_hash
+
+
 def test_added_and_removed_antennas_are_reported_in_stable_order():
     result = diff_service.compare_configuration_snapshots(
         [antenna("A2"), antenna("A1")],
