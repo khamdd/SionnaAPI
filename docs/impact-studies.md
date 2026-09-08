@@ -22,6 +22,9 @@ All endpoints require authentication.
 4. `POST /api/v1/impact-studies/{id}/cancel` cancels queued child jobs and marks
    running children for cooperative cancellation at the next safe checkpoint.
    The parent remains cancelled.
+5. When the saved policy is `if_objectives_fail`, a failed candidate Network
+   Coverage objective conditionally creates one linked optimization job. See
+   [`impact-optimization.md`](impact-optimization.md).
 
 The child jobs also remain visible through the normal `/api/v1/simulation-jobs`
 queue endpoints. Each carries `impact_study_id`, `simulation_profile_id`,

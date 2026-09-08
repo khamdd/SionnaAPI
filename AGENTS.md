@@ -138,6 +138,14 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   remain explicit. The comparison is stored in the parent study summary and is
   available at `GET /api/v1/impact-studies/{id}/comparison`; full grids remain in
   child-job artifacts instead of being duplicated in PostgreSQL.
+- Impact Studies accept a disabled-by-default optimization policy. With
+  `mode=if_objectives_fail`, a comparable Network Coverage candidate that misses
+  an objective queues one existing `network_coverage_optimization` job with
+  `scenario_role=optimization`. Results expose the exact candidate ID/hash,
+  suggested settings, and baseline/candidate/optimized objective outcomes.
+  `POST /api/v1/impact-studies/{id}/profiles/{profile_id}/suggested-configuration`
+  creates an idempotent draft child of that exact candidate and never publishes
+  it automatically.
 - Database-backed simulation execution is hardened with bounded exponential
   retries, permanent/transient failure categories, configurable per-attempt
   timeouts, worker heartbeats and leases, expired-lease recovery, cooperative

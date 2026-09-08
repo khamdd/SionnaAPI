@@ -198,6 +198,44 @@ def test_comparison_api_passes_authenticated_user(monkeypatch, authenticated_use
     assert captured == {"study_id": STUDY_ID, "user_id": USER_ID}
 
 
+def test_suggested_configuration_api_passes_exact_ids(
+    monkeypatch,
+    authenticated_user,
+):
+    captured = {}
+
+    def fake_create(study_id, simulation_profile_id, user_id):
+        captured.update(
+            study_id=study_id,
+            simulation_profile_id=simulation_profile_id,
+            user_id=user_id,
+        )
+        return {
+            "status": "success",
+            "already_created": False,
+            "configuration": {"id": CANDIDATE_ID, "status": "draft"},
+        }
+
+    monkeypatch.setattr(
+        impact_study_service,
+        "create_suggested_configuration",
+        fake_create,
+    )
+
+    response = client.post(
+        f"/api/v1/impact-studies/{STUDY_ID}/profiles/{PROFILE_ID}/"
+        "suggested-configuration"
+    )
+
+    assert response.status_code == 201
+    assert response.json()["configuration"]["status"] == "draft"
+    assert captured == {
+        "study_id": STUDY_ID,
+        "simulation_profile_id": PROFILE_ID,
+        "user_id": USER_ID,
+    }
+
+
 def test_impact_study_api_requires_authentication():
     response = client.get("/api/v1/impact-studies")
 

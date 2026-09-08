@@ -54,13 +54,20 @@ def build_impact_comparison(
     for plan in planned:
         profile_id = _text(plan.get("profile_id"))
         seen_profile_ids.add(profile_id)
-        profiles.append(
-            compare_profile_jobs(
-                plan,
-                jobs_by_profile.get(profile_id, []),
-                result_loader=result_loader,
-            )
+        profile_jobs = jobs_by_profile.get(profile_id, [])
+        profile = compare_profile_jobs(
+            plan,
+            profile_jobs,
+            result_loader=result_loader,
         )
+        profile["optimization"] = summarize_optimization_jobs(
+            plan,
+            profile_jobs,
+            execution_plan.get("candidate") or {},
+            result_loader,
+        )
+        profile["objectives"] = summarize_profile_objectives(profile)
+        profiles.append(profile)
 
     for profile_id in sorted(set(jobs_by_profile).difference(seen_profile_ids)):
         profiles.append(
@@ -79,6 +86,10 @@ def build_impact_comparison(
         for profile in profiles
         for kpi in profile.get("kpis", [])
     )
+    optimization_counts = Counter(
+        (profile.get("optimization") or {}).get("status", "not_requested")
+        for profile in profiles
+    )
     return {
         "status": (
             "complete"
@@ -89,6 +100,9 @@ def build_impact_comparison(
         ),
         "profile_counts": dict(sorted(profile_counts.items())),
         "kpi_direction_counts": dict(sorted(direction_counts.items())),
+        "optimization_policy": execution_plan.get("optimization_policy")
+        or {"mode": "disabled"},
+        "optimization_counts": dict(sorted(optimization_counts.items())),
         "profiles": profiles,
     }
 
@@ -394,6 +408,105 @@ def compare_spatial_coverage(baseline, candidate):
         "degraded_sinr_cells": degraded_sinr,
         "local_regression_present": lost_coverage > 0 or degraded_sinr > 0,
     }
+
+
+def summarize_optimization_jobs(plan, jobs, candidate_identity, result_loader):
+    optimization_jobs = [
+        job for job in jobs if _value(job, "scenario_role") == "optimization"
+    ]
+    source = {
+        "configuration_id": _text(candidate_identity.get("id")),
+        "content_hash": candidate_identity.get("content_hash"),
+    }
+    if not optimization_jobs:
+        return {
+            "status": "not_requested",
+            "based_on_candidate": source,
+        }
+    if len(optimization_jobs) != 1:
+        return {
+            "status": "incompatible",
+            "error": "Exactly one optimization job is allowed per profile.",
+            "based_on_candidate": source,
+        }
+
+    job = optimization_jobs[0]
+    job_state = _job_state(job)
+    status = _value(job, "status")
+    if status != "succeeded":
+        return {
+            "status": status or "unknown",
+            "job": job_state,
+            "based_on_candidate": source,
+        }
+
+    loaded = result_loader(job)
+    if loaded.get("error") or loaded.get("result") is None:
+        return {
+            "status": "unavailable",
+            "job": job_state,
+            "error": loaded.get("error") or "Optimization result is unavailable.",
+            "based_on_candidate": source,
+        }
+    optimization = (loaded.get("result") or {}).get("optimization") or {}
+    best = optimization.get("best") or {}
+    evaluation = best.get("evaluation") or {}
+    best_request = optimization.get("best_request")
+    if not isinstance(best_request, dict):
+        return {
+            "status": "incompatible",
+            "job": job_state,
+            "error": "Optimization result has no suggested request.",
+            "based_on_candidate": source,
+        }
+
+    objective_results = [
+        {
+            "metric": item.get("metric"),
+            "operator": item.get("operator"),
+            "target": _rounded(numeric_value(item.get("target"))),
+            "actual": _rounded(numeric_value(item.get("actual"))),
+            "status": "passed" if item.get("passed") else "failed",
+        }
+        for item in evaluation.get("evaluations", [])
+    ]
+    return {
+        "status": "completed",
+        "job": job_state,
+        "based_on_candidate": source,
+        "objectives_passed": bool(evaluation.get("passed")),
+        "objective_results": objective_results,
+        "suggested_settings": best.get("settings") or {},
+        "settings_changed": best.get("id") != "baseline",
+        "best_request": best_request,
+        "stop_reason": optimization.get("stop_reason"),
+        "tested_count": optimization.get("tested_count"),
+    }
+
+
+def summarize_profile_objectives(profile):
+    optimized = {
+        item.get("metric"): item.get("status")
+        for item in (profile.get("optimization") or {}).get(
+            "objective_results", []
+        )
+    }
+    results = []
+    for kpi in profile.get("kpis", []):
+        objective = kpi.get("objective") or {}
+        if objective.get("status") == "not_configured":
+            continue
+        results.append(
+            {
+                "metric": kpi.get("metric"),
+                "operator": objective.get("operator"),
+                "target": objective.get("target"),
+                "baseline_status": objective.get("baseline_status"),
+                "candidate_status": objective.get("candidate_status"),
+                "optimized_status": optimized.get(kpi.get("metric"), "not_run"),
+            }
+        )
+    return results
 
 
 def _grid_averages(cells):

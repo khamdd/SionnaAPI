@@ -195,3 +195,74 @@ def test_throughput_comparison_includes_meaningful_percentage_delta():
     assert kpis["base_throughput_mbps"]["percentage_delta"] == 50.0
     assert kpis["target_throughput_mbps"]["percentage_delta"] == 50.0
 
+
+def test_completed_optimization_exposes_candidate_source_and_objectives():
+    baseline = grid_result([coverage_cell(0, covered=True, sinr=5.0)])
+    candidate = grid_result([coverage_cell(0, covered=False, sinr=None)])
+    optimized_request = {
+        "antennas": [
+            {
+                "id": "A1",
+                "longitude": 105.8,
+                "latitude": 21.0,
+                "height_m": 30,
+                "tilt": {"min": 0, "current": 2, "max": 10},
+                "azimuth": 45,
+                "tx_power": {"min": 20, "current": 35, "max": 40},
+            }
+        ]
+    }
+    optimization_result = {
+        "optimization": {
+            "best": {
+                "id": "candidate-1",
+                "settings": {"A1": {"tilt": 2, "tx_power": 35, "azimuth": 45}},
+                "evaluation": {
+                    "passed": True,
+                    "evaluations": [
+                        {
+                            "metric": "covered_area_percent",
+                            "operator": ">=",
+                            "target": 100,
+                            "actual": 100,
+                            "passed": True,
+                        }
+                    ],
+                },
+            },
+            "best_request": optimized_request,
+            "stop_reason": "targets_met",
+            "tested_count": 2,
+        }
+    }
+    execution_plan = plan(
+        objectives=[
+            {"metric": "covered_area_percent", "operator": ">=", "target": 100}
+        ]
+    )
+    execution_plan["candidate"] = {"id": "candidate-config", "content_hash": "hash"}
+
+    comparison = build_impact_comparison(
+        [
+            job("base", "baseline", baseline),
+            job("next", "candidate", candidate),
+            job(
+                "opt",
+                "optimization",
+                optimization_result,
+                simulation_type="network_coverage_optimization",
+            ),
+        ],
+        execution_plan,
+        result_loader=load_result,
+    )
+
+    profile = comparison["profiles"][0]
+    assert profile["optimization"]["status"] == "completed"
+    assert profile["optimization"]["objectives_passed"] is True
+    assert profile["optimization"]["based_on_candidate"] == {
+        "configuration_id": "candidate-config",
+        "content_hash": "hash",
+    }
+    assert profile["objectives"][0]["candidate_status"] == "failed"
+    assert profile["objectives"][0]["optimized_status"] == "passed"

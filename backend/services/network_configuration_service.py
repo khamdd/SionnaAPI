@@ -96,26 +96,15 @@ def create_network_configuration(
             else:
                 antennas = request.antennas
 
-            normalized_antennas, content_hash = calculate_content_hash(antennas)
-            version = session.scalar(
-                select(
-                    func.coalesce(func.max(NetworkConfiguration.version), 0) + 1
-                ).where(NetworkConfiguration.scene_id == request.scene_id)
-            )
-
-            configuration = NetworkConfiguration(
+            configuration = add_network_configuration_draft(
+                session,
                 scene_id=request.scene_id,
-                version=version,
-                status="draft",
+                antennas=antennas,
+                created_by=created_by,
                 parent_configuration_id=parent.id if parent is not None else None,
                 source=request.source,
                 source_reference=request.source_reference,
-                antennas_json=normalized_antennas,
-                content_hash=content_hash,
-                created_by=created_by,
             )
-            session.add(configuration)
-            session.flush()
             session.refresh(configuration)
 
             return {
@@ -128,6 +117,39 @@ def create_network_configuration(
     except SQLAlchemyError:
         logger.exception("Failed to create network configuration.")
         return _failure(500, "Failed to create network configuration.")
+
+
+def add_network_configuration_draft(
+    session,
+    *,
+    scene_id: str,
+    antennas: Iterable[Any],
+    created_by: str,
+    parent_configuration_id: str | None,
+    source: str = "manual",
+    source_reference: str | None = None,
+) -> NetworkConfiguration:
+    """Add a draft inside a caller-owned, scene-locked transaction."""
+    normalized_antennas, content_hash = calculate_content_hash(antennas)
+    version = session.scalar(
+        select(
+            func.coalesce(func.max(NetworkConfiguration.version), 0) + 1
+        ).where(NetworkConfiguration.scene_id == scene_id)
+    )
+    configuration = NetworkConfiguration(
+        scene_id=scene_id,
+        version=version,
+        status="draft",
+        parent_configuration_id=parent_configuration_id,
+        source=source,
+        source_reference=source_reference,
+        antennas_json=normalized_antennas,
+        content_hash=content_hash,
+        created_by=created_by,
+    )
+    session.add(configuration)
+    session.flush()
+    return configuration
 
 
 def list_network_configurations(

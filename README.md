@@ -231,6 +231,11 @@ Completed studies normalize baseline/candidate KPI deltas, objective outcomes,
 and compatible spatial grid changes. See
 [`docs/impact-comparisons.md`](docs/impact-comparisons.md).
 
+Impact Studies can optionally run Network Coverage optimization when the
+candidate misses an objective, then create a new draft from the suggestion. The
+policy is disabled by default and never publishes settings automatically. See
+[`docs/impact-optimization.md`](docs/impact-optimization.md).
+
 Production queue execution uses a separate leased worker with heartbeat, crash
 recovery, bounded retries, timeouts, and cancellation checkpoints. See
 [`docs/simulation-job-reliability.md`](docs/simulation-job-reliability.md).

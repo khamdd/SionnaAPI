@@ -99,3 +99,21 @@ def cancel_impact_study(
     return return_or_raise(
         impact_study_service.cancel_impact_study(str(study_id), user_id=user["id"])
     )
+
+
+@router.post(
+    "/impact-studies/{study_id}/profiles/{profile_id}/suggested-configuration",
+    status_code=status.HTTP_201_CREATED,
+)
+def create_suggested_configuration(
+    study_id: UUID,
+    profile_id: UUID,
+    user=Depends(require_current_user),
+):
+    return return_or_raise(
+        impact_study_service.create_suggested_configuration(
+            str(study_id),
+            str(profile_id),
+            user_id=user["id"],
+        )
+    )
