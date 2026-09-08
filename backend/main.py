@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from backend.api.auth import router as auth_router
 from backend.api.sinr import router as sinr_router
 from backend.middleware.request_logging import RequestLoggingMiddleware
-from backend.database import initialize_database
+from backend.database import ensure_database_is_current
 from backend.services.event_logger import (
     start_event_logger,
     stop_event_logger,
@@ -21,7 +21,7 @@ from backend.services.simulation_worker import (
 
 @asynccontextmanager
 async def lifespan(app):
-    initialize_database()
+    ensure_database_is_current()
     start_event_logger()
     start_simulation_worker()
     try:

@@ -1,10 +1,16 @@
 import os
 from contextlib import contextmanager
+from pathlib import Path
 
+from alembic.config import Config
+from alembic.migration import MigrationContext
+from alembic.script import ScriptDirectory
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.engine import URL
 from sqlalchemy.orm import sessionmaker
+
+from backend.migrations.schema import set_application_search_path
 
 
 load_dotenv()
@@ -33,20 +39,44 @@ DATABASE_URL = resolve_database_url()
 
 _engine = None
 _session_factory = None
+_project_root = Path(__file__).resolve().parents[1]
+_alembic_config_path = _project_root / "alembic.ini"
 
 
 def is_database_configured():
     return bool(DATABASE_URL)
 
 
-def initialize_database():
-    """Create missing application tables in a new Docker database."""
+def _get_expected_migration_heads():
+    alembic_config = Config(str(_alembic_config_path))
+    return tuple(ScriptDirectory.from_config(alembic_config).get_heads())
+
+
+def _get_current_migration_heads():
+    with get_engine().connect() as connection:
+        set_application_search_path(connection)
+        migration_context = MigrationContext.configure(connection)
+        return tuple(migration_context.get_current_heads())
+
+
+def ensure_database_is_current():
+    """Fail startup when a configured database has unapplied migrations."""
     if not is_database_configured():
         return False
 
-    from backend.models import Base
+    expected_heads = set(_get_expected_migration_heads())
+    current_heads = set(_get_current_migration_heads())
+    if current_heads != expected_heads:
+        current_label = ", ".join(sorted(current_heads)) or "none"
+        expected_label = ", ".join(sorted(expected_heads)) or "none"
+        raise RuntimeError(
+            "Database schema is not current "
+            f"(current: {current_label}; expected: {expected_label}). "
+            "Run 'python -m alembic upgrade head' before starting the backend. "
+            "For a pre-Alembic database, run "
+            "'python -m backend.migrations.adopt_legacy_database' first."
+        )
 
-    Base.metadata.create_all(bind=get_engine())
     return True
 
 

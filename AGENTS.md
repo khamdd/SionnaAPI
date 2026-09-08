@@ -96,9 +96,11 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   PostGIS-owned tables from autogeneration. The baseline was verified on an
   isolated clean database. The legacy-schema adoption command validates types,
   defaults, constraints, and application-owned tables before stamping; the
-  existing Docker database is stamped at `0001_initial_schema`. FastAPI still
-  calls `Base.metadata.create_all()` until the startup migration step is
-  completed.
+  existing Docker database is stamped at `0001_initial_schema`. FastAPI
+  checks that a configured database is at the current Alembic head and fails
+  startup with migration guidance when it is not. It no longer creates tables.
+  Docker Compose runs the one-shot `database-migrate` service before starting
+  the backend. No-database mode skips the revision check.
 - RSRP work includes no-coverage rows for served/measured output and a legend UI
   update.
 - Antenna import work has started with a frontend download button that creates
@@ -222,8 +224,8 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   lifecycle.
 - `backend/api/sinr.py`: simulation, history, job, and scene endpoints.
 - `backend/api/auth.py`: authentication endpoints.
-- `backend/database.py`: database URL resolution, SQLAlchemy engine/session, table
-  creation.
+- `backend/database.py`: database URL resolution, SQLAlchemy engine/session, and
+  startup Alembic revision validation.
 - `backend/models.py`: PostgreSQL/PostGIS ORM schema.
 - `alembic.ini` and `backend/migrations/`: database migration configuration and
   future revision history.
@@ -265,8 +267,10 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 
 ## Runtime Behavior To Preserve
 
-- Backend startup initializes database tables only when database configuration is
-  present, then starts the Elasticsearch logger and simulation worker.
+- Docker runs Alembic migrations before the backend. Backend startup verifies a
+  configured database is at the current migration head, then starts the
+  Elasticsearch logger and simulation worker. No-database mode skips migration
+  validation and remains available for manual inline simulations.
 - Frontend redirects `/` and unknown paths to `/scenes`.
 - Frontend stores auth token/user in localStorage using constants from
   `frontend/src/constants`.
