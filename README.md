@@ -227,6 +227,10 @@ Durable impact studies persist that plan and submit linked baseline/candidate
 jobs through the existing simulation queue. See
 [`docs/impact-studies.md`](docs/impact-studies.md).
 
+Completed studies normalize baseline/candidate KPI deltas, objective outcomes,
+and compatible spatial grid changes. See
+[`docs/impact-comparisons.md`](docs/impact-comparisons.md).
+
 Production queue execution uses a separate leased worker with heartbeat, crash
 recovery, bounded retries, timeouts, and cancellation checkpoints. See
 [`docs/simulation-job-reliability.md`](docs/simulation-job-reliability.md).

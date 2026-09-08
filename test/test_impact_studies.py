@@ -173,6 +173,31 @@ def test_start_api_passes_authenticated_user(monkeypatch, authenticated_user):
     assert captured == {"study_id": STUDY_ID, "user_id": USER_ID}
 
 
+def test_comparison_api_passes_authenticated_user(monkeypatch, authenticated_user):
+    captured = {}
+
+    def fake_comparison(study_id, user_id):
+        captured.update(study_id=study_id, user_id=user_id)
+        return {
+            "status": "success",
+            "study_id": study_id,
+            "study_status": "completed",
+            "comparison": {"status": "complete", "profiles": []},
+        }
+
+    monkeypatch.setattr(
+        impact_study_service,
+        "get_impact_study_comparison",
+        fake_comparison,
+    )
+
+    response = client.get(f"/api/v1/impact-studies/{STUDY_ID}/comparison")
+
+    assert response.status_code == 200
+    assert response.json()["comparison"]["status"] == "complete"
+    assert captured == {"study_id": STUDY_ID, "user_id": USER_ID}
+
+
 def test_impact_study_api_requires_authentication():
     response = client.get("/api/v1/impact-studies")
 

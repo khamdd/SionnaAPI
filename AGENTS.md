@@ -131,6 +131,13 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   successful results when sibling jobs fail. Queued jobs can be cancelled;
   running jobs stop at a safe cancellation checkpoint. The workflow is
   backend-only for now and does not change manual simulation or frontend flows.
+- `backend/services/impact_comparison_service.py` normalizes completed Impact
+  Study baseline/candidate pairs into KPI values, absolute and meaningful
+  percentage deltas, improvement direction, objective outcomes, and spatial
+  coverage/SINR changes. Missing, failed, unavailable, and incompatible pairs
+  remain explicit. The comparison is stored in the parent study summary and is
+  available at `GET /api/v1/impact-studies/{id}/comparison`; full grids remain in
+  child-job artifacts instead of being duplicated in PostgreSQL.
 - Database-backed simulation execution is hardened with bounded exponential
   retries, permanent/transient failure categories, configurable per-attempt
   timeouts, worker heartbeats and leases, expired-lease recovery, cooperative
@@ -297,7 +304,10 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 - `backend/services/impact_planner.py`: policy-versioned dry-run mapping from
   configuration changes to planned and skipped simulation profiles.
 - `backend/services/impact_study_service.py`: durable impact-study lifecycle,
-  linked child-job creation, status reconciliation, and partial-failure summary.
+  linked child-job creation, status reconciliation, comparison aggregation, and
+  partial-failure summary.
+- `backend/services/impact_comparison_service.py`: normalized KPI, objective, and
+  spatial comparison of Impact Study baseline/candidate child results.
 - `backend/services/simulation_profile_service.py`: saved automation-profile CRUD,
   enable-time validation, antenna-role resolution, and request construction.
 - `backend/services/scene_service.py`: scene registry, preview lifecycle, activate

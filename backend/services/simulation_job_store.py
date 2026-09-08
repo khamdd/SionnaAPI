@@ -188,6 +188,14 @@ def get_simulation_job_result(job_id):
             "error": response.get("error"),
         }
 
+    return load_simulation_job_result(job)
+
+
+def load_simulation_job_result(job):
+    """Load a job's complete result from inline JSON or its stable artifact."""
+    if not isinstance(job, dict):
+        job = serialize_job(job)
+
     result = normalize_json_value(job.get("result")) or {}
     full_result_url = result.get("full_result_url")
 

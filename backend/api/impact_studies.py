@@ -68,6 +68,19 @@ def get_impact_study(
     )
 
 
+@router.get("/impact-studies/{study_id}/comparison")
+def get_impact_study_comparison(
+    study_id: UUID,
+    user=Depends(require_current_user),
+):
+    return return_or_raise(
+        impact_study_service.get_impact_study_comparison(
+            str(study_id),
+            user_id=user["id"],
+        )
+    )
+
+
 @router.post("/impact-studies/{study_id}/start")
 def start_impact_study(
     study_id: UUID,

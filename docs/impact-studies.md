@@ -15,8 +15,10 @@ All endpoints require authentication.
    child job for every planned profile. Calling start again returns the existing
    jobs and does not duplicate them.
 3. `GET /api/v1/impact-studies/{id}` returns the saved plan, summary, and linked
-   child jobs. `GET /api/v1/impact-studies` lists the current user's studies and
-   accepts optional `scene_id`, `status`, and `limit` filters.
+   child jobs. `GET /api/v1/impact-studies/{id}/comparison` returns the live
+   normalized baseline/candidate comparison. `GET /api/v1/impact-studies` lists
+   the current user's studies and accepts optional `scene_id`, `status`, and
+   `limit` filters.
 4. `POST /api/v1/impact-studies/{id}/cancel` cancels queued child jobs and marks
    running children for cooperative cancellation at the next safe checkpoint.
    The parent remains cancelled.
@@ -34,5 +36,8 @@ the summary. `cancelled` and `failed` are also terminal states.
 
 The worker updates the parent after child completion. Reading or listing studies
 also reconciles their state, so progress remains correct across API restarts.
-Policy v1 does not reuse an earlier baseline job and does not generate a report;
-`report_url` is reserved for a later reporting step.
+After all children finish, `summary.comparison` stores normalized KPI deltas,
+objective outcomes, and compatible spatial grid changes. See
+[`impact-comparisons.md`](impact-comparisons.md). Policy v1 does not reuse an
+earlier baseline job and does not generate a report; `report_url` is reserved for
+a later reporting step.

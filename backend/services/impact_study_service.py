@@ -12,6 +12,7 @@ from backend.database import db_session, is_database_configured
 from backend.models import ImpactStudy, SimulationJob
 from backend.schemas.impact_studies import ImpactStudyCreateRequest
 from backend.services import impact_planner
+from backend.services.impact_comparison_service import build_impact_comparison
 from backend.services.scene_service import list_scenes
 from backend.services.simulation_job_store import add_simulation_job, serialize_job
 from backend.services.simulation_store import (
@@ -178,7 +179,7 @@ def start_impact_study(study_id: str, user_id: str) -> dict:
             else:
                 study.status = "completed"
                 study.finished_at = now
-                study.summary_json = build_child_job_summary([])
+                study.summary_json = build_study_summary(study, [])
             session.flush()
             jobs = _load_study_jobs(session, study.id)
             return {
@@ -245,7 +246,7 @@ def cancel_impact_study(study_id: str, user_id: str) -> dict:
             study.finished_at = now
             session.flush()
             jobs = _load_study_jobs(session, study.id)
-            study.summary_json = build_child_job_summary(jobs)
+            study.summary_json = build_study_summary(study, jobs)
             return {
                 "status": "success",
                 "already_cancelled": False,
@@ -272,6 +273,37 @@ def reconcile_impact_study(study_id: str) -> None:
             _reconcile_study(study, _load_study_jobs(session, study.id))
     except SQLAlchemyError:
         logger.exception("Failed to reconcile impact study: %s", study_id)
+
+
+def get_impact_study_comparison(study_id: str, user_id: str) -> dict:
+    unavailable = _database_unavailable()
+    if unavailable:
+        return unavailable
+
+    try:
+        with db_session() as session:
+            study = session.get(ImpactStudy, study_id)
+            if study is None or study.created_by != user_id:
+                return _failure(404, "Impact study was not found.")
+            jobs = _load_study_jobs(session, study.id)
+            _reconcile_study(study, jobs)
+            comparison = build_impact_comparison(
+                jobs,
+                normalize_json_value(study.execution_plan_json) or {},
+            )
+            if study.status in TERMINAL_STUDY_STATUSES:
+                summary = build_child_job_summary(jobs)
+                summary["comparison"] = comparison
+                study.summary_json = sanitize_json_value(summary)
+            return {
+                "status": "success",
+                "study_id": str(study.id),
+                "study_status": study.status,
+                "comparison": comparison,
+            }
+    except SQLAlchemyError:
+        logger.exception("Failed to compare impact study results.")
+        return _failure(500, "Failed to compare impact study results.")
 
 
 def build_child_job_specs(execution_plan: dict, scene_info: dict) -> list[dict]:
@@ -346,6 +378,16 @@ def build_child_job_summary(jobs: Iterable[Any]) -> dict:
     }
 
 
+def build_study_summary(study: ImpactStudy, jobs: Iterable[Any]) -> dict:
+    jobs = list(jobs)
+    summary = build_child_job_summary(jobs)
+    summary["comparison"] = build_impact_comparison(
+        jobs,
+        normalize_json_value(getattr(study, "execution_plan_json", None)) or {},
+    )
+    return sanitize_json_value(summary)
+
+
 def serialize_impact_study(study: ImpactStudy, jobs: Iterable[Any]) -> dict:
     return {
         "id": str(study.id),
@@ -373,7 +415,7 @@ def _reconcile_study(study: ImpactStudy, jobs: list[SimulationJob]) -> None:
     statuses = {job.status for job in jobs}
     if statuses.issubset(TERMINAL_JOB_STATUSES):
         study.status = "aggregating"
-        study.summary_json = build_child_job_summary(jobs)
+        study.summary_json = build_study_summary(study, jobs)
         study.status = (
             "completed_with_failures"
             if statuses.intersection({"failed", "cancelled"})
