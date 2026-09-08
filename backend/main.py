@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.api.auth import router as auth_router
 from backend.api.network_configurations import router as network_configurations_router
+from backend.api.simulation_profiles import router as simulation_profiles_router
 from backend.api.sinr import router as sinr_router
 from backend.middleware.request_logging import RequestLoggingMiddleware
 from backend.database import ensure_database_is_current
@@ -71,6 +72,11 @@ app.include_router(
 
 app.include_router(
     network_configurations_router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    simulation_profiles_router,
     prefix="/api/v1",
 )
 

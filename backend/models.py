@@ -139,6 +139,51 @@ class NetworkConfiguration(Base):
     )
 
 
+class SimulationProfile(Base):
+    __tablename__ = "simulation_profiles"
+    __table_args__ = (
+        UniqueConstraint(
+            "scene_id",
+            "created_by",
+            "name",
+            name="uq_simulation_profiles_owner_scene_name",
+        ),
+        CheckConstraint(
+            "simulation_type IN ("
+            "'network_coverage', 'coverage_map', 'rsrp_simulation', "
+            "'sinr', 'throughput_comparison'"
+            ")",
+            name="ck_simulation_profiles_type",
+        ),
+        Index(
+            "ix_simulation_profiles_scene_type_enabled",
+            "scene_id",
+            "simulation_type",
+            "enabled",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    scene_id: Mapped[str] = mapped_column(
+        ForeignKey("scenes.id", ondelete="RESTRICT")
+    )
+    name: Mapped[str] = mapped_column(Text)
+    simulation_type: Mapped[str] = mapped_column(Text)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    request_template_json: Mapped[dict] = mapped_column(JSONB)
+    created_by: Mapped[str] = mapped_column(
+        ForeignKey("app_users.id", ondelete="RESTRICT")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class SimulationRun(Base):
     __tablename__ = "simulation_runs"
 

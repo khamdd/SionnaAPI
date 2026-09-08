@@ -96,6 +96,15 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   normalized content is rejected. Existing browser localStorage drafts remain
   unchanged until a later frontend migration. Published versions are shared for
   the project's shared scenes, while drafts are private to their creator.
+- Saved simulation profiles are stored in PostgreSQL through
+  `backend/services/simulation_profile_service.py`. Profiles keep explicit solver,
+  radio, camera, objective, and role settings separate from antenna configuration
+  versions. Enabling validates a profile against the scene's active published
+  configuration and an existing Pydantic request model. Network Coverage and RSRP
+  receive enabled configuration antennas; Coverage Map, SINR, and Throughput
+  resolve saved antenna role IDs. Invalid role profiles return an explicit skip
+  reason. Existing manual simulation requests and frontend localStorage remain
+  unchanged.
 - Alembic 1.19.2 is configured through `alembic.ini` and
   `backend/migrations/`, using the existing database URL resolver and
   `Base.metadata`. Revision `0001_initial_schema` reproduces the six existing
@@ -247,6 +256,8 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   cleanup.
 - `backend/services/network_configuration_service.py`: immutable antenna snapshot
   normalization, hashing, version creation, access control, and publishing.
+- `backend/services/simulation_profile_service.py`: saved automation-profile CRUD,
+  enable-time validation, antenna-role resolution, and request construction.
 - `backend/services/scene_service.py`: scene registry, preview lifecycle, activate
   and delete behavior.
 - `backend/services/osm_scene_builder.py`: OSM/Overpass to Sionna scene generation.

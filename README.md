@@ -153,7 +153,7 @@ Docker Compose uses named volumes:
 
 | Volume | Contents |
 | --- | --- |
-| `postgres-data` | Users, versioned network configurations, simulation jobs, scene references, and saved history |
+| `postgres-data` | Users, network configurations, simulation profiles, jobs, scene references, and saved history |
 | `elasticsearch-data` | Application logs |
 | `application-static` | Imported scenes and generated simulation files |
 
@@ -208,6 +208,10 @@ The backend also exposes immutable, versioned network configurations for future
 automation. Their lifecycle and API rules are documented in
 [`docs/network-configurations.md`](docs/network-configurations.md). Existing
 browser simulation drafts continue to use localStorage for now.
+
+Saved simulation profiles provide repeatable solver, radio, and antenna-role
+settings for that automation. Their validation and API rules are documented in
+[`docs/simulation-profiles.md`](docs/simulation-profiles.md).
 
 ## Database migrations
 
