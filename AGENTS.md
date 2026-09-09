@@ -104,20 +104,28 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   confirmation. It does not migrate or alter existing manual simulation drafts.
 - Saved simulation profiles are stored in PostgreSQL through
   `backend/services/simulation_profile_service.py`. Profiles keep explicit solver,
-  radio, camera, objective, and role settings separate from antenna configuration
-  versions. Enabling validates a profile against the scene's active published
-  configuration and an existing Pydantic request model. Network Coverage and RSRP
-  receive enabled configuration antennas; Coverage Map, SINR, and Throughput
-  resolve saved antenna role IDs. Invalid role profiles return an explicit skip
-  reason. Existing manual simulation requests and frontend localStorage remain
-  unchanged.
+  radio, objective, and role settings separate from antenna configuration
+  versions. Making a profile eligible requires an explicit readable same-scene
+  configuration ID; published, superseded, and caller-owned drafts are valid
+  targets. Network Coverage and RSRP receive enabled configuration antennas;
+  Coverage Map, SINR, and Throughput resolve saved antenna role IDs. Profiles are
+  created disabled, and an eligible profile must be disabled before changing its
+  simulation type or request template. Preview still validates each profile
+  against the actual scenario configuration. Existing manual simulation requests
+  and frontend localStorage remain unchanged.
 - The frontend `/profiles` route provides a structured Simulation Profiles
-  workspace. Its ledger separates the enabled impact-study run stack from
-  disabled drafts; editors cover the supported solver, camera, radio, sampling,
-  objective, and antenna-role fields. Profiles save disabled first, then use a
-  separate server-validated enable action against the active published network
-  configuration. Other users' enabled profiles are visible read-only, and delete
-  requires confirmation.
+  workspace. Its ledger separates eligible profiles from disabled drafts; editors
+  cover the supported solver, radio, sampling, objective, and antenna-role
+  fields. The eligibility panel defaults validation to the published configuration
+  while allowing readable drafts and superseded versions, and its selection also
+  supplies role antennas. Eligible means available for either scenario side, not
+  automatically included in every study. Other users' eligible profiles are
+  visible read-only, owners disable before editing, and delete requires
+  confirmation.
+- Legacy camera settings were removed from Coverage and Network Coverage request
+  schemas, frontend payloads, and simulation profiles because backend simulation
+  services never consumed them. The interactive `Scene3DPreview` camera remains
+  frontend-only and does not affect simulation inputs.
 - `backend/services/configuration_diff_service.py` compares two network
   configuration snapshots deterministically. It reports antenna additions,
   removals, and before/after changes for enabled status, geographic position,
@@ -371,7 +379,8 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 - `frontend/src/components/NetworkConfigurationsPage.jsx`: immutable
   configuration version ledger, proposal editor, exact diff, and publication UI.
 - `frontend/src/components/SimulationProfilesPage.jsx`: saved profile ledger,
-  structured request-template editor, run stack, and readiness validation UI.
+  structured request-template editor, selectable-configuration eligibility, and
+  readiness validation UI.
 - `frontend/src/utils/`: map drawing, scene sizing, history filtering, formatting.
 
 ## Current UI Routes
@@ -381,7 +390,7 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 - `/configurations`: published configuration, immutable proposal drafts, exact
   difference review, and confirmed publication.
 - `/profiles`: reusable simulation profile editing, antenna-role assignment,
-  validation, and enabled impact-study run stack.
+  selectable-configuration validation, and scenario-comparison eligibility.
 - `/queue`: submitted simulation jobs, status tracking, result review, save to
   history, and discard actions.
 - `/coverage`: coverage map API tool.

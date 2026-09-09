@@ -6,11 +6,6 @@ export const DEFAULT_SOLVER = {
   size: [300, 300],
 };
 
-export const DEFAULT_CAMERA = {
-  position: [-1.5, -137, 115],
-  look_at: [0, 0, 10],
-};
-
 export const TRANSMITTER_PATTERN = "tr38901";
 export const DEFAULT_RSRP_USER_COUNT = 1000;
 export const MAX_RSRP_USER_COUNT = 5000;

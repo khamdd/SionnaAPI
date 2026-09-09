@@ -35,13 +35,15 @@ def test_solver_config_rejects_non_positive_cell_size():
         SolverConfig(cell_size=0.0)
 
 
-def test_coverage_request_uses_default_camera_and_solver():
+def test_coverage_request_uses_default_solver_without_camera_input():
     request = CoverageRequest(
         tilt=8.0,
         transmitter_position=(8.5, 21.0, 27.0),
     )
 
-    assert request.camera.look_at == (0.0, 0.0, 10.0)
+    assert "camera" not in request.model_dump()
+    assert "camera" not in CoverageRequest.model_fields
+    assert "camera" not in NetworkCoverageRequest.model_fields
     assert request.azimuth == 0.0
     assert request.solver.size == (400.0, 400.0)
 

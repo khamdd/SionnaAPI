@@ -2621,10 +2621,6 @@ function buildNetworkCoveragePayload(antennas, activeScene) {
     antennas: antennas.map(toAntennaRequest),
     transmitter_pattern: TRANSMITTER_PATTERN,
     solver: solverForScene(activeScene),
-    camera: {
-      position: [0, 0, 650],
-      look_at: [0, 0, 0],
-    },
     bandwidth_mhz: 100,
     mimo_layers: 4,
   };

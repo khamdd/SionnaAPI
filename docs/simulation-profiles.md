@@ -6,14 +6,14 @@ the profile answers **how it should be tested**.
 
 Profiles support `network_coverage`, `coverage_map`, `rsrp_simulation`, `sinr`, and
 `throughput_comparison`. A profile can be saved while incomplete, but it cannot be
-enabled until its template and the scene's active published configuration combine
-into the existing Pydantic request model.
+made eligible until its template and a selected readable network configuration
+combine into the existing Pydantic request model.
 
 ## Template rules
 
-- Include every non-antenna setting explicitly, including complete `solver` and
-  `camera` objects where applicable. This avoids silently changing behavior if an
-  application default changes later.
+- Include every non-antenna simulation setting explicitly, including a complete
+  `solver` object. This avoids silently changing behavior if an application
+  default changes later.
 - Do not include fields owned by the network configuration, such as `antennas`,
   transmitter positions, power, or SINR tilt.
 - Coverage Map requires a `roles.transmitter` antenna ID.
@@ -34,10 +34,6 @@ Example Network Coverage template:
     "cell_size": 2,
     "center": [0, 0, 0],
     "size": [400, 400]
-  },
-  "camera": {
-    "position": [0, 0, 650],
-    "look_at": [0, 0, 0]
   },
   "bandwidth_mhz": 100,
   "mimo_layers": 4,
@@ -62,11 +58,28 @@ Example Network Coverage template:
 - `POST /api/v1/simulation-profiles/{id}/disable`
 - `POST /api/v1/simulation-profiles/{id}/build-request`
 
-The build-request endpoint accepts a `configuration_id` and returns the exact
-validated request that later automation can submit. All endpoints require a
-configured database and authentication. Enabled profiles are readable to users of
-the shared project scenes; only their creator can update, enable, disable, or
-delete them.
+The enable endpoint requires the validation configuration explicitly:
+
+```json
+{
+  "configuration_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+}
+```
+
+The configuration must be readable, belong to the profile's scene, and may be
+published, superseded, or a draft owned by the caller. The build-request endpoint
+accepts the same `configuration_id` shape and returns the exact validated request
+that later automation can submit. Preview validates the profile again against the
+scenario's actual configuration; earlier eligibility does not override scenario
+validation.
+
+All endpoints require a configured database and authentication. Eligible profiles
+are readable to users of the shared project scenes; only their creator can change
+eligibility, rename, or delete them. New profiles must be created disabled.
+Simulation type or request-template edits on an eligible profile return
+`enabled_profile_must_be_disabled`; disable it first, make the changes, then
+validate it again. A name-only update is allowed because it does not affect a
+simulation request.
 
 The current simulation pages and their localStorage drafts are unchanged. A future
 frontend step can add **Save as automation profile** controls to those individual
@@ -76,12 +89,23 @@ simulation pages without changing this profile workspace.
 
 The scene-scoped `/profiles` page provides a profile ledger, structured editor,
 and server-authoritative readiness panel. The editor exposes the applicable
-solver, camera, radio, user-sampling, objective, and antenna-role fields for each
+solver, radio, user-sampling, objective, and antenna-role fields for each
 simulation type instead of requiring raw JSON editing.
 
-New profiles are always saved disabled. A separate **Validate and enable** action
-builds the exact request against the active published configuration before the
-profile enters the impact-study run stack. Disabled profiles may remain incomplete;
-the readiness panel explains missing published configuration, role assignments,
-or settings. Enabled profiles are readable but remain read-only for users other
-than their creator. Deleting a profile requires explicit confirmation.
+Camera settings are not simulation-profile inputs. Coverage services never used
+the former request field, so it was removed from the API and profile editor. The
+interactive 3D preview manages its own frontend-only camera.
+
+New profiles are always saved disabled. A separate **Validate and make eligible**
+action builds the exact request against the configuration selected in the
+eligibility panel. The active published version is selected by default, while
+readable draft and superseded versions remain available so candidate-only antennas
+can be assigned and validated. The same selector supplies antenna choices to the
+structured role editor.
+
+Eligible means available for either side of a scenario comparison; it does not
+mean the profile is automatically used for both sides or for every study. Disabled
+profiles may remain incomplete, and the eligibility panel explains missing
+configuration, role assignments, or settings. Eligible profiles are read-only for
+users other than their creator, and owners must disable one before opening its full
+simulation-settings editor. Deleting a profile requires explicit confirmation.

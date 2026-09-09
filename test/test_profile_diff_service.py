@@ -5,10 +5,10 @@ def test_dictionary_order_and_equivalent_numbers_do_not_create_profile_changes()
     baseline = {
         "carrier_frequency_ghz": 3.5,
         "solver": {"max_depth": 5, "cell_size": 2},
-        "camera": {"position": [0, 0, 650], "look_at": [0, 0, 0]},
+        "roles": {"transmitter": "A1"},
     }
     candidate = {
-        "camera": {"look_at": [0.0, 0.0, 0.0], "position": [0, 0, 650.0]},
+        "roles": {"transmitter": "A1"},
         "solver": {"cell_size": 2.0, "max_depth": 5.0},
         "carrier_frequency_ghz": 3.5000,
     }

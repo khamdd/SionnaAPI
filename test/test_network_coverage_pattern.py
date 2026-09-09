@@ -41,7 +41,6 @@ class FakeRequest:
                 "size": (100.0, 100.0),
             },
         )()
-        self.camera = object()
 
 
 def test_network_coverage_uses_one_global_transmitter_pattern(monkeypatch):

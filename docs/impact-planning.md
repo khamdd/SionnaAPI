@@ -73,7 +73,7 @@ unavailable while aggregate comparison can remain meaningful.
 
 Profile differences compare canonical JSON values recursively. Dictionary key
 order and equivalent numeric representations do not create false changes;
-additions, removals, nested fields, list positions, roles, solver/camera settings,
+additions, removals, nested fields, list positions, roles, solver settings,
 radio settings, sampling, tilt inputs, and objectives are reported explicitly.
 
 ## Durable-study transition

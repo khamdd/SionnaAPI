@@ -6,6 +6,7 @@ from backend.api.dependencies import require_current_user
 from backend.schemas.simulation_profiles import (
     SimulationProfileBuildRequest,
     SimulationProfileCreateRequest,
+    SimulationProfileEnableRequest,
     SimulationProfileUpdateRequest,
     SimulationType,
 )
@@ -100,6 +101,7 @@ def delete_simulation_profile(
 @router.post("/simulation-profiles/{profile_id}/enable")
 def enable_simulation_profile(
     profile_id: UUID,
+    request: SimulationProfileEnableRequest,
     user=Depends(require_current_user),
 ):
     return return_or_raise(
@@ -107,6 +109,7 @@ def enable_simulation_profile(
             str(profile_id),
             enabled=True,
             user_id=user["id"],
+            configuration_id=str(request.configuration_id),
         )
     )
 

@@ -19,7 +19,7 @@ class SimulationProfileCreateRequest(BaseModel):
     scene_id: str = Field(min_length=1, max_length=255)
     name: str = Field(min_length=1, max_length=120)
     simulation_type: SimulationType
-    enabled: bool = False
+    enabled: Literal[False] = False
     request_template: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("scene_id", "name")
@@ -36,7 +36,6 @@ class SimulationProfileUpdateRequest(BaseModel):
 
     name: str | None = Field(default=None, min_length=1, max_length=120)
     simulation_type: SimulationType | None = None
-    enabled: bool | None = None
     request_template: dict[str, Any] | None = None
 
     @field_validator("name")
@@ -60,6 +59,12 @@ class SimulationProfileUpdateRequest(BaseModel):
 
 
 class SimulationProfileBuildRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    configuration_id: UUID
+
+
+class SimulationProfileEnableRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     configuration_id: UUID

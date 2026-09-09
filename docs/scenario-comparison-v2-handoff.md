@@ -31,7 +31,7 @@ Candidate scenario = Configuration B + Profile B
 
 The two configurations must be different. The two profiles may be the same or
 different. A direct pair must use the same simulation type, but its radio, solver,
-camera, role, sampling, and objective settings may differ intentionally.
+role, sampling, and objective settings may differ intentionally.
 
 The product is therefore a **scenario comparison**, not a controlled experiment
 that always holds the profile constant. When profiles differ, the result represents
@@ -42,12 +42,11 @@ must show both categories of change so that this is never hidden.
 
 At the time of this handoff:
 
-- Git HEAD is `fcf6481 feat(frontend): add simulation profiles workflow`.
-- The code baseline was clean before this handoff was written. This planning turn
-  intentionally leaves only this new document and its `AGENTS.md` pointer
-  uncommitted.
+- Git HEAD is `dc19b29 refactor(impact): plan explicit scenario profile pairs`.
+- Slice work is intentionally left uncommitted so each completed step can be
+  reviewed before the user commits it.
 - The backend already has immutable network configurations, saved simulation
-  profiles, configuration diffs, impact preview policy v1, durable Impact Studies,
+  profiles, configuration diffs, durable policy-v1-compatible Impact Studies,
   paired child jobs, KPI/spatial comparison, conditional coverage optimization,
   HTML reports, job reliability, Alembic migrations, and completion notifications.
 - The frontend has `/configurations` and `/profiles` workflows.
@@ -59,12 +58,18 @@ At the time of this handoff:
 - Durable Impact Study creation/execution and downstream comparison still assume
   one profile is reused for both scenarios. Study creation temporarily uses an
   explicit policy-v1 compatibility entry point until Slice 3 migrates persistence.
+- Profile eligibility now validates against an explicit caller-readable,
+  same-scene configuration. The Profiles GUI defaults to the published version,
+  also offers readable drafts and superseded versions, and describes enabled
+  profiles as eligible for either scenario side.
+- The unused camera request/profile field was removed before Slice 3. It never
+  affected backend simulation; the interactive 3D camera remains frontend-only.
 - Existing manual scene-first simulation pages and their browser localStorage
   drafts must remain unchanged.
 
 ## Remaining assumptions that must be replaced
 
-The following durable-study and frontend behavior remains after Slice 1:
+The following durable-study behavior remains after Slice 2:
 
 1. Child jobs are grouped by `simulation_profile_id` plus `scenario_role`.
 2. Comparison groups jobs by one shared profile ID.
@@ -73,9 +78,7 @@ The following durable-study and frontend behavior remains after Slice 1:
    the whole pair incompatible.
 4. Optimization and suggested-configuration endpoints identify work by the one
    shared profile ID.
-5. The Profiles GUI validates enablement only against the active published
-   configuration and describes enabled profiles as a shared paired run stack.
-6. Reports and durable-study docs imply the profile is constant across both sides.
+5. Reports and durable-study docs imply the profile is constant across both sides.
 
 Primary files containing these assumptions:
 
@@ -88,11 +91,9 @@ Primary files containing these assumptions:
 - `backend/services/impact_comparison_service.py`
 - `backend/services/impact_decision_service.py`
 - `backend/services/impact_report_service.py`
-- `backend/services/simulation_profile_service.py`
 - `backend/services/simulation_job_store.py`
 - `backend/models.py`
-- `frontend/src/components/SimulationProfilesPage.jsx`
-- `docs/impact-*.md` and `docs/simulation-profiles.md`
+- `docs/impact-*.md`
 
 ## Scenario-pair contract
 
@@ -201,7 +202,6 @@ by field path and report before/after values. At minimum include:
 
 - propagation model, frequency, bandwidth, MIMO, and noise figure;
 - solver depth, samples, cell size, center, and size;
-- camera position and look-at;
 - user count, height, and random seed;
 - antenna roles;
 - base/target tilt fields;
@@ -238,11 +238,13 @@ incompatible merely because profile settings differ.
 
 ## Profile lifecycle adjustment
 
+Implemented in Slice 2.
+
 Candidate profiles may reference antennas that exist only in a draft configuration.
 Therefore, a profile cannot be enabled exclusively against the active published
 configuration.
 
-Required behavior:
+Implemented behavior:
 
 - Change profile enablement so the caller supplies a readable
   `configuration_id` used for validation.
@@ -330,28 +332,34 @@ Suggested commit message:
 refactor(impact): plan explicit scenario profile pairs
 ```
 
-Completed result:
-
-- Added a reusable explicit profile-pair request schema and required one to 20
-  unique pairs on the preview API.
-- Preview loads only selected readable/enabled same-scene profiles, preserves
-  order, rejects type mismatches, and requires a material configuration diff.
-- Added deterministic recursive profile-template comparison with numeric and
-  dictionary-order normalization.
-- Planner v2 independently resolves each scenario, snapshots both profiles and
-  objective lists, distinguishes configuration/profile triggers, uses the union
-  of role antennas, returns side-specific validation skips, and emits methodology,
-  sampling, and spatial-grid warnings.
-- Durable policy-v1 study creation remains available through a named compatibility
-  entry point; no study or job persistence was migrated in this slice.
-- Verification: focused planner/profile-diff tests passed (32 tests after the
-  final boolean-equivalence case). The full backend run reached 260 passing tests
-  with three unrelated pre-existing failures in RSRP/scene tests that still send
-  the removed antenna `position` field.
-
 ### Slice 2 — Profile validation against selectable configurations
 
-Status: **next**
+Status: **complete (2026-09-09)**
+
+Implemented:
+
+- The enable-profile endpoint now requires a `configuration_id` and validates
+  against that readable, same-scene configuration instead of implicitly loading
+  the published version.
+- Published and superseded versions are readable validation targets; drafts are
+  valid only for their creator. The response records the configuration identity
+  used for successful validation.
+- Profiles are created disabled. Eligible profiles reject simulation-type or
+  request-template edits until explicitly disabled; name-only edits remain valid.
+- The Profiles GUI defaults its compact validation selector to the published
+  configuration, exposes all readable versions, supplies the selected version's
+  antennas to role editing, and consistently uses eligible-profile language.
+- Preview behavior remains authoritative and revalidates each selected profile
+  against the actual scenario configuration. Manual simulation localStorage keys
+  and drafts were not changed.
+
+Verification:
+
+- Focused profile/planner/profile-diff suite: 55 passed.
+- Frontend production build passed; the existing large-chunk warning remains.
+- Full backend suite: 271 passed and the same three unrelated schema-drift
+  failures remain in `test_rsrp_service.py` (two) and `test_scene_service.py`
+  (one); those tests still submit the forbidden antenna `position` field.
 
 Goal: make candidate-specific profiles eligible without requiring their role
 antennas to exist in the published baseline.
@@ -378,7 +386,38 @@ Suggested commit message:
 feat(profiles): validate eligibility against selected configurations
 ```
 
+### Cleanup gate — Remove unused camera inputs
+
+Status: **complete (2026-09-09)**
+
+Implemented:
+
+- Removed `CameraConfig` and camera fields from Coverage and Network Coverage
+  request schemas.
+- Removed camera values from manual frontend payloads, defaults, simulation
+  profile templates, required-field validation, profile editing, and examples.
+- Kept the interactive Three.js scene camera because it is frontend view state,
+  not a simulation input.
+- Existing stored profile templates containing `camera` are intentionally not
+  migrated; they can be recreated under the corrected contract.
+
+Verification:
+
+- Focused request/profile/planner/coverage suite: 79 passed.
+- Frontend production build passed; the existing large-chunk warning remains.
+- Full backend suite: 272 passed and the same three unrelated schema-drift
+  failures remain in `test_rsrp_service.py` (two) and `test_scene_service.py`
+  (one).
+
+Suggested commit message:
+
+```text
+refactor(simulation): remove unused camera inputs
+```
+
 ### Slice 3 — Durable v2 study jobs and migration
+
+Status: **next**
 
 Goal: persist and execute explicit profile pairs idempotently.
 

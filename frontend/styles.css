@@ -5792,7 +5792,7 @@ textarea:hover:not(:disabled) {
   }
 }
 
-/* Simulation profile run-stack workspace */
+/* Simulation profile eligibility workspace */
 .profiles-page {
   min-width: 0;
   background:
@@ -6347,6 +6347,35 @@ textarea:hover:not(:disabled) {
   color: #5e7669;
   font-size: 9px;
   line-height: 1.35;
+}
+
+.profile-validation-target {
+  display: grid;
+  gap: 6px;
+  border-bottom: 1px solid var(--line);
+  padding: 12px 14px;
+}
+
+.profile-validation-target > span {
+  color: #405766;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.profile-validation-target select {
+  width: 100%;
+  min-height: 35px;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: var(--text);
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+.profile-validation-target small {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.4;
 }
 
 .profile-check-list {

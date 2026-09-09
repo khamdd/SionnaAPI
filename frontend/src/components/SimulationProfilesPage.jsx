@@ -9,7 +9,6 @@ import {
   updateSimulationProfile,
 } from "../api";
 import {
-  DEFAULT_CAMERA,
   DEFAULT_RSRP_RANDOM_SEED,
   DEFAULT_RSRP_USER_COUNT,
   DEFAULT_USER_HEIGHT_M,
@@ -59,6 +58,7 @@ const ROLE_TYPES = {
 export default function SimulationProfilesPage({ activeScene, currentUser }) {
   const [profiles, setProfiles] = useState([]);
   const [configurations, setConfigurations] = useState([]);
+  const [validationConfigurationId, setValidationConfigurationId] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [editor, setEditor] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -74,13 +74,21 @@ export default function SimulationProfilesPage({ activeScene, currentUser }) {
     () => profiles.find((item) => item.id === selectedId) || null,
     [profiles, selectedId],
   );
+  const validationConfiguration = useMemo(
+    () => configurations.find(
+      (item) => item.id === validationConfigurationId,
+    ) || null,
+    [configurations, validationConfigurationId],
+  );
   const enabledProfiles = useMemo(
     () => profiles.filter((item) => item.enabled),
     [profiles],
   );
-  const publishedAntennas = useMemo(
-    () => (published?.antennas || []).filter((item) => item.enabled !== false),
-    [published],
+  const validationAntennas = useMemo(
+    () => (validationConfiguration?.antennas || []).filter(
+      (item) => item.enabled !== false,
+    ),
+    [validationConfiguration],
   );
 
   const loadWorkspace = useCallback(async (preferredId = null) => {
@@ -116,14 +124,23 @@ export default function SimulationProfilesPage({ activeScene, currentUser }) {
   }, [loadWorkspace]);
 
   useEffect(() => {
-    if (editor || !selected || !published) {
+    setValidationConfigurationId((current) => {
+      if (configurations.some((item) => item.id === current)) {
+        return current;
+      }
+      return published?.id || configurations[0]?.id || null;
+    });
+  }, [configurations, published]);
+
+  useEffect(() => {
+    if (editor || !selected || !validationConfiguration) {
       setValidation({ state: "idle" });
       return undefined;
     }
 
     let active = true;
     setValidation({ state: "loading" });
-    buildSimulationProfileRequest(selected.id, published.id)
+    buildSimulationProfileRequest(selected.id, validationConfiguration.id)
       .then((result) => {
         if (active) {
           setValidation({ state: "valid", result });
@@ -138,7 +155,7 @@ export default function SimulationProfilesPage({ activeScene, currentUser }) {
     return () => {
       active = false;
     };
-  }, [editor, published, selected]);
+  }, [editor, selected, validationConfiguration]);
 
   function startCreate() {
     setEditor({
@@ -148,11 +165,18 @@ export default function SimulationProfilesPage({ activeScene, currentUser }) {
     });
     setNotice({
       kind: "info",
-      message: "New profile started. It will remain disabled until you enable it explicitly.",
+      message: "New profile started. It will remain disabled until validation succeeds.",
     });
   }
 
   function startEdit(profile) {
+    if (profile.enabled) {
+      setNotice({
+        kind: "error",
+        message: "Disable this profile before editing its simulation settings.",
+      });
+      return;
+    }
     setEditor({
       mode: "edit",
       profileId: profile.id,
@@ -213,7 +237,7 @@ export default function SimulationProfilesPage({ activeScene, currentUser }) {
       setEditor(null);
       setNotice({
         kind: "success",
-        message: `${result.profile.name} saved${result.profile.enabled ? " and revalidated" : " as disabled"}.`,
+        message: `${result.profile.name} saved as disabled.`,
       });
       await loadWorkspace(result.profile.id);
     } catch (error) {
@@ -232,21 +256,30 @@ export default function SimulationProfilesPage({ activeScene, currentUser }) {
     setNotice({
       kind: "info",
       message: nextEnabled
-        ? "Validating profile against the published baseline..."
-        : "Removing profile from the impact run stack...",
+        ? `Validating profile against ${configurationLabel(validationConfiguration)}...`
+        : "Removing profile eligibility...",
     });
     try {
-      const result = await setSimulationProfileEnabled(selected.id, nextEnabled);
+      if (nextEnabled && !validationConfiguration) {
+        throw new Error("Choose a validation configuration first.");
+      }
+      const result = await setSimulationProfileEnabled(
+        selected.id,
+        nextEnabled,
+        validationConfiguration?.id,
+      );
       setNotice({
         kind: "success",
-        message: `${result.profile.name} ${nextEnabled ? "enabled" : "disabled"}.`,
+        message: nextEnabled
+          ? `${result.profile.name} is eligible after validation against ${configurationLabel(validationConfiguration)}.`
+          : `${result.profile.name} disabled.`,
       });
       await loadWorkspace(result.profile.id);
     } catch (error) {
       setNotice({
         kind: "error",
         message: nextEnabled
-          ? `Profile could not be enabled: ${error.message}`
+          ? `Profile could not be made eligible: ${error.message}`
           : `Profile could not be disabled: ${error.message}`,
       });
     } finally {
@@ -280,7 +313,11 @@ export default function SimulationProfilesPage({ activeScene, currentUser }) {
   const busy = isLoading || Boolean(action);
   const activeDraft = editor?.draft || null;
   const draftChecks = activeDraft
-    ? evaluateProfileDraft(activeDraft, published, publishedAntennas)
+    ? evaluateProfileDraft(
+      activeDraft,
+      validationConfiguration,
+      validationAntennas,
+    )
     : [];
 
   return (
@@ -289,8 +326,8 @@ export default function SimulationProfilesPage({ activeScene, currentUser }) {
         <div>
           <h1>Simulation profiles</h1>
           <p>
-            Define how {activeScene.name} should be tested. Enabled profiles form the
-            run stack used by configuration impact studies.
+            Define how {activeScene.name} should be tested. Eligible profiles can be
+            selected independently for either side of a scenario comparison.
           </p>
         </div>
         <div className="page-title-actions">
@@ -320,7 +357,7 @@ export default function SimulationProfilesPage({ activeScene, currentUser }) {
         />
         <ProfileWorkbench
           action={action}
-          antennas={publishedAntennas}
+          antennas={validationAntennas}
           currentUser={currentUser}
           editor={editor}
           onChange={updateDraft}
@@ -330,16 +367,19 @@ export default function SimulationProfilesPage({ activeScene, currentUser }) {
           onSave={saveProfile}
           onToggle={toggleSelected}
           onTypeChange={changeProfileType}
-          published={published}
+          validationConfiguration={validationConfiguration}
           selected={selected}
         />
         <ProfileValidation
           checks={draftChecks}
+          configurations={configurations}
           editor={editor}
           enabledCount={enabledProfiles.length}
-          published={published}
+          onConfigurationChange={setValidationConfigurationId}
           selected={selected}
           validation={validation}
+          validationConfiguration={validationConfiguration}
+          validationConfigurationId={validationConfigurationId}
         />
       </div>
     </main>
@@ -349,7 +389,7 @@ export default function SimulationProfilesPage({ activeScene, currentUser }) {
 
 function ProfileRail({ currentUser, disabled, isLoading, onSelect, profiles, selectedId }) {
   const groups = [
-    ["Enabled run stack", profiles.filter((profile) => profile.enabled)],
+    ["Eligible profiles", profiles.filter((profile) => profile.enabled)],
     ["Disabled drafts", profiles.filter((profile) => !profile.enabled)],
   ];
   return (
@@ -378,7 +418,7 @@ function ProfileRail({ currentUser, disabled, isLoading, onSelect, profiles, sel
                 <small>{formatSimulationType(profile.simulation_type)}</small>
               </span>
               <span className={`profile-state ${profile.enabled ? "enabled" : "disabled"}`}>
-                {isOwner(profile, currentUser) ? (profile.enabled ? "Enabled" : "Draft") : "Shared"}
+                {isOwner(profile, currentUser) ? (profile.enabled ? "Eligible" : "Draft") : "Shared"}
               </span>
             </button>
           ))}
@@ -401,8 +441,8 @@ function ProfileWorkbench({
   onSave,
   onToggle,
   onTypeChange,
-  published,
   selected,
+  validationConfiguration,
 }) {
   if (editor) {
     return (
@@ -420,11 +460,11 @@ function ProfileWorkbench({
             draft={editor.draft}
             onChange={onChange}
             onTypeChange={onTypeChange}
-            published={published}
+            validationConfiguration={validationConfiguration}
           />
         </fieldset>
         <div className="profiles-action-bar">
-          <span>Save first, then enable after server validation succeeds.</span>
+          <span>Save first, then validate against a configuration to make this profile eligible.</span>
           <div>
             <button className="ghost-button" type="button" disabled={Boolean(action)} onClick={onDiscard}>Discard changes</button>
             <button className="primary-button" type="submit" disabled={Boolean(action)}>
@@ -441,7 +481,7 @@ function ProfileWorkbench({
       <section className="profiles-workbench profiles-blank">
         <div>
           <h2>Define the first repeatable test</h2>
-          <p>Create a profile, assign its solver and radio settings, then enable it against the published baseline.</p>
+          <p>Create a profile, assign its solver and radio settings, then validate it against a configuration.</p>
         </div>
       </section>
     );
@@ -454,13 +494,13 @@ function ProfileWorkbench({
       <div className="profiles-panel-heading workbench-heading">
         <div><h2>{selected.name}</h2><span>{formatSimulationType(selected.simulation_type)}</span></div>
         <span className={`profile-state ${selected.enabled ? "enabled" : "disabled"}`}>
-          {selected.enabled ? "Enabled" : "Disabled"}
+          {selected.enabled ? "Eligible" : "Disabled"}
         </span>
       </div>
       <dl className="profile-meta">
         <div><dt>Updated</dt><dd>{formatDateTime(selected.updated_at)}</dd></div>
         <div><dt>Access</dt><dd>{owner ? "Owned by you" : "Shared read-only"}</dd></div>
-        <div><dt>Baseline</dt><dd>{published ? `Published v${published.version}` : "Unavailable"}</dd></div>
+        <div><dt>Validation target</dt><dd>{configurationLabel(validationConfiguration)}</dd></div>
       </dl>
       <ProfileSummary profile={selected} template={template} />
       <div className="profile-template-block">
@@ -470,17 +510,17 @@ function ProfileWorkbench({
         </details>
       </div>
       <div className="profiles-action-bar">
-        <span>{owner ? "Changes are revalidated whenever an enabled profile is saved." : "Only the creator can change this shared profile."}</span>
+        <span>{owner ? (selected.enabled ? "Disable this profile before editing its simulation settings." : "Validate against the configuration that supplies its antenna roles.") : "Only the creator can change this project-shared profile."}</span>
         <div>
           {owner && (
             <button className="ghost-button danger-button" type="button" disabled={Boolean(action)} onClick={onDelete}>
               {action === "deleting" ? "Deleting..." : "Delete"}
             </button>
           )}
-          {owner && <button className="ghost-button" type="button" disabled={Boolean(action)} onClick={() => onEdit(selected)}>Edit</button>}
+          {owner && <button className="ghost-button" type="button" disabled={Boolean(action) || selected.enabled} title={selected.enabled ? "Disable this profile before editing" : undefined} onClick={() => onEdit(selected)}>Edit</button>}
           {owner && (
-            <button className="primary-button" type="button" disabled={Boolean(action)} onClick={onToggle}>
-              {action === "enabling" ? "Validating..." : action === "disabling" ? "Disabling..." : selected.enabled ? "Disable profile" : "Validate and enable"}
+            <button className="primary-button" type="button" disabled={Boolean(action) || (!selected.enabled && !validationConfiguration)} onClick={onToggle}>
+              {action === "enabling" ? "Validating..." : action === "disabling" ? "Disabling..." : selected.enabled ? "Disable profile" : "Validate and make eligible"}
             </button>
           )}
         </div>
@@ -490,7 +530,13 @@ function ProfileWorkbench({
 }
 
 
-function ProfileEditorFields({ antennas, draft, onChange, onTypeChange, published }) {
+function ProfileEditorFields({
+  antennas,
+  draft,
+  onChange,
+  onTypeChange,
+  validationConfiguration,
+}) {
   const template = draft.request_template;
   const type = draft.simulation_type;
   return (
@@ -512,7 +558,7 @@ function ProfileEditorFields({ antennas, draft, onChange, onTypeChange, publishe
       {ROLE_TYPES[type] && (
         <RoleFields
           antennas={antennas}
-          published={published}
+          validationConfiguration={validationConfiguration}
           roles={template.roles || {}}
           roleTypes={ROLE_TYPES[type]}
           onChange={(roles) => onTemplateChange(draft, onChange, "roles", roles)}
@@ -535,10 +581,6 @@ function ProfileEditorFields({ antennas, draft, onChange, onTypeChange, publishe
 
       <SolverFields draft={draft} onChange={onChange} />
 
-      {(type === "network_coverage" || type === "coverage_map") && (
-        <CameraFields draft={draft} onChange={onChange} />
-      )}
-
       <section className="profile-form-section">
         <div className="profile-section-heading"><h3>Antenna pattern</h3><p>Pattern ID passed to the simulation request.</p></div>
         <div className="profile-form-grid">
@@ -552,14 +594,24 @@ function ProfileEditorFields({ antennas, draft, onChange, onTypeChange, publishe
 }
 
 
-function RoleFields({ antennas, onChange, published, roles, roleTypes }) {
+function RoleFields({
+  antennas,
+  onChange,
+  roles,
+  roleTypes,
+  validationConfiguration,
+}) {
   return (
     <section className="profile-form-section role-section">
       <div className="profile-section-heading">
-        <div><h3>Antenna roles</h3><p>Roles resolve from the active published configuration when the profile runs.</p></div>
+        <div><h3>Antenna roles</h3><p>Roles resolve from the selected validation configuration.</p></div>
         <span>{antennas.length} enabled antennas available</span>
       </div>
-      {!published && <p className="profile-inline-warning">Publish a network configuration before assigning roles.</p>}
+      {!validationConfiguration && (
+        <p className="profile-inline-warning">
+          Choose a configuration before assigning antenna roles.
+        </p>
+      )}
       <div className="profile-role-grid">
         {roleTypes.map(([role, label]) => (
           <label className="profile-field" key={role}>
@@ -601,7 +653,7 @@ function NetworkFields({ draft, onChange }) {
   const template = draft.request_template;
   return (
     <section className="profile-form-section">
-      <div className="profile-section-heading"><h3>Radio capacity</h3><p>These settings are shared by the baseline and candidate requests.</p></div>
+      <div className="profile-section-heading"><h3>Radio capacity</h3><p>These settings belong to this profile and may differ between scenarios.</p></div>
       <div className="profile-form-grid">
         <NumberField label="Bandwidth" unit="MHz" min={0.01} value={template.bandwidth_mhz} onChange={(value) => onTemplateChange(draft, onChange, "bandwidth_mhz", value)} />
         <NumberField label="MIMO layers" min={1} step={1} value={template.mimo_layers} onChange={(value) => onTemplateChange(draft, onChange, "mimo_layers", value)} />
@@ -654,21 +706,6 @@ function SolverFields({ draft, onChange }) {
         <NumberField label="Cell size" unit="m" min={0.1} max={50} value={solver.cell_size} onChange={(value) => updateSolver("cell_size", value)} />
         <VectorField labels={["x", "y", "z"]} label="Grid center" value={solver.center || [0, 0, 0]} onChange={(value) => updateSolver("center", value)} />
         <VectorField labels={["width", "height"]} label="Grid size" unit="m" value={solver.size || [400, 400]} onChange={(value) => updateSolver("size", value)} />
-      </div>
-    </section>
-  );
-}
-
-
-function CameraFields({ draft, onChange }) {
-  const camera = draft.request_template.camera || {};
-  const updateCamera = (field, value) => onTemplateChange(draft, onChange, "camera", { ...camera, [field]: value });
-  return (
-    <section className="profile-form-section">
-      <div className="profile-section-heading"><h3>Camera</h3><p>Controls the rendered evidence view saved with the result.</p></div>
-      <div className="profile-form-grid">
-        <VectorField labels={["x", "y", "z"]} label="Position" unit="m" value={camera.position || [0, 0, 650]} onChange={(value) => updateCamera("position", value)} />
-        <VectorField labels={["x", "y", "z"]} label="Look at" unit="m" value={camera.look_at || [0, 0, 0]} onChange={(value) => updateCamera("look_at", value)} />
       </div>
     </section>
   );
@@ -766,7 +803,17 @@ function ProfileSummary({ profile, template }) {
 }
 
 
-function ProfileValidation({ checks, editor, enabledCount, published, selected, validation }) {
+function ProfileValidation({
+  checks,
+  configurations,
+  editor,
+  enabledCount,
+  onConfigurationChange,
+  selected,
+  validation,
+  validationConfiguration,
+  validationConfigurationId,
+}) {
   let validationBody;
   if (editor) {
     validationBody = (
@@ -780,30 +827,46 @@ function ProfileValidation({ checks, editor, enabledCount, published, selected, 
         </details>
       </>
     );
-  } else if (!published) {
-    validationBody = <p className="profiles-empty error-text">No published network configuration is available. Profiles can be saved, but none can be enabled.</p>;
+  } else if (!validationConfiguration) {
+    validationBody = <p className="profiles-empty error-text">No readable network configuration is available. Create a configuration before making profiles eligible.</p>;
   } else if (!selected) {
-    validationBody = <p className="profiles-empty">Select a profile to validate it against the published baseline.</p>;
+    validationBody = <p className="profiles-empty">Select a profile to validate it against this configuration.</p>;
   } else if (validation.state === "loading") {
     validationBody = <p className="profiles-empty">Building the exact request...</p>;
   } else if (validation.state === "invalid") {
-    validationBody = <div className="profile-validation-result invalid"><strong>Not ready to enable</strong><p>{validation.message}</p></div>;
+    validationBody = <div className="profile-validation-result invalid"><strong>Not ready for eligibility</strong><p>{validation.message}</p></div>;
   } else if (validation.state === "valid") {
     validationBody = (
       <div className="profile-validation-result valid">
-        <strong>Valid against published v{published.version}</strong>
+        <strong>Valid against {configurationLabel(validationConfiguration)}</strong>
         <p>The server built an exact {formatSimulationType(selected.simulation_type)} request.</p>
         <details><summary>Resolved request</summary><pre>{JSON.stringify(validation.result.request, null, 2)}</pre></details>
       </div>
     );
   } else {
-    validationBody = <p className="profiles-empty">Validation is waiting for a saved profile and published baseline.</p>;
+    validationBody = <p className="profiles-empty">Validation is waiting for a saved profile and configuration.</p>;
   }
 
   return (
-    <aside className="profiles-validation" aria-label="Profile readiness">
-      <div className="profiles-panel-heading"><div><h2>Run readiness</h2><span>{enabledCount} enabled in the run stack</span></div></div>
-      <div className="run-stack-strip"><span>{enabledCount}</span><p><strong>paired profile runs</strong><small>{enabledCount * 2} baseline/candidate jobs before policy skips</small></p></div>
+    <aside className="profiles-validation" aria-label="Profile eligibility">
+      <div className="profiles-panel-heading"><div><h2>Eligibility</h2><span>{enabledCount} available for selection</span></div></div>
+      <div className="run-stack-strip"><span>{enabledCount}</span><p><strong>eligible profiles</strong><small>Each can be selected for either scenario side</small></p></div>
+      <label className="profile-validation-target">
+        <span>Validate against</span>
+        <select
+          disabled={configurations.length === 0}
+          value={validationConfigurationId || ""}
+          onChange={(event) => onConfigurationChange(event.target.value || null)}
+        >
+          {configurations.length === 0 && <option value="">No configurations</option>}
+          {configurations.map((configuration) => (
+            <option key={configuration.id} value={configuration.id}>
+              {configurationOptionLabel(configuration)}
+            </option>
+          ))}
+        </select>
+        <small>Published is the default; readable drafts and superseded versions are also valid targets.</small>
+      </label>
       {validationBody}
     </aside>
   );
@@ -816,7 +879,6 @@ function createProfileDraft(simulationType, activeScene) {
     network_coverage: {
       transmitter_pattern: TRANSMITTER_PATTERN,
       solver,
-      camera: { position: [0, 0, 650], look_at: [0, 0, 0] },
       bandwidth_mhz: 100,
       mimo_layers: 4,
       objectives: [{ metric: "covered_area_percent", operator: ">=", target: 90 }],
@@ -825,7 +887,6 @@ function createProfileDraft(simulationType, activeScene) {
       roles: { transmitter: "" },
       transmitter_pattern: TRANSMITTER_PATTERN,
       solver,
-      camera: structuredClone(DEFAULT_CAMERA),
     },
     rsrp_simulation: {
       transmitter_pattern: TRANSMITTER_PATTERN,
@@ -864,7 +925,7 @@ function createProfileDraft(simulationType, activeScene) {
 }
 
 
-function evaluateProfileDraft(draft, published, antennas) {
+function evaluateProfileDraft(draft, validationConfiguration, antennas) {
   const template = draft.request_template || {};
   const roles = ROLE_TYPES[draft.simulation_type] || [];
   const roleIds = roles.map(([role]) => template.roles?.[role]).filter(Boolean);
@@ -884,7 +945,7 @@ function evaluateProfileDraft(draft, published, antennas) {
   );
   return [
     { ok: Boolean(String(draft.name || "").trim()), label: "Profile identity", detail: "A unique scene-level name is required." },
-    { ok: Boolean(published), label: "Published baseline", detail: published ? `Version ${published.version} will resolve antennas.` : "Publish a network configuration before enabling." },
+    { ok: Boolean(validationConfiguration), label: "Validation configuration", detail: validationConfiguration ? `${configurationLabel(validationConfiguration)} will resolve antennas.` : "Choose a readable configuration before validation." },
     { ok: numericComplete, label: "Explicit settings", detail: numericComplete ? "Required solver and radio values are present." : "One or more numeric settings are incomplete." },
     { ok: assignedRoles, label: "Antenna roles", detail: roles.length === 0 ? "This simulation uses every enabled configuration antenna." : assignedRoles ? "Distinct enabled antennas are assigned." : "Assign a different enabled antenna to every role." },
     { ok: objectivesValid, label: "Decision objectives", detail: draft.simulation_type === "network_coverage" ? (objectivesValid ? "Coverage objectives are ready." : "Add one or two unique valid objectives.") : "Objectives are not required for this simulation type." },
@@ -895,8 +956,7 @@ function evaluateProfileDraft(draft, published, antennas) {
 function requiredNumericValues(type, template) {
   const solver = template.solver || {};
   const values = [solver.max_depth, solver.samples_per_tx, solver.cell_size, ...(solver.center || []), ...(solver.size || [])];
-  if (type === "network_coverage") values.push(template.bandwidth_mhz, template.mimo_layers, ...(template.camera?.position || []), ...(template.camera?.look_at || []));
-  if (type === "coverage_map") values.push(...(template.camera?.position || []), ...(template.camera?.look_at || []));
+  if (type === "network_coverage") values.push(template.bandwidth_mhz, template.mimo_layers);
   if (type === "rsrp_simulation") values.push(template.user_count, template.user_height_m, template.random_seed);
   if (type === "sinr") values.push(template.carrier_frequency_ghz, template.bandwidth_mhz, template.noise_figure_db);
   if (type === "throughput_comparison") values.push(template.carrier_frequency_ghz, template.noise_figure_db, template.base_tilt, template.target_tilt, template.bandwidth_mhz, template.mimo_layers);
@@ -926,6 +986,28 @@ function profileTypeInfo(type) {
 
 function propagationLabel(value) {
   return PROPAGATION_MODELS.find(([model]) => model === value)?.[1] || value;
+}
+
+
+function configurationLabel(configuration) {
+  if (!configuration) return "Unavailable";
+  return `${configurationStatusLabel(configuration.status)} v${configuration.version}`;
+}
+
+
+function configurationOptionLabel(configuration) {
+  const source = configuration.source === "optimization"
+    ? " (suggested)"
+    : "";
+  return `${configurationLabel(configuration)}${source}`;
+}
+
+
+function configurationStatusLabel(status) {
+  if (status === "published") return "Published";
+  if (status === "superseded") return "Superseded";
+  if (status === "draft") return "Draft";
+  return status || "Configuration";
 }
 
 

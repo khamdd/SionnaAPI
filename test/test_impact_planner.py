@@ -75,10 +75,6 @@ def network_template():
     return {
         "transmitter_pattern": "tr38901",
         "solver": solver(),
-        "camera": {
-            "position": [0, 0, 650],
-            "look_at": [0, 0, 0],
-        },
         "bandwidth_mhz": 100,
         "mimo_layers": 4,
         "objectives": [

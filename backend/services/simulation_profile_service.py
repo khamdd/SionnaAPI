@@ -1,6 +1,5 @@
 import logging
 from datetime import datetime, timezone
-from types import SimpleNamespace
 from typing import Any
 
 from pydantic import ValidationError
@@ -74,12 +73,11 @@ REQUIRED_TEMPLATE_FIELDS = {
     "network_coverage": {
         "transmitter_pattern",
         "solver",
-        "camera",
         "bandwidth_mhz",
         "mimo_layers",
         "objectives",
     },
-    "coverage_map": {"transmitter_pattern", "solver", "camera"},
+    "coverage_map": {"transmitter_pattern", "solver"},
     "rsrp_simulation": {
         "transmitter_pattern",
         "solver",
@@ -110,7 +108,6 @@ REQUIRED_TEMPLATE_FIELDS = {
 
 REQUIRED_NESTED_FIELDS = {
     "solver": {"max_depth", "samples_per_tx", "cell_size", "center", "size"},
-    "camera": {"position", "look_at"},
 }
 
 
@@ -130,17 +127,6 @@ def create_simulation_profile(
         with db_session() as session:
             ensure_scene_reference(session, scene_info)
             session.flush()
-
-            if request.enabled:
-                active = _get_active_configuration(session, request.scene_id)
-                validation = validate_profile_definition(
-                    request.simulation_type,
-                    request.request_template,
-                    active,
-                    scene_info,
-                )
-                if validation.get("status") == "failure":
-                    return validation
 
             profile = SimulationProfile(
                 scene_id=request.scene_id,
@@ -247,42 +233,20 @@ def update_simulation_profile(
             if access_error:
                 return access_error
 
-            candidate = SimpleNamespace(
-                simulation_type=(
-                    request.simulation_type
-                    if "simulation_type" in request.model_fields_set
-                    else profile.simulation_type
-                ),
-                request_template_json=(
-                    request.request_template
-                    if "request_template" in request.model_fields_set
-                    else profile.request_template_json
-                ),
-                enabled=(
-                    request.enabled
-                    if "enabled" in request.model_fields_set
-                    else profile.enabled
-                ),
-            )
-
-            if candidate.enabled:
-                scene_info = _find_ready_scene(profile.scene_id)
-                active = _get_active_configuration(session, profile.scene_id)
-                validation = validate_profile_definition(
-                    candidate.simulation_type,
-                    candidate.request_template_json,
-                    active,
-                    scene_info,
+            simulation_fields = {"simulation_type", "request_template"}
+            if profile.enabled and simulation_fields.intersection(
+                request.model_fields_set
+            ):
+                return _failure(
+                    409,
+                    "Disable the profile before changing its simulation settings.",
+                    error_code="enabled_profile_must_be_disabled",
                 )
-                if validation.get("status") == "failure":
-                    return validation
 
             if "name" in request.model_fields_set:
                 profile.name = request.name
             if "simulation_type" in request.model_fields_set:
                 profile.simulation_type = request.simulation_type
-            if "enabled" in request.model_fields_set:
-                profile.enabled = request.enabled
             if "request_template" in request.model_fields_set:
                 profile.request_template_json = request.request_template
             profile.updated_at = datetime.now(timezone.utc)
@@ -304,6 +268,7 @@ def set_simulation_profile_enabled(
     profile_id: str,
     enabled: bool,
     user_id: str,
+    configuration_id: str | None = None,
 ) -> dict:
     unavailable = _database_unavailable()
     if unavailable:
@@ -321,12 +286,36 @@ def set_simulation_profile_enabled(
                 return access_error
 
             if enabled:
+                if not configuration_id:
+                    return _failure(
+                        422,
+                        "Choose a network configuration for profile validation.",
+                        error_code="validation_configuration_required",
+                    )
+                configuration = session.get(
+                    NetworkConfiguration,
+                    configuration_id,
+                )
+                if configuration is None or not _can_read_configuration(
+                    configuration,
+                    user_id,
+                ):
+                    return _failure(
+                        404,
+                        "Validation network configuration was not found.",
+                        error_code="validation_configuration_not_found",
+                    )
+                if configuration.scene_id != profile.scene_id:
+                    return _failure(
+                        400,
+                        "Profile and validation configuration use different scenes.",
+                        error_code="validation_configuration_scene_mismatch",
+                    )
                 scene_info = _find_ready_scene(profile.scene_id)
-                active = _get_active_configuration(session, profile.scene_id)
                 validation = validate_profile_definition(
                     profile.simulation_type,
                     profile.request_template_json,
-                    active,
+                    configuration,
                     scene_info,
                 )
                 if validation.get("status") == "failure":
@@ -335,10 +324,15 @@ def set_simulation_profile_enabled(
             profile.enabled = enabled
             profile.updated_at = datetime.now(timezone.utc)
             session.flush()
-            return {
+            result = {
                 "status": "success",
                 "profile": serialize_profile(profile),
             }
+            if enabled:
+                result["validated_configuration"] = _configuration_identity(
+                    configuration
+                )
+            return result
     except SQLAlchemyError:
         logger.exception("Failed to change simulation profile state.")
         return _failure(500, "Failed to change simulation profile state.")
@@ -422,8 +416,8 @@ def validate_profile_definition(
     if configuration is None:
         return _failure(
             409,
-            "A published network configuration is required before enabling a profile.",
-            error_code="active_configuration_required",
+            "A network configuration is required to validate a profile.",
+            error_code="validation_configuration_required",
         )
     if scene_info is None:
         return _failure(404, "The profile scene was not found or is not ready.")
@@ -641,15 +635,6 @@ def _role_failure(label: str, required_roles: tuple[str, ...]) -> dict:
     )
 
 
-def _get_active_configuration(session, scene_id: str):
-    return session.execute(
-        select(NetworkConfiguration).where(
-            NetworkConfiguration.scene_id == scene_id,
-            NetworkConfiguration.status == "published",
-        )
-    ).scalar_one_or_none()
-
-
 def _find_ready_scene(scene_id: str) -> dict | None:
     scenes = list_scenes().get("scenes", [])
     return next(
@@ -671,6 +656,15 @@ def _can_read_configuration(
     user_id: str,
 ) -> bool:
     return configuration.status != "draft" or configuration.created_by == user_id
+
+
+def _configuration_identity(configuration: NetworkConfiguration) -> dict:
+    return {
+        "id": str(configuration.id),
+        "version": configuration.version,
+        "status": configuration.status,
+        "content_hash": configuration.content_hash,
+    }
 
 
 def _owner_error(profile: SimulationProfile | None, user_id: str) -> dict | None:

@@ -151,10 +151,20 @@ export function deleteSimulationProfile(profileId) {
   });
 }
 
-export function setSimulationProfileEnabled(profileId, enabled) {
+export function setSimulationProfileEnabled(
+  profileId,
+  enabled,
+  configurationId = null,
+) {
   return requestJson(
     `/api/v1/simulation-profiles/${profileId}/${enabled ? "enable" : "disable"}`,
-    { method: "POST" },
+    {
+      method: "POST",
+      ...(enabled ? {
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ configuration_id: configurationId }),
+      } : {}),
+    },
   );
 }
 

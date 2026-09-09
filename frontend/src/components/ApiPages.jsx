@@ -6,7 +6,6 @@ import {
   runThroughputComparison,
 } from "../api";
 import {
-  DEFAULT_CAMERA,
   DEFAULT_RSRP_RANDOM_SEED,
   DEFAULT_RSRP_USER_COUNT,
   DEFAULT_SOLVER,
@@ -52,7 +51,6 @@ export function CoverageApiPage({ activeScene, antennas = EMPTY_ARRAY, onProgres
     },
     selected_antenna_id: "",
     solver: DEFAULT_SOLVER,
-    camera: DEFAULT_CAMERA,
   }));
   const [resultState, setResultState] = useApiResult(
     onProgressChange,
@@ -149,7 +147,6 @@ export function CoverageApiPage({ activeScene, antennas = EMPTY_ARRAY, onProgres
       azimuth: form.azimuth,
       transmitter_position: transmitterPosition,
       tx_power: form.tx_power,
-      camera: form.camera,
       solver: sceneSolver,
       transmitter_pattern: TRANSMITTER_PATTERN,
     };

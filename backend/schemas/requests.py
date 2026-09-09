@@ -35,20 +35,6 @@ class SolverConfig(BaseModel):
         return self
 
 
-class CameraConfig(BaseModel):
-    position: Tuple[float, float, float] = (
-        -1.5,
-        -137.0,
-        115.0,
-    )
-
-    look_at: Tuple[float, float, float] = (
-        0.0,
-        0.0,
-        10.0,
-    )
-
-
 class CoverageRequest(BaseModel):
     tilt: float
 
@@ -70,10 +56,6 @@ class CoverageRequest(BaseModel):
 
     solver: SolverConfig = Field(
         default_factory=SolverConfig
-    )
-
-    camera: CameraConfig = Field(
-        default_factory=CameraConfig
     )
 
 
@@ -117,13 +99,6 @@ class NetworkCoverageRequest(BaseModel):
 
     solver: SolverConfig = Field(
         default_factory=SolverConfig
-    )
-
-    camera: CameraConfig = Field(
-        default_factory=lambda: CameraConfig(
-            position=(0.0, 0.0, 650.0),
-            look_at=(0.0, 0.0, 0.0),
-        )
     )
 
     bandwidth_mhz: float = Field(
