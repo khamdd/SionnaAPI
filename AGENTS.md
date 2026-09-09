@@ -125,15 +125,18 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   representations do not create false differences. The authenticated
   `POST /api/v1/network-configurations/compare` endpoint enforces existing
   configuration visibility and same-scene comparison.
-- Impact policy `impact-policy-v1` is implemented in
+- Impact preview policy `impact-policy-v2` is implemented in
   `backend/services/impact_planner.py`. The authenticated
   `POST /api/v1/configuration-impact/preview` endpoint performs a dry run only:
-  it combines a same-scene baseline/candidate pair with enabled simulation
-  profiles, returns paired validated requests, explicit skip reasons, and an
-  estimated job count, but never queues work. Role profiles run only for affected
-  antennas. Analytical SINR/Throughput profiles are skipped for tilt, azimuth,
-  position, and height-only changes that their current formulas do not use.
-  Automatic optimization remains disabled in policy v1.
+  it accepts one to 20 explicit ordered baseline/candidate profile pairs, loads
+  only those enabled readable profiles, independently resolves each side against
+  its configuration, and returns stable pair IDs, profile snapshots and diffs,
+  side-specific objectives/skips, warnings, affected antennas, and estimated job
+  count without creating rows or jobs. Same-profile pairs remain valid. Profile
+  changes trigger a run even when an analytical model ignores the accompanying
+  antenna-only change, and role applicability uses the union of both sides'
+  antenna roles. Existing durable Impact Study creation remains on an explicit
+  policy-v1 compatibility path until paired persistence is implemented.
 - Durable impact studies are stored through
   `backend/services/impact_study_service.py`. Authenticated APIs create and list
   studies, inspect one study, start it, and cancel it. Starting creates exactly
@@ -334,8 +337,11 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   normalization, hashing, version creation, access control, and publishing.
 - `backend/services/configuration_diff_service.py`: deterministic field-level
   comparison of network configuration versions.
+- `backend/services/profile_diff_service.py`: deterministic recursive comparison
+  of canonical profile-template JSON, including objectives and role assignments.
 - `backend/services/impact_planner.py`: policy-versioned dry-run mapping from
-  configuration changes to planned and skipped simulation profiles.
+  configuration/profile changes and explicit scenario pairs to planned and
+  skipped simulations.
 - `backend/services/impact_study_service.py`: durable impact-study lifecycle,
   linked child-job creation, status reconciliation, comparison aggregation, and
   partial-failure summary.
@@ -349,6 +355,9 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   user-scoped listing and unread state transitions.
 - `backend/services/simulation_profile_service.py`: saved automation-profile CRUD,
   enable-time validation, antenna-role resolution, and request construction.
+- `docs/scenario-comparison-v2-handoff.md`: accepted next-stage plan for replacing
+  the shared-profile Impact Study assumption with explicit scenario profile pairs,
+  followed by the Impact UI and nationwide execution roadmap.
 - `backend/services/scene_service.py`: scene registry, preview lifecycle, activate
   and delete behavior.
 - `backend/services/osm_scene_builder.py`: OSM/Overpass to Sionna scene generation.

@@ -2,9 +2,11 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from backend.api.dependencies import require_current_user
 from backend.main import app
+from backend.schemas.configuration_impact import ConfigurationImpactPreviewRequest
 from backend.services import impact_planner
 
 
@@ -12,6 +14,8 @@ client = TestClient(app)
 USER_ID = "11111111-1111-1111-1111-111111111111"
 BASELINE_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 CANDIDATE_ID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+BASELINE_PROFILE_ID = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+CANDIDATE_PROFILE_ID = "dddddddd-dddd-dddd-dddd-dddddddddddd"
 
 
 def antenna(antenna_id, longitude):
@@ -33,6 +37,7 @@ def configuration(configuration_id, version, status):
         scene_id="scene-1",
         version=version,
         status=status,
+        created_by=USER_ID,
         content_hash=f"hash-{version}",
         antennas_json=[
             antenna("A1", 105.82),
@@ -108,13 +113,23 @@ def sinr_template(model="sionna", roles=None):
     }
 
 
-def profile(profile_id, simulation_type, template):
+def profile(
+    profile_id,
+    simulation_type,
+    template,
+    *,
+    scene_id="scene-1",
+    enabled=True,
+    created_by=USER_ID,
+):
     return SimpleNamespace(
         id=profile_id,
         name=profile_id,
         simulation_type=simulation_type,
         request_template_json=template,
-        enabled=True,
+        enabled=enabled,
+        scene_id=scene_id,
+        created_by=created_by,
     )
 
 
@@ -152,10 +167,18 @@ def topology_difference(antenna_id="A4"):
     }
 
 
-def plan(difference, profiles):
+def profile_pair(baseline_profile, candidate_profile=None, ordinal=0):
+    return {
+        "ordinal": ordinal,
+        "baseline_profile": baseline_profile,
+        "candidate_profile": candidate_profile or baseline_profile,
+    }
+
+
+def plan(difference, pairs):
     return impact_planner.plan_configuration_impact(
         difference,
-        profiles,
+        pairs,
         configuration(BASELINE_ID, 1, "published"),
         configuration(CANDIDATE_ID, 2, "draft"),
         scene_info(),
@@ -190,9 +213,12 @@ def test_network_level_profiles_run_for_every_supported_change(
     simulation_type,
 ):
     template = network_template() if simulation_type == "network_coverage" else rsrp_template()
-    decision = impact_planner.evaluate_profile_impact(
-        profile("profile-1", simulation_type, template),
+    selected_profile = profile("profile-1", simulation_type, template)
+    decision = impact_planner.evaluate_profile_pair_impact(
+        selected_profile,
+        selected_profile,
         difference,
+        {"changed": False, "changed_fields": []},
     )
 
     assert decision["action"] == "plan"
@@ -203,20 +229,28 @@ def test_tilt_only_change_skips_analytical_role_profile():
     result = plan(
         field_difference("tilt.current"),
         [
-            profile("coverage", "network_coverage", network_template()),
-            profile("rsrp", "rsrp_simulation", rsrp_template()),
-            profile("sinr-sionna", "sinr", sinr_template("sionna", roles)),
-            profile("sinr-uma", "sinr", sinr_template("uma", roles)),
+            profile_pair(profile("coverage", "network_coverage", network_template())),
+            profile_pair(profile("rsrp", "rsrp_simulation", rsrp_template()), ordinal=1),
+            profile_pair(
+                profile("sinr-sionna", "sinr", sinr_template("sionna", roles)),
+                ordinal=2,
+            ),
+            profile_pair(
+                profile("sinr-uma", "sinr", sinr_template("uma", roles)),
+                ordinal=3,
+            ),
         ],
     )
 
-    assert [item["profile_id"] for item in result["planned_simulations"]] == [
+    assert [
+        item["baseline_profile"]["id"] for item in result["planned_simulations"]
+    ] == [
         "coverage",
         "rsrp",
         "sinr-sionna",
     ]
     assert result["estimated_job_count"] == 6
-    assert result["skipped_simulations"][0]["profile_id"] == "sinr-uma"
+    assert result["skipped_simulations"][0]["baseline_profile"]["id"] == "sinr-uma"
     assert result["skipped_simulations"][0]["reason_code"] == (
         "propagation_model_ignores_change"
     )
@@ -226,10 +260,10 @@ def test_power_change_runs_an_analytical_role_profile():
     roles = {"transmitter": "A1", "receiver": "A2", "interferer": "A3"}
     result = plan(
         field_difference("tx_power.current"),
-        [profile("sinr-friis", "sinr", sinr_template("friis", roles))],
+        [profile_pair(profile("sinr-friis", "sinr", sinr_template("friis", roles)))],
     )
 
-    assert result["planned_simulations"][0]["profile_id"] == "sinr-friis"
+    assert result["planned_simulations"][0]["baseline_profile"]["id"] == "sinr-friis"
     assert result["estimated_job_count"] == 2
 
 
@@ -237,7 +271,7 @@ def test_unaffected_role_profile_is_skipped():
     roles = {"transmitter": "A1", "receiver": "A2", "interferer": "A3"}
     result = plan(
         field_difference("tilt.current", antenna_id="A4"),
-        [profile("sinr", "sinr", sinr_template("sionna", roles))],
+        [profile_pair(profile("sinr", "sinr", sinr_template("sionna", roles)))],
     )
 
     assert result["planned_simulations"] == []
@@ -249,7 +283,7 @@ def test_unaffected_role_profile_is_skipped():
 def test_incomplete_role_profile_is_skipped_without_failing_plan():
     result = plan(
         field_difference("tilt.current"),
-        [profile("sinr", "sinr", sinr_template())],
+        [profile_pair(profile("sinr", "sinr", sinr_template()))],
     )
 
     assert result["status"] == "success"
@@ -270,7 +304,7 @@ def test_no_change_produces_no_jobs_and_explicit_skips():
             "changes": [],
             "summary": {},
         },
-        [profile("coverage", "network_coverage", network_template())],
+        [profile_pair(profile("coverage", "network_coverage", network_template()))],
     )
 
     assert result["estimated_job_count"] == 0
@@ -280,13 +314,234 @@ def test_no_change_produces_no_jobs_and_explicit_skips():
     )
 
 
+def test_same_profile_on_both_sides_builds_a_valid_pair():
+    selected_profile = profile("coverage", "network_coverage", network_template())
+
+    result = plan(
+        field_difference("tilt.current"),
+        [profile_pair(selected_profile)],
+    )
+
+    planned = result["planned_simulations"][0]
+    assert planned["baseline_profile"]["id"] == "coverage"
+    assert planned["candidate_profile"]["id"] == "coverage"
+    assert planned["profile_difference"]["changed"] is False
+    assert planned["pair_id"].startswith("pair-")
+    assert result["policy_version"] == "impact-policy-v2"
+
+
+def test_different_same_type_profiles_build_independent_requests_and_objectives():
+    baseline_template = network_template()
+    candidate_template = network_template()
+    candidate_template["bandwidth_mhz"] = 80
+    candidate_template["objectives"][0]["target"] = 95
+
+    result = plan(
+        field_difference("tilt.current"),
+        [
+            profile_pair(
+                profile("baseline-profile", "network_coverage", baseline_template),
+                profile("candidate-profile", "network_coverage", candidate_template),
+            )
+        ],
+    )
+
+    planned = result["planned_simulations"][0]
+    assert planned["baseline_request"]["bandwidth_mhz"] == 100
+    assert planned["candidate_request"]["bandwidth_mhz"] == 80
+    assert planned["baseline_objectives"][0]["target"] == 90
+    assert planned["candidate_objectives"][0]["target"] == 95
+    assert planned["profile_difference"]["changed_fields"] == [
+        "bandwidth_mhz",
+        "objectives[0].target",
+    ]
+
+
+def test_profile_change_triggers_analytical_pair_when_configuration_change_is_ignored():
+    roles = {"transmitter": "A1", "receiver": "A2", "interferer": "A3"}
+    baseline_template = sinr_template("uma", roles)
+    candidate_template = sinr_template("uma", roles)
+    candidate_template["bandwidth_mhz"] = 80
+
+    result = plan(
+        field_difference("tilt.current"),
+        [
+            profile_pair(
+                profile("baseline-profile", "sinr", baseline_template),
+                profile("candidate-profile", "sinr", candidate_template),
+            )
+        ],
+    )
+
+    triggering = result["planned_simulations"][0]["triggering_changes"]
+    assert triggering["configuration_changes"] == []
+    assert triggering["profile_changes"] == ["bandwidth_mhz"]
+
+
+def test_invalid_candidate_request_is_a_side_specific_skip():
+    baseline_roles = {"transmitter": "A1", "receiver": "A2", "interferer": "A3"}
+    candidate_roles = {"transmitter": "A1", "receiver": "A2", "interferer": "A9"}
+
+    result = plan(
+        field_difference("tilt.current"),
+        [
+            profile_pair(
+                profile("baseline-profile", "sinr", sinr_template("sionna", baseline_roles)),
+                profile("candidate-profile", "sinr", sinr_template("sionna", candidate_roles)),
+            )
+        ],
+    )
+
+    skipped = result["skipped_simulations"][0]
+    assert set(skipped["side_reasons"]) == {"candidate"}
+    assert skipped["baseline_objectives"] == []
+    assert skipped["candidate_objectives"] == []
+    assert skipped["comparability_warnings"] == []
+    assert skipped["side_reasons"]["candidate"]["reason_code"] == (
+        "invalid_role_profile"
+    )
+
+
+def test_explicit_pair_loader_rejects_type_scene_visibility_and_enabled_errors():
+    class Session:
+        def __init__(self, profiles):
+            self.profiles = profiles
+
+        def get(self, model, profile_id):
+            return self.profiles.get(profile_id)
+
+    valid = profile(BASELINE_PROFILE_ID, "sinr", sinr_template())
+    cases = [
+        (
+            profile(CANDIDATE_PROFILE_ID, "network_coverage", network_template()),
+            "profile_simulation_type_mismatch",
+        ),
+        (
+            profile(
+                CANDIDATE_PROFILE_ID,
+                "sinr",
+                sinr_template(),
+                scene_id="scene-2",
+            ),
+            "profile_scene_mismatch",
+        ),
+        (
+            profile(
+                CANDIDATE_PROFILE_ID,
+                "sinr",
+                sinr_template(),
+                enabled=False,
+                created_by="22222222-2222-2222-2222-222222222222",
+            ),
+            "profile_not_found",
+        ),
+        (
+            profile(
+                CANDIDATE_PROFILE_ID,
+                "sinr",
+                sinr_template(),
+                enabled=False,
+            ),
+            "profile_not_enabled",
+        ),
+    ]
+
+    for candidate, error_code in cases:
+        result = impact_planner._load_explicit_profile_pairs(
+            Session(
+                {
+                    BASELINE_PROFILE_ID: valid,
+                    CANDIDATE_PROFILE_ID: candidate,
+                }
+            ),
+            [
+                {
+                    "baseline_profile_id": BASELINE_PROFILE_ID,
+                    "candidate_profile_id": CANDIDATE_PROFILE_ID,
+                }
+            ],
+            USER_ID,
+            "scene-1",
+        )
+        assert result["status"] == "failure"
+        assert result["error_code"] == error_code
+
+
+def test_explicit_pair_loader_preserves_order_and_loads_only_selected_profiles():
+    class Session:
+        def __init__(self, profiles):
+            self.profiles = profiles
+            self.loaded_ids = []
+
+        def get(self, model, profile_id):
+            self.loaded_ids.append(profile_id)
+            return self.profiles.get(profile_id)
+
+    first = profile(BASELINE_PROFILE_ID, "network_coverage", network_template())
+    second = profile(CANDIDATE_PROFILE_ID, "network_coverage", network_template())
+    session = Session(
+        {
+            BASELINE_PROFILE_ID: first,
+            CANDIDATE_PROFILE_ID: second,
+            "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee": profile(
+                "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+                "network_coverage",
+                network_template(),
+            ),
+        }
+    )
+
+    result = impact_planner._load_explicit_profile_pairs(
+        session,
+        [
+            {
+                "baseline_profile_id": CANDIDATE_PROFILE_ID,
+                "candidate_profile_id": BASELINE_PROFILE_ID,
+            },
+            {
+                "baseline_profile_id": BASELINE_PROFILE_ID,
+                "candidate_profile_id": BASELINE_PROFILE_ID,
+            },
+        ],
+        USER_ID,
+        "scene-1",
+    )
+
+    assert [pair["ordinal"] for pair in result] == [0, 1]
+    assert result[0]["baseline_profile"] is second
+    assert result[0]["candidate_profile"] is first
+    assert session.loaded_ids == [CANDIDATE_PROFILE_ID, BASELINE_PROFILE_ID]
+
+
+def test_preview_schema_rejects_duplicate_pairs():
+    pair = {
+        "baseline_profile_id": BASELINE_PROFILE_ID,
+        "candidate_profile_id": CANDIDATE_PROFILE_ID,
+    }
+
+    with pytest.raises(ValidationError, match="profile pairs must be unique"):
+        ConfigurationImpactPreviewRequest(
+            baseline_configuration_id=BASELINE_ID,
+            candidate_configuration_id=CANDIDATE_ID,
+            profile_pairs=[pair, pair],
+        )
+
+
 def test_preview_api_passes_authenticated_user(monkeypatch, authenticated_user):
     captured = {}
 
-    def fake_preview(baseline_configuration_id, candidate_configuration_id, user_id):
+    def fake_preview(
+        baseline_configuration_id,
+        candidate_configuration_id,
+        profile_pairs,
+        user_id,
+    ):
         captured.update(
             baseline=baseline_configuration_id,
             candidate=candidate_configuration_id,
+            profile_pairs=[
+                pair.model_dump(mode="json") for pair in profile_pairs
+            ],
             user_id=user_id,
         )
         return {
@@ -304,14 +559,26 @@ def test_preview_api_passes_authenticated_user(monkeypatch, authenticated_user):
         json={
             "baseline_configuration_id": BASELINE_ID,
             "candidate_configuration_id": CANDIDATE_ID,
+            "profile_pairs": [
+                {
+                    "baseline_profile_id": BASELINE_PROFILE_ID,
+                    "candidate_profile_id": CANDIDATE_PROFILE_ID,
+                }
+            ],
         },
     )
 
     assert response.status_code == 200
-    assert response.json()["policy_version"] == "impact-policy-v1"
+    assert response.json()["policy_version"] == "impact-policy-v2"
     assert captured == {
         "baseline": BASELINE_ID,
         "candidate": CANDIDATE_ID,
+        "profile_pairs": [
+            {
+                "baseline_profile_id": BASELINE_PROFILE_ID,
+                "candidate_profile_id": CANDIDATE_PROFILE_ID,
+            }
+        ],
         "user_id": USER_ID,
     }
 
@@ -322,6 +589,12 @@ def test_preview_api_requires_authentication():
         json={
             "baseline_configuration_id": BASELINE_ID,
             "candidate_configuration_id": CANDIDATE_ID,
+            "profile_pairs": [
+                {
+                    "baseline_profile_id": BASELINE_PROFILE_ID,
+                    "candidate_profile_id": CANDIDATE_PROFILE_ID,
+                }
+            ],
         },
     )
 
@@ -334,6 +607,12 @@ def test_impact_preview_requires_database(monkeypatch):
     result = impact_planner.preview_configuration_impact(
         BASELINE_ID,
         CANDIDATE_ID,
+        [
+            {
+                "baseline_profile_id": BASELINE_PROFILE_ID,
+                "candidate_profile_id": CANDIDATE_PROFILE_ID,
+            }
+        ],
         USER_ID,
     )
 

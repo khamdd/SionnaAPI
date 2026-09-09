@@ -1,4 +1,6 @@
+import hashlib
 import logging
+from copy import deepcopy
 from typing import Any, Iterable
 
 from sqlalchemy import select
@@ -6,16 +8,15 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from backend.database import db_session, is_database_configured
 from backend.models import NetworkConfiguration, SimulationProfile
-from backend.services.configuration_diff_service import (
-    compare_configuration_snapshots,
-)
+from backend.services.configuration_diff_service import compare_configuration_snapshots
+from backend.services.profile_diff_service import compare_profile_templates
 from backend.services.scene_service import list_scenes
 from backend.services.simulation_profile_service import validate_profile_definition
 
 
 logger = logging.getLogger(__name__)
 
-IMPACT_POLICY_VERSION = "impact-policy-v1"
+IMPACT_POLICY_VERSION = "impact-policy-v2"
 NETWORK_LEVEL_TYPES = {"network_coverage", "rsrp_simulation"}
 ROLE_BASED_TYPES = {"coverage_map", "sinr", "throughput_comparison"}
 ANALYTICAL_MODELS = {"uma", "ericsson", "friis"}
@@ -39,24 +40,55 @@ FIELD_CHANGE_CATEGORIES = {
 def preview_configuration_impact(
     baseline_configuration_id: str,
     candidate_configuration_id: str,
+    profile_pairs: Iterable[Any],
     user_id: str,
 ) -> dict:
+    """Build a side-effect-free v2 preview from explicitly selected profile pairs."""
+    return _preview_configuration_impact(
+        baseline_configuration_id,
+        candidate_configuration_id,
+        profile_pairs=profile_pairs,
+        user_id=user_id,
+        allow_implicit_profiles=False,
+    )
+
+
+def preview_configuration_impact_legacy(
+    baseline_configuration_id: str,
+    candidate_configuration_id: str,
+    user_id: str,
+) -> dict:
+    """Keep v1 study creation operational until paired persistence lands in Slice 3."""
+    result = _preview_configuration_impact(
+        baseline_configuration_id,
+        candidate_configuration_id,
+        profile_pairs=None,
+        user_id=user_id,
+        allow_implicit_profiles=True,
+    )
+    if result.get("status") == "success":
+        result["policy_version"] = "impact-policy-v1"
+        result["optimization"] = {
+            "planned": False,
+            "reason": "Impact policy v1 does not automatically run optimization.",
+        }
+    return result
+
+
+def _preview_configuration_impact(
+    baseline_configuration_id: str,
+    candidate_configuration_id: str,
+    profile_pairs: Iterable[Any] | None,
+    user_id: str,
+    allow_implicit_profiles: bool,
+) -> dict:
     if not is_database_configured():
-        return _failure(
-            503,
-            "Impact planning requires a configured database.",
-        )
+        return _failure(503, "Impact planning requires a configured database.")
 
     try:
         with db_session() as session:
-            baseline = session.get(
-                NetworkConfiguration,
-                baseline_configuration_id,
-            )
-            candidate = session.get(
-                NetworkConfiguration,
-                candidate_configuration_id,
-            )
+            baseline = session.get(NetworkConfiguration, baseline_configuration_id)
+            candidate = session.get(NetworkConfiguration, candidate_configuration_id)
             if baseline is None or not _can_read_configuration(baseline, user_id):
                 return _failure(404, "Baseline network configuration was not found.")
             if candidate is None or not _can_read_configuration(candidate, user_id):
@@ -64,18 +96,6 @@ def preview_configuration_impact(
             if baseline.scene_id != candidate.scene_id:
                 return _failure(400, "Configurations belong to different scenes.")
 
-            profiles = session.scalars(
-                select(SimulationProfile)
-                .where(
-                    SimulationProfile.scene_id == baseline.scene_id,
-                    SimulationProfile.enabled.is_(True),
-                )
-                .order_by(
-                    SimulationProfile.simulation_type,
-                    SimulationProfile.name,
-                    SimulationProfile.id,
-                )
-            ).all()
             scene_info = _find_ready_scene(baseline.scene_id)
             if scene_info is None:
                 return _failure(404, "The configuration scene was not found or ready.")
@@ -84,12 +104,32 @@ def preview_configuration_impact(
                 baseline.antennas_json,
                 candidate.antennas_json,
             )
+            if not difference.get("changed"):
+                return _failure(
+                    400,
+                    "Configurations do not contain a meaningful difference.",
+                    error_code="no_meaningful_configuration_change",
+                )
+
+            if allow_implicit_profiles:
+                resolved_pairs = _load_legacy_profile_pairs(session, baseline.scene_id)
+            else:
+                resolved_pairs = _load_explicit_profile_pairs(
+                    session,
+                    profile_pairs,
+                    user_id,
+                    baseline.scene_id,
+                )
+                if isinstance(resolved_pairs, dict):
+                    return resolved_pairs
+
             return plan_configuration_impact(
                 difference,
-                profiles,
+                resolved_pairs,
                 baseline,
                 candidate,
                 scene_info,
+                legacy_aliases=allow_implicit_profiles,
             )
     except (SQLAlchemyError, ValueError):
         logger.exception("Failed to preview configuration impact.")
@@ -98,34 +138,39 @@ def preview_configuration_impact(
 
 def plan_configuration_impact(
     difference: dict,
-    profiles: Iterable[SimulationProfile],
+    profile_pairs: Iterable[dict],
     baseline_configuration: NetworkConfiguration,
     candidate_configuration: NetworkConfiguration,
     scene_info: dict,
+    *,
+    legacy_aliases: bool = False,
 ) -> dict:
     planned_simulations = []
     skipped_simulations = []
 
-    for profile in profiles:
-        if not difference.get("changed"):
-            applicability = evaluate_profile_impact(profile, difference)
-            skipped_simulations.append(_skipped_profile(profile, applicability))
-            continue
-
+    for ordinal, raw_pair in enumerate(profile_pairs):
+        pair = _normalize_planning_pair(raw_pair, ordinal)
+        baseline_profile = pair["baseline_profile"]
+        candidate_profile = pair["candidate_profile"]
+        profile_difference = compare_profile_templates(
+            _profile_template(baseline_profile),
+            _profile_template(candidate_profile),
+        )
         baseline_validation = validate_profile_definition(
-            profile.simulation_type,
-            profile.request_template_json,
+            baseline_profile.simulation_type,
+            baseline_profile.request_template_json,
             baseline_configuration,
             scene_info,
         )
         candidate_validation = validate_profile_definition(
-            profile.simulation_type,
-            profile.request_template_json,
+            candidate_profile.simulation_type,
+            candidate_profile.request_template_json,
             candidate_configuration,
             scene_info,
         )
         validation_skip = _validation_skip(
-            profile,
+            pair,
+            profile_difference,
             baseline_validation,
             candidate_validation,
         )
@@ -133,25 +178,53 @@ def plan_configuration_impact(
             skipped_simulations.append(validation_skip)
             continue
 
-        applicability = evaluate_profile_impact(profile, difference)
+        applicability = evaluate_profile_pair_impact(
+            baseline_profile,
+            candidate_profile,
+            difference,
+            profile_difference,
+        )
         if applicability["action"] == "skip":
-            skipped_simulations.append(_skipped_profile(profile, applicability))
+            skipped_simulations.append(
+                _skipped_pair(pair, profile_difference, applicability)
+            )
             continue
 
-        planned_simulations.append(
-            {
-                "profile_id": str(profile.id),
-                "profile_name": profile.name,
-                "simulation_type": profile.simulation_type,
-                "propagation_model": _propagation_model(profile),
-                "triggering_changes": applicability["triggering_changes"],
-                "affected_antennas": applicability["affected_antennas"],
-                "baseline_request": baseline_validation["request"],
-                "candidate_request": candidate_validation["request"],
-                "objectives": candidate_validation.get("objectives", []),
-                "job_count": 2,
-            }
-        )
+        planned = {
+            "pair_id": pair["pair_id"],
+            "ordinal": pair["ordinal"],
+            "simulation_type": baseline_profile.simulation_type,
+            "baseline_profile": _profile_snapshot(
+                baseline_profile,
+                baseline_validation.get("objectives", []),
+            ),
+            "candidate_profile": _profile_snapshot(
+                candidate_profile,
+                candidate_validation.get("objectives", []),
+            ),
+            "profile_difference": profile_difference,
+            "triggering_changes": applicability["triggering_changes"],
+            "affected_antennas": applicability["affected_antennas"],
+            "baseline_request": baseline_validation["request"],
+            "candidate_request": candidate_validation["request"],
+            "baseline_objectives": baseline_validation.get("objectives", []),
+            "candidate_objectives": candidate_validation.get("objectives", []),
+            "comparability_warnings": _comparability_warnings(
+                baseline_profile,
+                profile_difference,
+            ),
+            "job_count": 2,
+        }
+        if legacy_aliases:
+            planned.update(
+                {
+                    "profile_id": str(baseline_profile.id),
+                    "profile_name": baseline_profile.name,
+                    "propagation_model": _propagation_model(baseline_profile),
+                    "objectives": candidate_validation.get("objectives", []),
+                }
+            )
+        planned_simulations.append(planned)
 
     estimated_job_count = sum(
         simulation["job_count"] for simulation in planned_simulations
@@ -168,35 +241,46 @@ def plan_configuration_impact(
         "estimated_job_count": estimated_job_count,
         "optimization": {
             "planned": False,
-            "reason": "Impact policy v1 does not automatically run optimization.",
+            "reason": "Impact policy v2 does not automatically run optimization.",
         },
     }
 
 
-def evaluate_profile_impact(profile: SimulationProfile, difference: dict) -> dict:
-    if not difference.get("changed"):
+def evaluate_profile_pair_impact(
+    baseline_profile: SimulationProfile,
+    candidate_profile: SimulationProfile,
+    difference: dict,
+    profile_difference: dict,
+) -> dict:
+    configuration_categories = classify_difference(difference)
+    profile_fields = profile_difference.get("changed_fields", [])
+    profiles_changed = bool(profile_difference.get("changed"))
+
+    if not difference.get("changed") and not profiles_changed:
         return _skip(
             "no_meaningful_change",
-            "No meaningful configuration change was detected.",
+            "No meaningful configuration or profile change was detected.",
         )
-
-    categories = classify_difference(difference)
-    affected_antennas = sorted(set(difference.get("changed_antennas", [])))
-    if not categories:
+    if not configuration_categories and not profiles_changed:
         return _skip(
             "unsupported_change",
             "The detected changes are not covered by this policy version.",
         )
 
-    if profile.simulation_type in ROLE_BASED_TYPES:
-        role_antennas = _profile_role_antennas(profile)
-        affected_roles = sorted(set(affected_antennas).intersection(role_antennas))
+    affected_antennas = set(difference.get("changed_antennas", []))
+    if baseline_profile.simulation_type in ROLE_BASED_TYPES:
+        role_antennas = _profile_role_antennas(baseline_profile).union(
+            _profile_role_antennas(candidate_profile)
+        )
+        affected_roles = affected_antennas.intersection(role_antennas)
+        if profiles_changed:
+            affected_roles.update(role_antennas)
         if not affected_roles:
             return _skip(
                 "unaffected_profile_roles",
-                "None of this profile's antenna roles use an affected antenna.",
+                "None of this pair's antenna roles use an affected antenna.",
             )
-    elif profile.simulation_type in NETWORK_LEVEL_TYPES:
+    elif baseline_profile.simulation_type in NETWORK_LEVEL_TYPES:
         affected_roles = affected_antennas
     else:
         return _skip(
@@ -204,24 +288,33 @@ def evaluate_profile_impact(profile: SimulationProfile, difference: dict) -> dic
             "This simulation type is not covered by the current impact policy.",
         )
 
-    propagation_model = _propagation_model(profile)
+    triggering_configuration_categories = set(configuration_categories)
+    models = {
+        _propagation_model(baseline_profile),
+        _propagation_model(candidate_profile),
+    }
     if (
-        profile.simulation_type in {"sinr", "throughput_comparison"}
-        and propagation_model in ANALYTICAL_MODELS
+        baseline_profile.simulation_type in {"sinr", "throughput_comparison"}
+        and models.issubset(ANALYTICAL_MODELS)
     ):
-        relevant_categories = categories.difference(ANALYTICAL_IGNORED_CHANGES)
-        if not relevant_categories:
-            ignored = ", ".join(sorted(categories))
+        triggering_configuration_categories.difference_update(
+            ANALYTICAL_IGNORED_CHANGES
+        )
+        if not triggering_configuration_categories and not profiles_changed:
+            ignored = ", ".join(sorted(configuration_categories))
             return _skip(
                 "propagation_model_ignores_change",
-                f"{propagation_model} does not use the affected fields: {ignored}.",
+                "The selected analytical propagation model(s) do not use the "
+                f"affected fields: {ignored}.",
             )
-        categories = relevant_categories
 
     return {
         "action": "plan",
-        "triggering_changes": sorted(categories),
-        "affected_antennas": affected_roles,
+        "triggering_changes": {
+            "configuration_changes": sorted(triggering_configuration_categories),
+            "profile_changes": list(profile_fields),
+        },
+        "affected_antennas": sorted(affected_roles),
     }
 
 
@@ -238,39 +331,220 @@ def classify_difference(difference: dict) -> set[str]:
     return categories
 
 
+def _load_explicit_profile_pairs(
+    session,
+    requested_pairs: Iterable[Any] | None,
+    user_id: str,
+    scene_id: str,
+) -> list[dict] | dict:
+    requested_pairs = list(requested_pairs or [])
+    if not 1 <= len(requested_pairs) <= 20:
+        return _failure(
+            400,
+            "Select between one and 20 profile pairs.",
+            error_code="invalid_profile_pair_count",
+        )
+
+    resolved_profiles: dict[str, SimulationProfile] = {}
+    resolved_pairs = []
+    seen_pairs = set()
+    for ordinal, requested_pair in enumerate(requested_pairs):
+        baseline_id = _requested_profile_id(requested_pair, "baseline_profile_id")
+        candidate_id = _requested_profile_id(requested_pair, "candidate_profile_id")
+        identity = (baseline_id, candidate_id)
+        if identity in seen_pairs:
+            return _failure(
+                400,
+                "Profile pairs must be unique.",
+                error_code="duplicate_profile_pair",
+                pair_ordinal=ordinal,
+            )
+        seen_pairs.add(identity)
+
+        side_profiles = {}
+        for side, profile_id in (
+            ("baseline", baseline_id),
+            ("candidate", candidate_id),
+        ):
+            profile = resolved_profiles.get(profile_id)
+            if profile is None:
+                profile = session.get(SimulationProfile, profile_id)
+                if profile is not None:
+                    resolved_profiles[profile_id] = profile
+            if profile is None or not _can_read_profile(profile, user_id):
+                return _failure(
+                    404,
+                    f"The selected {side} profile was not found.",
+                    error_code="profile_not_found",
+                    pair_ordinal=ordinal,
+                    side=side,
+                    profile_id=profile_id,
+                )
+            if profile.scene_id != scene_id:
+                return _failure(
+                    400,
+                    f"The selected {side} profile belongs to a different scene.",
+                    error_code="profile_scene_mismatch",
+                    pair_ordinal=ordinal,
+                    side=side,
+                    profile_id=profile_id,
+                )
+            if not profile.enabled:
+                return _failure(
+                    409,
+                    f"The selected {side} profile is not enabled.",
+                    error_code="profile_not_enabled",
+                    pair_ordinal=ordinal,
+                    side=side,
+                    profile_id=profile_id,
+                )
+            side_profiles[side] = profile
+
+        if side_profiles["baseline"].simulation_type != side_profiles[
+            "candidate"
+        ].simulation_type:
+            return _failure(
+                400,
+                "A profile pair must use the same simulation type on both sides.",
+                error_code="profile_simulation_type_mismatch",
+                pair_ordinal=ordinal,
+                baseline_simulation_type=side_profiles["baseline"].simulation_type,
+                candidate_simulation_type=side_profiles["candidate"].simulation_type,
+            )
+
+        resolved_pairs.append(
+            {
+                "pair_id": _pair_id(ordinal, baseline_id, candidate_id),
+                "ordinal": ordinal,
+                "baseline_profile": side_profiles["baseline"],
+                "candidate_profile": side_profiles["candidate"],
+            }
+        )
+    return resolved_pairs
+
+
+def _load_legacy_profile_pairs(session, scene_id: str) -> list[dict]:
+    profiles = session.scalars(
+        select(SimulationProfile)
+        .where(
+            SimulationProfile.scene_id == scene_id,
+            SimulationProfile.enabled.is_(True),
+        )
+        .order_by(
+            SimulationProfile.simulation_type,
+            SimulationProfile.name,
+            SimulationProfile.id,
+        )
+    ).all()
+    return [
+        {
+            "pair_id": _pair_id(ordinal, str(profile.id), str(profile.id)),
+            "ordinal": ordinal,
+            "baseline_profile": profile,
+            "candidate_profile": profile,
+        }
+        for ordinal, profile in enumerate(profiles)
+    ]
+
+
+def _normalize_planning_pair(raw_pair: dict, ordinal: int) -> dict:
+    baseline_profile = raw_pair["baseline_profile"]
+    candidate_profile = raw_pair["candidate_profile"]
+    if baseline_profile.simulation_type != candidate_profile.simulation_type:
+        raise ValueError("A profile pair must use the same simulation type.")
+    return {
+        "pair_id": raw_pair.get("pair_id")
+        or _pair_id(ordinal, str(baseline_profile.id), str(candidate_profile.id)),
+        "ordinal": raw_pair.get("ordinal", ordinal),
+        "baseline_profile": baseline_profile,
+        "candidate_profile": candidate_profile,
+    }
+
+
 def _validation_skip(
-    profile: SimulationProfile,
+    pair: dict,
+    profile_difference: dict,
     baseline_validation: dict,
     candidate_validation: dict,
 ) -> dict | None:
-    failures = []
+    side_reasons = {}
     for label, result in (
         ("baseline", baseline_validation),
         ("candidate", candidate_validation),
     ):
         if result.get("status") == "failure":
-            reason = result.get("skip_reason") or result.get("error")
-            failures.append(f"{label}: {reason}")
+            side_reasons[label] = {
+                "reason_code": result.get("error_code", "invalid_profile"),
+                "reason": result.get("skip_reason") or result.get("error"),
+            }
 
-    if not failures:
+    if not side_reasons:
         return None
-    return {
-        "profile_id": str(profile.id),
-        "profile_name": profile.name,
-        "simulation_type": profile.simulation_type,
-        "propagation_model": _propagation_model(profile),
+    return _pair_identity(pair, profile_difference) | {
         "reason_code": "invalid_or_incomplete_profile",
-        "reason": "; ".join(failures),
+        "reason": "; ".join(
+            f"{side}: {details['reason']}"
+            for side, details in side_reasons.items()
+        ),
+        "side_reasons": side_reasons,
     }
 
 
+def _skipped_pair(pair: dict, profile_difference: dict, reason: dict) -> dict:
+    return _pair_identity(pair, profile_difference) | {
+        "reason_code": reason["reason_code"],
+        "reason": reason["reason"],
+        "side_reasons": {},
+    }
+
+
+def _pair_identity(pair: dict, profile_difference: dict) -> dict:
+    baseline_objectives = _template_objectives(pair["baseline_profile"])
+    candidate_objectives = _template_objectives(pair["candidate_profile"])
+    return {
+        "pair_id": pair["pair_id"],
+        "ordinal": pair["ordinal"],
+        "simulation_type": pair["baseline_profile"].simulation_type,
+        "baseline_profile": _profile_snapshot(
+            pair["baseline_profile"],
+            baseline_objectives,
+        ),
+        "candidate_profile": _profile_snapshot(
+            pair["candidate_profile"],
+            candidate_objectives,
+        ),
+        "baseline_objectives": baseline_objectives,
+        "candidate_objectives": candidate_objectives,
+        "profile_difference": profile_difference,
+        "comparability_warnings": _comparability_warnings(
+            pair["baseline_profile"],
+            profile_difference,
+        ),
+    }
+
+
+def _profile_snapshot(profile: SimulationProfile, objectives: list[dict]) -> dict:
+    return {
+        "id": str(profile.id),
+        "name": profile.name,
+        "simulation_type": profile.simulation_type,
+        "template": deepcopy(_profile_template(profile)),
+        "objectives": deepcopy(objectives),
+    }
+
+
+def _template_objectives(profile: SimulationProfile) -> list[dict]:
+    objectives = _profile_template(profile).get("objectives")
+    return deepcopy(objectives) if isinstance(objectives, list) else []
+
+
+def _profile_template(profile: SimulationProfile) -> dict:
+    template = profile.request_template_json
+    return template if isinstance(template, dict) else {}
+
+
 def _profile_role_antennas(profile: SimulationProfile) -> set[str]:
-    template = (
-        profile.request_template_json
-        if isinstance(profile.request_template_json, dict)
-        else {}
-    )
-    roles = template.get("roles")
+    roles = _profile_template(profile).get("roles")
     if not isinstance(roles, dict):
         return set()
     return {
@@ -282,34 +556,81 @@ def _profile_role_antennas(profile: SimulationProfile) -> set[str]:
 
 def _propagation_model(profile: SimulationProfile) -> str:
     if profile.simulation_type in {"sinr", "throughput_comparison"}:
-        template = (
-            profile.request_template_json
-            if isinstance(profile.request_template_json, dict)
-            else {}
-        )
-        return str(
-            template.get("propagation_model", "sionna")
-        ).lower()
+        return str(_profile_template(profile).get("propagation_model", "sionna")).lower()
     return "sionna"
 
 
-def _skipped_profile(profile: SimulationProfile, reason: dict) -> dict:
-    return {
-        "profile_id": str(profile.id),
-        "profile_name": profile.name,
-        "simulation_type": profile.simulation_type,
-        "propagation_model": _propagation_model(profile),
-        "reason_code": reason["reason_code"],
-        "reason": reason["reason"],
-    }
+def _comparability_warnings(
+    profile: SimulationProfile,
+    profile_difference: dict,
+) -> list[dict]:
+    changed_fields = set(profile_difference.get("changed_fields", []))
+    warnings = []
+    if "propagation_model" in changed_fields:
+        warnings.append(
+            {
+                "code": "propagation_methodology_changed",
+                "message": "The scenarios use different propagation models.",
+                "fields": ["propagation_model"],
+            }
+        )
+
+    sampling_fields = sorted(
+        changed_fields.intersection({"user_count", "random_seed"})
+    )
+    if profile.simulation_type == "rsrp_simulation" and sampling_fields:
+        warnings.append(
+            {
+                "code": "sampling_changed",
+                "message": "The RSRP scenarios use different sampling settings.",
+                "fields": sampling_fields,
+            }
+        )
+
+    grid_roots = ("solver.cell_size", "solver.center", "solver.size")
+    grid_fields = sorted(
+        field
+        for field in changed_fields
+        if any(
+            field == root
+            or field.startswith(f"{root}[")
+            or field.startswith(f"{root}.")
+            for root in grid_roots
+        )
+    )
+    if grid_fields:
+        warnings.append(
+            {
+                "code": "spatial_grid_changed",
+                "message": (
+                    "Aggregate results may remain comparable, but cell-by-cell "
+                    "spatial comparison may be unavailable."
+                ),
+                "fields": grid_fields,
+            }
+        )
+    return warnings
+
+
+def _requested_profile_id(requested_pair: Any, field_name: str) -> str:
+    if isinstance(requested_pair, dict):
+        value = requested_pair.get(field_name)
+    else:
+        value = getattr(requested_pair, field_name, None)
+    value = str(value or "").strip()
+    if not value:
+        raise ValueError(f"{field_name} is required")
+    return value
+
+
+def _pair_id(ordinal: int, baseline_profile_id: str, candidate_profile_id: str) -> str:
+    raw_identity = f"{ordinal}:{baseline_profile_id}:{candidate_profile_id}"
+    digest = hashlib.sha256(raw_identity.encode("utf-8")).hexdigest()
+    return f"pair-{digest[:24]}"
 
 
 def _skip(reason_code: str, reason: str) -> dict:
-    return {
-        "action": "skip",
-        "reason_code": reason_code,
-        "reason": reason,
-    }
+    return {"action": "skip", "reason_code": reason_code, "reason": reason}
 
 
 def _configuration_identity(configuration: NetworkConfiguration) -> dict:
@@ -338,6 +659,10 @@ def _can_read_configuration(
     user_id: str,
 ) -> bool:
     return configuration.status != "draft" or configuration.created_by == user_id
+
+
+def _can_read_profile(profile: SimulationProfile, user_id: str) -> bool:
+    return profile.enabled or profile.created_by == user_id
 
 
 def _failure(status_code: int, error: str, **details: Any) -> dict:

@@ -53,7 +53,7 @@ def create_impact_study(
     if unavailable:
         return unavailable
 
-    plan = impact_planner.preview_configuration_impact(
+    plan = impact_planner.preview_configuration_impact_legacy(
         str(request.baseline_configuration_id),
         str(request.candidate_configuration_id),
         user_id=created_by,

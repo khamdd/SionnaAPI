@@ -26,6 +26,7 @@ def preview_configuration_impact(
         impact_planner.preview_configuration_impact(
             str(request.baseline_configuration_id),
             str(request.candidate_configuration_id),
+            request.profile_pairs,
             user_id=user["id"],
         )
     )
