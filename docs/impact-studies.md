@@ -25,6 +25,9 @@ All endpoints require authentication.
 5. When the saved policy is `if_objectives_fail`, a failed candidate Network
    Coverage objective conditionally creates one linked optimization job. See
    [`impact-optimization.md`](impact-optimization.md).
+6. `GET /api/v1/impact-studies/{id}/report` generates or downloads the stable
+   HTML report after the study reaches a terminal state. See
+   [`impact-reports.md`](impact-reports.md).
 
 The child jobs also remain visible through the normal `/api/v1/simulation-jobs`
 queue endpoints. Each carries `impact_study_id`, `simulation_profile_id`,
@@ -42,5 +45,5 @@ also reconciles their state, so progress remains correct across API restarts.
 After all children finish, `summary.comparison` stores normalized KPI deltas,
 objective outcomes, and compatible spatial grid changes. See
 [`impact-comparisons.md`](impact-comparisons.md). Policy v1 does not reuse an
-earlier baseline job and does not generate a report; `report_url` is reserved for
-a later reporting step.
+earlier baseline job. HTML reports are generated idempotently on first download
+and persist in application artifact storage.

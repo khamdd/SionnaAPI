@@ -2,10 +2,11 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import FileResponse
 
 from backend.api.dependencies import require_current_user
 from backend.schemas.impact_studies import ImpactStudyCreateRequest
-from backend.services import impact_study_service
+from backend.services import impact_report_service, impact_study_service
 
 
 router = APIRouter(tags=["Impact studies"])
@@ -78,6 +79,29 @@ def get_impact_study_comparison(
             str(study_id),
             user_id=user["id"],
         )
+    )
+
+
+@router.get("/impact-studies/{study_id}/report", response_class=FileResponse)
+def download_impact_study_report(
+    study_id: UUID,
+    user=Depends(require_current_user),
+):
+    result = return_or_raise(
+        impact_report_service.get_or_create_impact_report(
+            str(study_id),
+            user_id=user["id"],
+        )
+    )
+    return FileResponse(
+        path=result["file_path"],
+        media_type="text/html; charset=utf-8",
+        filename=result["filename"],
+        headers={
+            "X-Impact-Report-Generated": (
+                "false" if result.get("already_generated") else "true"
+            )
+        },
     )
 
 

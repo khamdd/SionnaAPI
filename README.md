@@ -236,6 +236,11 @@ candidate misses an objective, then create a new draft from the suggestion. The
 policy is disabled by default and never publishes settings automatically. See
 [`docs/impact-optimization.md`](docs/impact-optimization.md).
 
+Terminal studies expose a persistent, authenticated HTML report download with
+configuration changes, KPI/objective results, spatial impact, warnings, runtime
+metadata, and a conservative decision-support status. See
+[`docs/impact-reports.md`](docs/impact-reports.md).
+
 Production queue execution uses a separate leased worker with heartbeat, crash
 recovery, bounded retries, timeouts, and cancellation checkpoints. See
 [`docs/simulation-job-reliability.md`](docs/simulation-job-reliability.md).

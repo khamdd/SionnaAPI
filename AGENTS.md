@@ -146,6 +146,12 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   `POST /api/v1/impact-studies/{id}/profiles/{profile_id}/suggested-configuration`
   creates an idempotent draft child of that exact candidate and never publishes
   it automatically.
+- Terminal Impact Studies expose an authenticated, idempotent HTML download at
+  `GET /api/v1/impact-studies/{id}/report`. Reports are atomically stored under
+  `static/impact-reports/`, survive Docker API restarts through shared artifact
+  storage, and include all 12 planned sections plus an explicit simulation-data
+  disclaimer. Partial reports name failed/missing results; absent rendered maps
+  are labeled unavailable. `report_url` points to the authenticated API route.
 - Database-backed simulation execution is hardened with bounded exponential
   retries, permanent/transient failure categories, configurable per-attempt
   timeouts, worker heartbeats and leases, expired-lease recovery, cooperative
@@ -316,6 +322,8 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   partial-failure summary.
 - `backend/services/impact_comparison_service.py`: normalized KPI, objective, and
   spatial comparison of Impact Study baseline/candidate child results.
+- `backend/services/impact_report_service.py`: persistent HTML report generation,
+  decision status, partial-result warnings, runtime metadata, and artifact reuse.
 - `backend/services/simulation_profile_service.py`: saved automation-profile CRUD,
   enable-time validation, antenna-role resolution, and request construction.
 - `backend/services/scene_service.py`: scene registry, preview lifecycle, activate
