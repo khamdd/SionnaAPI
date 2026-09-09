@@ -96,6 +96,12 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   normalized content is rejected. Existing browser localStorage drafts remain
   unchanged until a later frontend migration. Published versions are shared for
   the project's shared scenes, while drafts are private to their creator.
+- The frontend `/configurations` route provides the first backend-connected
+  automation workflow. Its version ledger separates published, draft, and
+  superseded snapshots. Engineers can start a local proposal, modify allowed
+  Type 1 settings, add or remove proposed Type 2 antennas, save a new immutable
+  draft, inspect the exact server-generated diff, and publish after explicit
+  confirmation. It does not migrate or alter existing manual simulation drafts.
 - Saved simulation profiles are stored in PostgreSQL through
   `backend/services/simulation_profile_service.py`. Profiles keep explicit solver,
   radio, camera, objective, and role settings separate from antenna configuration
@@ -346,12 +352,16 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 - `frontend/src/constants/`: frontend route, map, radio, scene, storage, API
   constants.
 - `frontend/src/components/`: feature UI components.
+- `frontend/src/components/NetworkConfigurationsPage.jsx`: immutable
+  configuration version ledger, proposal editor, exact diff, and publication UI.
 - `frontend/src/utils/`: map drawing, scene sizing, history filtering, formatting.
 
 ## Current UI Routes
 
 - `/network`: main network coverage planner.
 - `/network/optimization`: Network Coverage tilt optimization, progress, comparison, and apply.
+- `/configurations`: published configuration, immutable proposal drafts, exact
+  difference review, and confirmed publication.
 - `/queue`: submitted simulation jobs, status tracking, result review, save to
   history, and discard actions.
 - `/coverage`: coverage map API tool.

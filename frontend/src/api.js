@@ -71,6 +71,51 @@ export function getCurrentUser() {
   return requestJson("/api/v1/auth/verify");
 }
 
+export function listNetworkConfigurations(sceneId, status = "", limit = 200) {
+  const params = new URLSearchParams({
+    scene_id: sceneId,
+    limit: String(limit),
+  });
+
+  if (status) {
+    params.set("status", status);
+  }
+
+  return requestJson(`/api/v1/network-configurations?${params.toString()}`);
+}
+
+export function createNetworkConfiguration(payload) {
+  return requestJson("/api/v1/network-configurations", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function compareNetworkConfigurations(
+  baselineConfigurationId,
+  candidateConfigurationId,
+) {
+  return requestJson("/api/v1/network-configurations/compare", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      baseline_configuration_id: baselineConfigurationId,
+      candidate_configuration_id: candidateConfigurationId,
+    }),
+  });
+}
+
+export function publishNetworkConfiguration(configurationId) {
+  return requestJson(`/api/v1/network-configurations/${configurationId}/publish`, {
+    method: "POST",
+  });
+}
+
 async function runSimulationRequest(path, payload) {
   const response = await requestJson(path, {
     method: "POST",

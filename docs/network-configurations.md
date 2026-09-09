@@ -20,6 +20,20 @@ The server sorts antennas by ID and canonicalizes numeric values before computin
 a SHA-256 content hash. One database constraint allows at most one published
 configuration per scene.
 
+## Frontend workflow
+
+The scene-scoped `/configurations` page connects this lifecycle to the planner.
+Its version ledger separates the published baseline, the current user's drafts,
+and superseded versions. An engineer can start a local working proposal from the
+published or selected snapshot, change allowed Type 1 simulation settings, add
+or remove proposed Type 2 antennas, and save the result as a new immutable draft.
+
+Saved non-baseline versions are compared with the published snapshot through the
+server comparison endpoint. The UI displays the exact antenna and field changes;
+unsaved edits are never presented as an authoritative diff. Publishing requires
+explicit confirmation and supersedes the previous published version. Existing
+manual simulation drafts in browser storage are not migrated or changed.
+
 ## Access and runtime rules
 
 - All endpoints require authentication.

@@ -209,7 +209,9 @@ manual simulation mode remains available.
 The backend also exposes immutable, versioned network configurations for future
 automation. Their lifecycle and API rules are documented in
 [`docs/network-configurations.md`](docs/network-configurations.md). Existing
-browser simulation drafts continue to use localStorage for now.
+browser simulation drafts continue to use localStorage for now. The scene-scoped
+`/configurations` workspace provides a version ledger, immutable proposal editor,
+exact server diff, and confirmed publication workflow.
 
 Saved simulation profiles provide repeatable solver, radio, and antenna-role
 settings for that automation. Their validation and API rules are documented in
