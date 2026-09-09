@@ -48,6 +48,7 @@ import LoginPage from "./components/LoginPage";
 import MapPanel from "./components/MapPanel";
 import OptimizationObjectivePage from "./components/OptimizationObjectivePage";
 import NetworkConfigurationsPage from "./components/NetworkConfigurationsPage";
+import SimulationProfilesPage from "./components/SimulationProfilesPage";
 import SceneChooserPage from "./components/SceneChooserModal";
 import ScenesPage from "./components/ScenesPage";
 import { formatDateTime, formatSimulationType, formatText } from "./utils/format";
@@ -1940,6 +1941,13 @@ export default function App() {
           fixedAntennas={fixedSceneAntennas}
         />
       )}
+      {visibleRoute === "/profiles" && activeScene && (
+        <SimulationProfilesPage
+          key={activeScene.id}
+          activeScene={activeScene}
+          currentUser={currentUser}
+        />
+      )}
       {visibleRoute === "/coverage" && (
         <CoverageApiPage
           activeScene={activeScene}
@@ -2211,6 +2219,7 @@ function NavIcon({ path }) {
   const paths = {
     "/network": "M4 16v4m5-8v8m5-13v13m5-17v17M2 20h20",
     "/configurations": "M4 5h16M4 12h16M4 19h16M8 3v4m8 3v4M11 17v4",
+    "/profiles": "M5 4h14v5H5V4Zm0 11h14v5H5v-5Zm3-3h8M12 9v6",
     "/coverage": "M3 6.5 12 2l9 4.5-9 4.5-9-4.5Zm0 5L12 16l9-4.5M3 16.5 12 21l9-4.5",
     "/rsrp": "M4.9 19.1a10 10 0 0 1 14.2 0M8 16a5.7 5.7 0 0 1 8 0m-5.4-3a2 2 0 0 1 2.8 0M12 21h.01",
     "/sinr": "M4 18V9m5 9V5m5 13v-7m5 7V3M2 21h20",

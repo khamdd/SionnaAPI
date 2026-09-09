@@ -215,7 +215,10 @@ exact server diff, and confirmed publication workflow.
 
 Saved simulation profiles provide repeatable solver, radio, and antenna-role
 settings for that automation. Their validation and API rules are documented in
-[`docs/simulation-profiles.md`](docs/simulation-profiles.md).
+[`docs/simulation-profiles.md`](docs/simulation-profiles.md). The scene-scoped
+`/profiles` workspace provides structured editors for all supported simulation
+types, published-configuration role assignment, server request validation, and an
+explicit enabled run stack for later impact studies.
 
 Version-to-version antenna changes can be inspected through the authenticated
 configuration comparison API described in

@@ -69,4 +69,19 @@ the shared project scenes; only their creator can update, enable, disable, or
 delete them.
 
 The current simulation pages and their localStorage drafts are unchanged. A future
-frontend step can add **Save as automation profile** controls using these APIs.
+frontend step can add **Save as automation profile** controls to those individual
+simulation pages without changing this profile workspace.
+
+## Frontend workflow
+
+The scene-scoped `/profiles` page provides a profile ledger, structured editor,
+and server-authoritative readiness panel. The editor exposes the applicable
+solver, camera, radio, user-sampling, objective, and antenna-role fields for each
+simulation type instead of requiring raw JSON editing.
+
+New profiles are always saved disabled. A separate **Validate and enable** action
+builds the exact request against the active published configuration before the
+profile enters the impact-study run stack. Disabled profiles may remain incomplete;
+the readiness panel explains missing published configuration, role assignments,
+or settings. Enabled profiles are readable but remain read-only for users other
+than their creator. Deleting a profile requires explicit confirmation.

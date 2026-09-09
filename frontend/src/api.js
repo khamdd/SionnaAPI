@@ -116,6 +116,58 @@ export function publishNetworkConfiguration(configurationId) {
   });
 }
 
+export function listSimulationProfiles(sceneId, limit = 200) {
+  const params = new URLSearchParams({
+    scene_id: sceneId,
+    limit: String(limit),
+  });
+
+  return requestJson(`/api/v1/simulation-profiles?${params.toString()}`);
+}
+
+export function createSimulationProfile(payload) {
+  return requestJson("/api/v1/simulation-profiles", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateSimulationProfile(profileId, payload) {
+  return requestJson(`/api/v1/simulation-profiles/${profileId}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteSimulationProfile(profileId) {
+  return requestJson(`/api/v1/simulation-profiles/${profileId}`, {
+    method: "DELETE",
+  });
+}
+
+export function setSimulationProfileEnabled(profileId, enabled) {
+  return requestJson(
+    `/api/v1/simulation-profiles/${profileId}/${enabled ? "enable" : "disable"}`,
+    { method: "POST" },
+  );
+}
+
+export function buildSimulationProfileRequest(profileId, configurationId) {
+  return requestJson(`/api/v1/simulation-profiles/${profileId}/build-request`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ configuration_id: configurationId }),
+  });
+}
+
 async function runSimulationRequest(path, payload) {
   const response = await requestJson(path, {
     method: "POST",

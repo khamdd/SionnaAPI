@@ -111,6 +111,13 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   resolve saved antenna role IDs. Invalid role profiles return an explicit skip
   reason. Existing manual simulation requests and frontend localStorage remain
   unchanged.
+- The frontend `/profiles` route provides a structured Simulation Profiles
+  workspace. Its ledger separates the enabled impact-study run stack from
+  disabled drafts; editors cover the supported solver, camera, radio, sampling,
+  objective, and antenna-role fields. Profiles save disabled first, then use a
+  separate server-validated enable action against the active published network
+  configuration. Other users' enabled profiles are visible read-only, and delete
+  requires confirmation.
 - `backend/services/configuration_diff_service.py` compares two network
   configuration snapshots deterministically. It reports antenna additions,
   removals, and before/after changes for enabled status, geographic position,
@@ -354,6 +361,8 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 - `frontend/src/components/`: feature UI components.
 - `frontend/src/components/NetworkConfigurationsPage.jsx`: immutable
   configuration version ledger, proposal editor, exact diff, and publication UI.
+- `frontend/src/components/SimulationProfilesPage.jsx`: saved profile ledger,
+  structured request-template editor, run stack, and readiness validation UI.
 - `frontend/src/utils/`: map drawing, scene sizing, history filtering, formatting.
 
 ## Current UI Routes
@@ -362,6 +371,8 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 - `/network/optimization`: Network Coverage tilt optimization, progress, comparison, and apply.
 - `/configurations`: published configuration, immutable proposal drafts, exact
   difference review, and confirmed publication.
+- `/profiles`: reusable simulation profile editing, antenna-role assignment,
+  validation, and enabled impact-study run stack.
 - `/queue`: submitted simulation jobs, status tracking, result review, save to
   history, and discard actions.
 - `/coverage`: coverage map API tool.
