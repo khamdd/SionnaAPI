@@ -28,6 +28,9 @@ All endpoints require authentication.
 6. `GET /api/v1/impact-studies/{id}/report` generates or downloads the stable
    HTML report after the study reaches a terminal state. See
    [`impact-reports.md`](impact-reports.md).
+7. A completed, partially failed, failed, or review-required study creates one
+   in-app notification for its creator. Child jobs and cancelled studies remain
+   silent. See [`notifications.md`](notifications.md).
 
 The child jobs also remain visible through the normal `/api/v1/simulation-jobs`
 queue endpoints. Each carries `impact_study_id`, `simulation_profile_id`,

@@ -241,6 +241,10 @@ configuration changes, KPI/objective results, spatial impact, warnings, runtime
 metadata, and a conservative decision-support status. See
 [`docs/impact-reports.md`](docs/impact-reports.md).
 
+Impact Study completion notifications are stored once per study and exposed
+through authenticated list, unread-count, and mark-read APIs. Child jobs and
+cancelled studies remain silent. See [`docs/notifications.md`](docs/notifications.md).
+
 Production queue execution uses a separate leased worker with heartbeat, crash
 recovery, bounded retries, timeouts, and cancellation checkpoints. See
 [`docs/simulation-job-reliability.md`](docs/simulation-job-reliability.md).

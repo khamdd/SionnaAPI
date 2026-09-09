@@ -14,6 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from backend.constants import STATIC_DIR
 from backend.database import db_session, is_database_configured
 from backend.models import ImpactStudy, NetworkConfiguration, SimulationJob
+from backend.services.impact_decision_service import final_decision
 from backend.services.impact_study_service import (
     TERMINAL_STUDY_STATUSES,
     _reconcile_study,
@@ -192,40 +193,6 @@ def render_impact_report(snapshot: dict) -> str:
   {''.join(sections)}
 </main></body>
 </html>"""
-
-
-def final_decision(study_status: str | None, comparison: dict) -> str:
-    if study_status != "completed" or comparison.get("status") not in {
-        "complete",
-        "empty",
-    }:
-        return "incomplete"
-
-    profiles = comparison.get("profiles") or []
-    if any(profile.get("status") != "compared" for profile in profiles):
-        return "incomplete"
-    objective_states = []
-    local_regression = False
-    for profile in profiles:
-        local_regression = local_regression or bool(
-            (profile.get("spatial") or {}).get("local_regression_present")
-        )
-        optimization = profile.get("optimization") or {}
-        optimized_states = {
-            item.get("metric"): item.get("status")
-            for item in optimization.get("objective_results", [])
-        }
-        for objective in profile.get("objectives", []):
-            objective_states.append(
-                optimized_states.get(objective.get("metric"))
-                if optimization.get("status") == "completed"
-                else objective.get("candidate_status")
-            )
-    if any(state == "failed" for state in objective_states):
-        return "fail"
-    if objective_states and all(state == "passed" for state in objective_states):
-        return "review" if local_regression else "pass"
-    return "review"
 
 
 def report_warnings(snapshot: dict, decision: str) -> list[str]:

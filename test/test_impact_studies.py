@@ -92,6 +92,44 @@ def test_partial_failure_summary_keeps_successful_child():
     ]
 
 
+def test_reconciliation_notifies_only_after_all_children_finish(monkeypatch):
+    notifications = []
+    monkeypatch.setattr(
+        impact_study_service.notification_service,
+        "ensure_impact_study_notification",
+        lambda session, current_study: notifications.append(current_study.status),
+    )
+    monkeypatch.setattr(
+        impact_study_service,
+        "_queue_required_optimization_jobs",
+        lambda session, current_study, jobs: [],
+    )
+    study = SimpleNamespace(
+        id=STUDY_ID,
+        created_by=USER_ID,
+        scene_id="scene-1",
+        status="running",
+        summary_json=None,
+        finished_at=None,
+    )
+
+    impact_study_service._reconcile_study(
+        study,
+        [job("job-success", "succeeded"), job("job-running", "running")],
+        session=object(),
+    )
+    assert study.status == "running"
+    assert notifications == []
+
+    impact_study_service._reconcile_study(
+        study,
+        [job("job-success", "succeeded"), job("job-finished", "succeeded")],
+        session=object(),
+    )
+    assert study.status == "completed"
+    assert notifications == ["completed"]
+
+
 def test_start_does_not_duplicate_jobs_for_started_study(monkeypatch):
     study = SimpleNamespace(
         id=STUDY_ID,

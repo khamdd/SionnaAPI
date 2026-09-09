@@ -14,7 +14,7 @@ from backend.models import ImpactStudy, NetworkConfiguration, Scene, SimulationJ
 from backend.schemas.impact_studies import ImpactStudyCreateRequest
 from backend.schemas.network_configurations import NetworkConfigurationAntenna
 from backend.schemas.requests import NetworkCoverageOptimizationRequest
-from backend.services import impact_planner
+from backend.services import impact_planner, notification_service
 from backend.services.impact_comparison_service import build_impact_comparison
 from backend.services.network_configuration_service import (
     add_network_configuration_draft,
@@ -213,6 +213,7 @@ def start_impact_study(study_id: str, user_id: str) -> dict:
                 study.status = "completed"
                 study.finished_at = now
                 study.summary_json = build_study_summary(study, [])
+                notification_service.ensure_impact_study_notification(session, study)
             session.flush()
             jobs = _load_study_jobs(session, study.id)
             return {
@@ -578,7 +579,11 @@ def _reconcile_study(
     jobs: list[SimulationJob],
     session=None,
 ) -> None:
-    if study.status == "cancelled" or not jobs:
+    if study.status == "cancelled":
+        return
+    if not jobs:
+        if session is not None:
+            notification_service.ensure_impact_study_notification(session, study)
         return
 
     statuses = {job.status for job in jobs}
@@ -602,6 +607,8 @@ def _reconcile_study(
             (job.finished_at for job in jobs if job.finished_at is not None),
             default=datetime.now(timezone.utc),
         )
+        if session is not None:
+            notification_service.ensure_impact_study_notification(session, study)
     elif "running" in statuses:
         study.status = "running"
     else:

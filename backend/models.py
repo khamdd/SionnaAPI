@@ -329,6 +329,57 @@ class ImpactStudy(Base):
     )
 
 
+class Notification(Base):
+    __tablename__ = "notifications"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "impact_study_id",
+            name="uq_notifications_user_impact_study",
+        ),
+        CheckConstraint(
+            "event_type IN ("
+            "'impact_study_completed', "
+            "'impact_study_completed_with_failures', "
+            "'impact_study_failed', "
+            "'impact_study_needs_review'"
+            ")",
+            name="ck_notifications_event_type",
+        ),
+        Index(
+            "ix_notifications_user_unread_created",
+            "user_id",
+            "is_read",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("app_users.id", ondelete="CASCADE")
+    )
+    impact_study_id: Mapped[str] = mapped_column(
+        ForeignKey("impact_studies.id", ondelete="CASCADE")
+    )
+    event_type: Mapped[str] = mapped_column(Text)
+    title: Mapped[str] = mapped_column(Text)
+    message: Mapped[str] = mapped_column(Text)
+    payload_json: Mapped[dict] = mapped_column(JSONB)
+    is_read: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default=text("false"),
+    )
+    read_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class SimulationJob(Base):
     __tablename__ = "simulation_jobs"
     __table_args__ = (

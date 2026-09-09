@@ -152,6 +152,12 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   storage, and include all 12 planned sections plus an explicit simulation-data
   disclaimer. Partial reports name failed/missing results; absent rendered maps
   are labeled unavailable. `report_url` points to the authenticated API route.
+- In-app notifications are persisted once per Impact Study when the parent
+  completes, completes with failures, fails, or produces a result that needs
+  engineering review. Child jobs and cancelled studies do not notify. The
+  authenticated notification APIs list the current user's rows, return an unread
+  count, and mark one or all rows read. This milestone is backend-only; the
+  frontend notification badge and list are still pending.
 - Database-backed simulation execution is hardened with bounded exponential
   retries, permanent/transient failure categories, configurable per-attempt
   timeouts, worker heartbeats and leases, expired-lease recovery, cooperative
@@ -324,6 +330,10 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   spatial comparison of Impact Study baseline/candidate child results.
 - `backend/services/impact_report_service.py`: persistent HTML report generation,
   decision status, partial-result warnings, runtime metadata, and artifact reuse.
+- `backend/services/impact_decision_service.py`: shared conservative Impact Study
+  decision used by reports and notifications.
+- `backend/services/notification_service.py`: idempotent terminal-study alerts,
+  user-scoped listing and unread state transitions.
 - `backend/services/simulation_profile_service.py`: saved automation-profile CRUD,
   enable-time validation, antenna-role resolution, and request construction.
 - `backend/services/scene_service.py`: scene registry, preview lifecycle, activate
