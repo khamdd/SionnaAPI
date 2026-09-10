@@ -16,6 +16,8 @@ combine into the existing Pydantic request model.
   default changes later.
 - Do not include fields owned by the network configuration, such as `antennas`,
   transmitter positions, power, or SINR tilt.
+- Do not include `objectives`. Decision thresholds belong to an Impact Study
+  profile pair so both scenario results are judged against the same target.
 - Coverage Map requires a `roles.transmitter` antenna ID.
 - SINR and Throughput require distinct `roles.transmitter`, `roles.receiver`, and
   `roles.interferer` IDs. Missing or disabled role antennas produce an explicit
@@ -36,14 +38,7 @@ Example Network Coverage template:
     "size": [400, 400]
   },
   "bandwidth_mhz": 100,
-  "mimo_layers": 4,
-  "objectives": [
-    {
-      "metric": "covered_area_percent",
-      "operator": ">=",
-      "target": 90
-    }
-  ]
+  "mimo_layers": 4
 }
 ```
 
@@ -89,8 +84,12 @@ simulation pages without changing this profile workspace.
 
 The scene-scoped `/profiles` page provides a profile ledger, structured editor,
 and server-authoritative readiness panel. The editor exposes the applicable
-solver, radio, user-sampling, objective, and antenna-role fields for each
+solver, radio, user-sampling, and antenna-role fields for each
 simulation type instead of requiring raw JSON editing.
+
+Profile create and update requests reject an `objectives` field. Objectives are
+selected later for a specific Impact Study pair and are not part of profile
+eligibility or profile differences.
 
 Camera settings are not simulation-profile inputs. Coverage services never used
 the former request field, so it was removed from the API and profile editor. The

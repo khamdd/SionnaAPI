@@ -11,7 +11,6 @@ from backend.models import NetworkConfiguration, SimulationProfile
 from backend.schemas.requests import (
     CoverageRequest,
     NetworkCoverageRequest,
-    OptimizationObjective,
     RSRPRequest,
     SINRRequest,
     ThroughputRequest,
@@ -75,7 +74,6 @@ REQUIRED_TEMPLATE_FIELDS = {
         "solver",
         "bandwidth_mhz",
         "mimo_layers",
-        "objectives",
     },
     "coverage_map": {"transmitter_pattern", "solver"},
     "rsrp_simulation": {
@@ -400,7 +398,6 @@ def build_profile_request(
                 "configuration_id": str(configuration.id),
                 "simulation_type": profile.simulation_type,
                 "request": result["request"],
-                "objectives": result["objectives"],
             }
     except SQLAlchemyError:
         logger.exception("Failed to build a request from a simulation profile.")
@@ -429,6 +426,12 @@ def validate_profile_definition(
         return _failure(422, "request_template must be a JSON object.")
 
     template = dict(request_template)
+    if "objectives" in template:
+        return _failure(
+            422,
+            "Decision objectives belong to an Impact Study, not a simulation profile.",
+            error_code="study_field_in_profile",
+        )
     missing_fields = _missing_template_fields(simulation_type, template)
     if missing_fields:
         return _failure(
@@ -448,7 +451,6 @@ def validate_profile_definition(
         )
 
     try:
-        objectives = _validate_objectives(simulation_type, template)
         if simulation_type in {"network_coverage", "rsrp_simulation"}:
             template["antennas"] = _enabled_request_antennas(configuration)
         else:
@@ -476,7 +478,6 @@ def validate_profile_definition(
         return {
             "status": "success",
             "request": request.model_dump(mode="json"),
-            "objectives": objectives,
         }
     except (TypeError, ValueError, ValidationError) as exc:
         return _failure(
@@ -509,25 +510,6 @@ def _enabled_request_antennas(configuration: NetworkConfiguration) -> list[dict]
         request_antenna.pop("enabled", None)
         antennas.append(request_antenna)
     return antennas
-
-
-def _validate_objectives(simulation_type: str, template: dict) -> list[dict]:
-    raw_objectives = template.pop("objectives", None)
-    if simulation_type != "network_coverage":
-        if raw_objectives is not None:
-            raise ValueError("objectives are currently supported only for network coverage")
-        return []
-    if not isinstance(raw_objectives, list) or not 1 <= len(raw_objectives) <= 2:
-        raise ValueError("network coverage profiles require one or two objectives")
-
-    objectives = [
-        OptimizationObjective.model_validate(objective)
-        for objective in raw_objectives
-    ]
-    metrics = [objective.metric for objective in objectives]
-    if len(metrics) != len(set(metrics)):
-        raise ValueError("profile objectives must use unique metrics")
-    return [objective.model_dump(mode="json") for objective in objectives]
 
 
 def _missing_template_fields(simulation_type: str, template: dict) -> list[str]:

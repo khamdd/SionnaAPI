@@ -23,7 +23,14 @@ Candidate scenario = candidate configuration + candidate profile
   "profile_pairs": [
     {
       "baseline_profile_id": "cccccccc-cccc-cccc-cccc-cccccccccccc",
-      "candidate_profile_id": "dddddddd-dddd-dddd-dddd-dddddddddddd"
+      "candidate_profile_id": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+      "objectives": [
+        {
+          "metric": "covered_area_percent",
+          "operator": ">=",
+          "target": 90
+        }
+      ]
     }
   ]
 }
@@ -33,16 +40,18 @@ The request requires one to 20 unique profile pairs. The configurations must be
 different, readable, from the same ready scene, and materially different. Every
 selected profile must be readable, enabled, and from that scene. Both sides of a
 pair must use the same simulation type, while using the same profile ID on both
-sides remains valid.
+sides remains valid. A Network Coverage pair requires one or two objectives with
+unique metrics. Other simulation types currently require an empty objective list
+until their decision metrics are defined.
 
 The planner loads only the selected profile IDs and preserves request order. Each
 planned or skipped entry receives a stable `pair_id` and `ordinal`, plus immutable
 baseline and candidate profile snapshots. A planned entry includes independently
-resolved requests, both objective lists, a deterministic profile-template diff,
-configuration and profile trigger categories, affected antennas, comparability
-warnings, and a job estimate of two. Invalid role resolution or request building
-becomes a skip with structured baseline/candidate reasons instead of failing
-unrelated pairs.
+resolved requests, one shared objective list, a deterministic profile-template
+diff, configuration and profile trigger categories, affected antennas,
+comparability warnings, and a job estimate of two. Invalid role resolution or
+request building becomes a skip with structured baseline/candidate reasons
+instead of failing unrelated pairs.
 
 ## Policy v2 behavior
 
@@ -74,7 +83,10 @@ unavailable while aggregate comparison can remain meaningful.
 Profile differences compare canonical JSON values recursively. Dictionary key
 order and equivalent numeric representations do not create false changes;
 additions, removals, nested fields, list positions, roles, solver settings,
-radio settings, sampling, tilt inputs, and objectives are reported explicitly.
+radio settings, sampling, and tilt inputs are reported explicitly. Objectives are
+study-pair inputs, so they are neither embedded in profile snapshots nor reported
+as profile differences. The same objective list is used to evaluate both scenario
+results; raw KPI deltas remain independent of those thresholds.
 
 ## Durable-study transition
 

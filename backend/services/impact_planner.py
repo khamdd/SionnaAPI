@@ -3,11 +3,13 @@ import logging
 from copy import deepcopy
 from typing import Any, Iterable
 
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from backend.database import db_session, is_database_configured
 from backend.models import NetworkConfiguration, SimulationProfile
+from backend.schemas.requests import OptimizationObjective
 from backend.services.configuration_diff_service import compare_configuration_snapshots
 from backend.services.profile_diff_service import compare_profile_templates
 from backend.services.scene_service import list_scenes
@@ -158,13 +160,13 @@ def plan_configuration_impact(
         )
         baseline_validation = validate_profile_definition(
             baseline_profile.simulation_type,
-            baseline_profile.request_template_json,
+            _profile_template(baseline_profile),
             baseline_configuration,
             scene_info,
         )
         candidate_validation = validate_profile_definition(
             candidate_profile.simulation_type,
-            candidate_profile.request_template_json,
+            _profile_template(candidate_profile),
             candidate_configuration,
             scene_info,
         )
@@ -194,21 +196,14 @@ def plan_configuration_impact(
             "pair_id": pair["pair_id"],
             "ordinal": pair["ordinal"],
             "simulation_type": baseline_profile.simulation_type,
-            "baseline_profile": _profile_snapshot(
-                baseline_profile,
-                baseline_validation.get("objectives", []),
-            ),
-            "candidate_profile": _profile_snapshot(
-                candidate_profile,
-                candidate_validation.get("objectives", []),
-            ),
+            "baseline_profile": _profile_snapshot(baseline_profile),
+            "candidate_profile": _profile_snapshot(candidate_profile),
             "profile_difference": profile_difference,
             "triggering_changes": applicability["triggering_changes"],
             "affected_antennas": applicability["affected_antennas"],
             "baseline_request": baseline_validation["request"],
             "candidate_request": candidate_validation["request"],
-            "baseline_objectives": baseline_validation.get("objectives", []),
-            "candidate_objectives": candidate_validation.get("objectives", []),
+            "objectives": pair["objectives"],
             "comparability_warnings": _comparability_warnings(
                 baseline_profile,
                 profile_difference,
@@ -221,7 +216,6 @@ def plan_configuration_impact(
                     "profile_id": str(baseline_profile.id),
                     "profile_name": baseline_profile.name,
                     "propagation_model": _propagation_model(baseline_profile),
-                    "objectives": candidate_validation.get("objectives", []),
                 }
             )
         planned_simulations.append(planned)
@@ -412,12 +406,38 @@ def _load_explicit_profile_pairs(
                 candidate_simulation_type=side_profiles["candidate"].simulation_type,
             )
 
+        simulation_type = side_profiles["baseline"].simulation_type
+        try:
+            objectives = _requested_objectives(requested_pair)
+        except (TypeError, ValueError, ValidationError) as exc:
+            return _failure(
+                422,
+                f"Profile-pair objectives are invalid: {exc}",
+                error_code="invalid_profile_pair_objectives",
+                pair_ordinal=ordinal,
+            )
+        if simulation_type == "network_coverage" and not 1 <= len(objectives) <= 2:
+            return _failure(
+                422,
+                "Network Coverage pairs require one or two shared objectives.",
+                error_code="invalid_profile_pair_objectives",
+                pair_ordinal=ordinal,
+            )
+        if simulation_type != "network_coverage" and objectives:
+            return _failure(
+                422,
+                "Shared objectives are currently supported only for Network Coverage pairs.",
+                error_code="unsupported_profile_pair_objectives",
+                pair_ordinal=ordinal,
+            )
+
         resolved_pairs.append(
             {
                 "pair_id": _pair_id(ordinal, baseline_id, candidate_id),
                 "ordinal": ordinal,
                 "baseline_profile": side_profiles["baseline"],
                 "candidate_profile": side_profiles["candidate"],
+                "objectives": objectives,
             }
         )
     return resolved_pairs
@@ -442,6 +462,7 @@ def _load_legacy_profile_pairs(session, scene_id: str) -> list[dict]:
             "ordinal": ordinal,
             "baseline_profile": profile,
             "candidate_profile": profile,
+            "objectives": _legacy_profile_objectives(profile),
         }
         for ordinal, profile in enumerate(profiles)
     ]
@@ -458,6 +479,7 @@ def _normalize_planning_pair(raw_pair: dict, ordinal: int) -> dict:
         "ordinal": raw_pair.get("ordinal", ordinal),
         "baseline_profile": baseline_profile,
         "candidate_profile": candidate_profile,
+        "objectives": _requested_objectives(raw_pair),
     }
 
 
@@ -499,22 +521,13 @@ def _skipped_pair(pair: dict, profile_difference: dict, reason: dict) -> dict:
 
 
 def _pair_identity(pair: dict, profile_difference: dict) -> dict:
-    baseline_objectives = _template_objectives(pair["baseline_profile"])
-    candidate_objectives = _template_objectives(pair["candidate_profile"])
     return {
         "pair_id": pair["pair_id"],
         "ordinal": pair["ordinal"],
         "simulation_type": pair["baseline_profile"].simulation_type,
-        "baseline_profile": _profile_snapshot(
-            pair["baseline_profile"],
-            baseline_objectives,
-        ),
-        "candidate_profile": _profile_snapshot(
-            pair["candidate_profile"],
-            candidate_objectives,
-        ),
-        "baseline_objectives": baseline_objectives,
-        "candidate_objectives": candidate_objectives,
+        "baseline_profile": _profile_snapshot(pair["baseline_profile"]),
+        "candidate_profile": _profile_snapshot(pair["candidate_profile"]),
+        "objectives": deepcopy(pair["objectives"]),
         "profile_difference": profile_difference,
         "comparability_warnings": _comparability_warnings(
             pair["baseline_profile"],
@@ -523,24 +536,22 @@ def _pair_identity(pair: dict, profile_difference: dict) -> dict:
     }
 
 
-def _profile_snapshot(profile: SimulationProfile, objectives: list[dict]) -> dict:
+def _profile_snapshot(profile: SimulationProfile) -> dict:
     return {
         "id": str(profile.id),
         "name": profile.name,
         "simulation_type": profile.simulation_type,
         "template": deepcopy(_profile_template(profile)),
-        "objectives": deepcopy(objectives),
     }
-
-
-def _template_objectives(profile: SimulationProfile) -> list[dict]:
-    objectives = _profile_template(profile).get("objectives")
-    return deepcopy(objectives) if isinstance(objectives, list) else []
 
 
 def _profile_template(profile: SimulationProfile) -> dict:
     template = profile.request_template_json
-    return template if isinstance(template, dict) else {}
+    if not isinstance(template, dict):
+        return {}
+    result = dict(template)
+    result.pop("objectives", None)
+    return result
 
 
 def _profile_role_antennas(profile: SimulationProfile) -> set[str]:
@@ -621,6 +632,35 @@ def _requested_profile_id(requested_pair: Any, field_name: str) -> str:
     if not value:
         raise ValueError(f"{field_name} is required")
     return value
+
+
+def _requested_objectives(requested_pair: Any) -> list[dict]:
+    if isinstance(requested_pair, dict):
+        raw_objectives = requested_pair.get("objectives") or []
+    else:
+        raw_objectives = getattr(requested_pair, "objectives", None) or []
+    objectives = [
+        (
+            objective
+            if isinstance(objective, OptimizationObjective)
+            else OptimizationObjective.model_validate(objective)
+        )
+        for objective in raw_objectives
+    ]
+    metrics = [objective.metric for objective in objectives]
+    if len(metrics) != len(set(metrics)):
+        raise ValueError("Profile-pair objective metrics must be unique.")
+    return [objective.model_dump(mode="json") for objective in objectives]
+
+
+def _legacy_profile_objectives(profile: SimulationProfile) -> list[dict]:
+    template = profile.request_template_json
+    if not isinstance(template, dict):
+        return []
+    try:
+        return _requested_objectives({"objectives": template.get("objectives")})
+    except (TypeError, ValueError, ValidationError):
+        return []
 
 
 def _pair_id(ordinal: int, baseline_profile_id: str, candidate_profile_id: str) -> str:

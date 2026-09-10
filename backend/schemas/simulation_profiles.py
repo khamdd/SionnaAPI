@@ -30,6 +30,13 @@ class SimulationProfileCreateRequest(BaseModel):
             raise ValueError("value cannot be empty")
         return normalized
 
+    @field_validator("request_template")
+    @classmethod
+    def reject_study_objectives(cls, value: dict[str, Any]) -> dict[str, Any]:
+        if "objectives" in value:
+            raise ValueError("objectives belong to an impact study, not a profile")
+        return value
+
 
 class SimulationProfileUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -47,6 +54,16 @@ class SimulationProfileUpdateRequest(BaseModel):
         if not normalized:
             raise ValueError("name cannot be empty")
         return normalized
+
+    @field_validator("request_template")
+    @classmethod
+    def reject_study_objectives(
+        cls,
+        value: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        if value is not None and "objectives" in value:
+            raise ValueError("objectives belong to an impact study, not a profile")
+        return value
 
     @model_validator(mode="after")
     def require_at_least_one_change(self):

@@ -77,14 +77,17 @@ def network_template():
         "solver": solver(),
         "bandwidth_mhz": 100,
         "mimo_layers": 4,
-        "objectives": [
-            {
-                "metric": "covered_area_percent",
-                "operator": ">=",
-                "target": 90,
-            }
-        ],
     }
+
+
+def coverage_objectives(target=90):
+    return [
+        {
+            "metric": "covered_area_percent",
+            "operator": ">=",
+            "target": target,
+        }
+    ]
 
 
 def rsrp_template():
@@ -163,11 +166,19 @@ def topology_difference(antenna_id="A4"):
     }
 
 
-def profile_pair(baseline_profile, candidate_profile=None, ordinal=0):
+def profile_pair(
+    baseline_profile,
+    candidate_profile=None,
+    ordinal=0,
+    objectives=None,
+):
+    if objectives is None and baseline_profile.simulation_type == "network_coverage":
+        objectives = coverage_objectives()
     return {
         "ordinal": ordinal,
         "baseline_profile": baseline_profile,
         "candidate_profile": candidate_profile or baseline_profile,
+        "objectives": objectives or [],
     }
 
 
@@ -326,11 +337,10 @@ def test_same_profile_on_both_sides_builds_a_valid_pair():
     assert result["policy_version"] == "impact-policy-v2"
 
 
-def test_different_same_type_profiles_build_independent_requests_and_objectives():
+def test_different_same_type_profiles_share_study_objectives():
     baseline_template = network_template()
     candidate_template = network_template()
     candidate_template["bandwidth_mhz"] = 80
-    candidate_template["objectives"][0]["target"] = 95
 
     result = plan(
         field_difference("tilt.current"),
@@ -338,6 +348,7 @@ def test_different_same_type_profiles_build_independent_requests_and_objectives(
             profile_pair(
                 profile("baseline-profile", "network_coverage", baseline_template),
                 profile("candidate-profile", "network_coverage", candidate_template),
+                objectives=coverage_objectives(95),
             )
         ],
     )
@@ -345,12 +356,10 @@ def test_different_same_type_profiles_build_independent_requests_and_objectives(
     planned = result["planned_simulations"][0]
     assert planned["baseline_request"]["bandwidth_mhz"] == 100
     assert planned["candidate_request"]["bandwidth_mhz"] == 80
-    assert planned["baseline_objectives"][0]["target"] == 90
-    assert planned["candidate_objectives"][0]["target"] == 95
-    assert planned["profile_difference"]["changed_fields"] == [
-        "bandwidth_mhz",
-        "objectives[0].target",
-    ]
+    assert planned["objectives"][0]["target"] == 95
+    assert "objectives" not in planned["baseline_profile"]
+    assert "objectives" not in planned["candidate_profile"]
+    assert planned["profile_difference"]["changed_fields"] == ["bandwidth_mhz"]
 
 
 def test_profile_change_triggers_analytical_pair_when_configuration_change_is_ignored():
@@ -390,8 +399,7 @@ def test_invalid_candidate_request_is_a_side_specific_skip():
 
     skipped = result["skipped_simulations"][0]
     assert set(skipped["side_reasons"]) == {"candidate"}
-    assert skipped["baseline_objectives"] == []
-    assert skipped["candidate_objectives"] == []
+    assert skipped["objectives"] == []
     assert skipped["comparability_warnings"] == []
     assert skipped["side_reasons"]["candidate"]["reason_code"] == (
         "invalid_role_profile"
@@ -493,10 +501,12 @@ def test_explicit_pair_loader_preserves_order_and_loads_only_selected_profiles()
             {
                 "baseline_profile_id": CANDIDATE_PROFILE_ID,
                 "candidate_profile_id": BASELINE_PROFILE_ID,
+                "objectives": coverage_objectives(),
             },
             {
                 "baseline_profile_id": BASELINE_PROFILE_ID,
                 "candidate_profile_id": BASELINE_PROFILE_ID,
+                "objectives": coverage_objectives(95),
             },
         ],
         USER_ID,
@@ -506,7 +516,52 @@ def test_explicit_pair_loader_preserves_order_and_loads_only_selected_profiles()
     assert [pair["ordinal"] for pair in result] == [0, 1]
     assert result[0]["baseline_profile"] is second
     assert result[0]["candidate_profile"] is first
+    assert result[0]["objectives"][0]["target"] == 90
+    assert result[1]["objectives"][0]["target"] == 95
     assert session.loaded_ids == [CANDIDATE_PROFILE_ID, BASELINE_PROFILE_ID]
+
+
+def test_explicit_network_pair_requires_shared_objectives():
+    class Session:
+        def get(self, model, profile_id):
+            return profile(profile_id, "network_coverage", network_template())
+
+    result = impact_planner._load_explicit_profile_pairs(
+        Session(),
+        [
+            {
+                "baseline_profile_id": BASELINE_PROFILE_ID,
+                "candidate_profile_id": CANDIDATE_PROFILE_ID,
+            }
+        ],
+        USER_ID,
+        "scene-1",
+    )
+
+    assert result["status_code"] == 422
+    assert result["error_code"] == "invalid_profile_pair_objectives"
+
+
+def test_explicit_non_coverage_pair_rejects_shared_coverage_objectives():
+    class Session:
+        def get(self, model, profile_id):
+            return profile(profile_id, "sinr", sinr_template())
+
+    result = impact_planner._load_explicit_profile_pairs(
+        Session(),
+        [
+            {
+                "baseline_profile_id": BASELINE_PROFILE_ID,
+                "candidate_profile_id": CANDIDATE_PROFILE_ID,
+                "objectives": coverage_objectives(),
+            }
+        ],
+        USER_ID,
+        "scene-1",
+    )
+
+    assert result["status_code"] == 422
+    assert result["error_code"] == "unsupported_profile_pair_objectives"
 
 
 def test_preview_schema_rejects_duplicate_pairs():
@@ -520,6 +575,21 @@ def test_preview_schema_rejects_duplicate_pairs():
             baseline_configuration_id=BASELINE_ID,
             candidate_configuration_id=CANDIDATE_ID,
             profile_pairs=[pair, pair],
+        )
+
+
+def test_preview_schema_rejects_duplicate_objective_metrics():
+    with pytest.raises(ValidationError, match="objective metrics must be unique"):
+        ConfigurationImpactPreviewRequest(
+            baseline_configuration_id=BASELINE_ID,
+            candidate_configuration_id=CANDIDATE_ID,
+            profile_pairs=[
+                {
+                    "baseline_profile_id": BASELINE_PROFILE_ID,
+                    "candidate_profile_id": CANDIDATE_PROFILE_ID,
+                    "objectives": coverage_objectives() * 2,
+                }
+            ],
         )
 
 
@@ -559,6 +629,7 @@ def test_preview_api_passes_authenticated_user(monkeypatch, authenticated_user):
                 {
                     "baseline_profile_id": BASELINE_PROFILE_ID,
                     "candidate_profile_id": CANDIDATE_PROFILE_ID,
+                    "objectives": coverage_objectives(),
                 }
             ],
         },
@@ -573,6 +644,7 @@ def test_preview_api_passes_authenticated_user(monkeypatch, authenticated_user):
             {
                 "baseline_profile_id": BASELINE_PROFILE_ID,
                 "candidate_profile_id": CANDIDATE_PROFILE_ID,
+                "objectives": coverage_objectives(),
             }
         ],
         "user_id": USER_ID,

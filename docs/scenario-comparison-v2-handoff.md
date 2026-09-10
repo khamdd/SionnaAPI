@@ -1,6 +1,6 @@
 # Scenario Comparison v2 — Development Handoff
 
-Updated: 2026-09-09
+Updated: 2026-09-10
 
 This document is a standalone implementation plan for continuing the Nationwide
 Network Impact Playground from the current repository state. Treat it as project
@@ -31,7 +31,8 @@ Candidate scenario = Configuration B + Profile B
 
 The two configurations must be different. The two profiles may be the same or
 different. A direct pair must use the same simulation type, but its radio, solver,
-role, sampling, and objective settings may differ intentionally.
+role, and sampling settings may differ intentionally. Each pair has one shared
+objective list so both scenario results are judged against the same decision target.
 
 The product is therefore a **scenario comparison**, not a controlled experiment
 that always holds the profile constant. When profiles differ, the result represents
@@ -42,7 +43,7 @@ must show both categories of change so that this is never hidden.
 
 At the time of this handoff:
 
-- Git HEAD is `dc19b29 refactor(impact): plan explicit scenario profile pairs`.
+- Git HEAD is `1feaebd feat(profiles): validate eligibility and remove unused camera inputs`.
 - Slice work is intentionally left uncommitted so each completed step can be
   reviewed before the user commits it.
 - The backend already has immutable network configurations, saved simulation
@@ -53,8 +54,8 @@ At the time of this handoff:
 - There is no Impact Preview or Impact Studies frontend workflow yet.
 - Dry-run impact preview now uses `impact-policy-v2`, requires explicit ordered
   profile pairs, independently resolves both scenario requests, and returns
-  stable pair IDs, profile snapshots/diffs, side-specific objectives/skips, and
-  comparability warnings. It remains side-effect free.
+  stable pair IDs, profile snapshots/diffs, shared pair objectives, side-specific
+  skips, and comparability warnings. It remains side-effect free.
 - Durable Impact Study creation/execution and downstream comparison still assume
   one profile is reused for both scenarios. Study creation temporarily uses an
   explicit policy-v1 compatibility entry point until Slice 3 migrates persistence.
@@ -64,6 +65,9 @@ At the time of this handoff:
   profiles as eligible for either scenario side.
 - The unused camera request/profile field was removed before Slice 3. It never
   affected backend simulation; the interactive 3D camera remains frontend-only.
+- Objectives were removed from reusable simulation profiles before Slice 3. The
+  policy-v2 preview now accepts one shared objective list per pair; durable study
+  persistence still needs to carry that list forward in Slice 3.
 - Existing manual scene-first simulation pages and their browser localStorage
   drafts must remain unchanged.
 
@@ -109,7 +113,14 @@ Proposed preview and study-create input:
   "profile_pairs": [
     {
       "baseline_profile_id": "cccccccc-cccc-cccc-cccc-cccccccccccc",
-      "candidate_profile_id": "cccccccc-cccc-cccc-cccc-cccccccccccc"
+      "candidate_profile_id": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+      "objectives": [
+        {
+          "metric": "covered_area_percent",
+          "operator": ">=",
+          "target": 90
+        }
+      ]
     },
     {
       "baseline_profile_id": "dddddddd-dddd-dddd-dddd-dddddddddddd",
@@ -132,6 +143,9 @@ Contract rules:
 - Both profiles in a pair must have the same `simulation_type`.
 - The baseline and candidate profile IDs may be identical.
 - Reject duplicate `(baseline_profile_id, candidate_profile_id)` tuples.
+- Network Coverage pairs require one or two objectives with unique metrics.
+- Other simulation types require no objectives until supported decision metrics
+  are defined for them.
 - Do not infer profile pairs by loading every enabled scene profile.
 - Assign each accepted pair a stable `pair_id` in the saved plan. Use a UUID or a
   deterministic hash of the pair ordinal and selected IDs; never use one profile
@@ -150,22 +164,19 @@ Recommended planned-entry shape:
   "baseline_profile": {
     "id": "...",
     "name": "Standard coverage",
-    "template": {},
-    "objectives": []
+    "template": {}
   },
   "candidate_profile": {
     "id": "...",
     "name": "Dense urban coverage",
-    "template": {},
-    "objectives": []
+    "template": {}
   },
   "profile_difference": {},
   "triggering_changes": [],
   "affected_antennas": [],
   "baseline_request": {},
   "candidate_request": {},
-  "baseline_objectives": [],
-  "candidate_objectives": [],
+  "objectives": [],
   "comparability_warnings": [],
   "job_count": 2
 }
@@ -205,7 +216,7 @@ by field path and report before/after values. At minimum include:
 - user count, height, and random seed;
 - antenna roles;
 - base/target tilt fields;
-- objectives.
+- any other simulation-affecting template fields.
 
 Equivalent numeric values and dictionary key order must not produce false changes.
 
@@ -227,14 +238,18 @@ incompatible merely because profile settings differ.
 
 ### Objective semantics
 
-- Evaluate baseline KPIs against `baseline_objectives`.
-- Evaluate candidate KPIs against `candidate_objectives`.
+- Objectives belong to the Impact Study profile pair, not either reusable profile.
+- Evaluate both baseline and candidate KPIs against the pair's same `objectives`
+  list so the decision target remains fixed across the comparison.
+- Network Coverage requires one or two objectives with unique metrics. Other
+  simulation types currently carry no objectives until their metrics are defined.
 - Raw KPI deltas do not depend on objectives.
-- The final decision uses candidate objectives plus existing conservative spatial
-  regression checks.
-- Baseline objective outcomes are context, not candidate pass criteria.
-- If candidate objectives are absent, the result should be `review`, not `pass`.
-- Do not silently apply objectives from one side to the other.
+- Baseline objective outcomes provide the starting context; candidate outcomes
+  determine whether the proposed scenario meets the shared target.
+- The final decision uses candidate outcomes plus the existing conservative
+  spatial regression checks.
+- If a future simulation type has no supported objectives, the result should be
+  `review`, not `pass` based on an invented threshold.
 
 ## Profile lifecycle adjustment
 
@@ -279,9 +294,10 @@ Implemented:
 - Added deterministic recursive profile-template comparison with stable field
   paths and canonical numeric handling.
 - Added policy-v2 explicit-pair loading, visibility/scene/enabled/type validation,
-  independent request resolution, stable pair IDs, side-specific skips and
-  objectives, profile/configuration trigger separation, union role handling, and
-  preview comparability warnings.
+  independent request resolution, stable pair IDs, side-specific skips,
+  profile/configuration trigger separation, union role handling, and preview
+  comparability warnings. The initial side-specific objective snapshot was later
+  replaced by the shared-objective correction gate below.
 - Kept durable study creation on a named policy-v1 compatibility entry point;
   pair-keyed study persistence remains exclusively Slice 3 work.
 
@@ -310,7 +326,7 @@ Work:
 - Update applicability logic for profile changes and the union of role antennas.
 - Bump the policy identifier to `impact-policy-v2`.
 - Return the v2 planned/skipped shape with `pair_id`, both profile snapshots,
-  both objective lists, profile diff, and warnings.
+  pair objectives, profile diff, and warnings.
 - Update `test/test_impact_planner.py` and add focused profile-diff tests.
 - Update `docs/impact-planning.md` and `AGENTS.md`.
 
@@ -415,6 +431,41 @@ Suggested commit message:
 refactor(simulation): remove unused camera inputs
 ```
 
+### Correction gate — Move objectives from profiles to study pairs
+
+Status: **complete (2026-09-10)**
+
+Implemented:
+
+- Removed objective editing, readiness checks, defaults, and summaries from the
+  Simulation Profiles UI.
+- Profile create/update and service validation now reject `objectives`; request
+  construction no longer includes them.
+- Added one shared `objectives` list to each policy-v2 profile pair. Network
+  Coverage requires one or two unique coverage objectives; other simulation
+  types currently accept none.
+- Planned and skipped entries retain their pair objectives without embedding
+  thresholds in either profile snapshot. Both scenario results will be evaluated
+  against this one target during pair-aware comparison.
+- Preserved policy-v1 durable-study compatibility while keeping legacy stored
+  objective fields out of v2 profile snapshots and diffs.
+
+Verification:
+
+- Focused profile/planner/profile-diff suite: 61 passed.
+- Existing Impact Study/comparison/optimization/report/notification compatibility
+  suite: 41 passed.
+- Frontend production build passed; the existing large-chunk warning remains.
+- Full backend suite: 277 passed and the same three unrelated schema-drift
+  failures remain in `test_rsrp_service.py` (two) and `test_scene_service.py`
+  (one); those tests still submit the forbidden antenna `position` field.
+
+Suggested commit message:
+
+```text
+refactor(impact): move objectives to impact pairs
+```
+
 ### Slice 3 — Durable v2 study jobs and migration
 
 Status: **next**
@@ -437,7 +488,8 @@ Recommended persistence change:
 Work:
 
 - Update study creation to pass explicit pairs into planner v2.
-- Save the complete immutable v2 execution plan.
+- Save the complete immutable v2 execution plan, including each pair's shared
+  objectives.
 - Create baseline jobs with baseline profile IDs and candidate jobs with candidate
   profile IDs.
 - Group and serialize jobs with `impact_profile_pair_id`.
@@ -468,14 +520,17 @@ Work:
 - Group child jobs by `impact_profile_pair_id`, with legacy fallback.
 - Separate scalar-KPI comparability from spatial-grid comparability.
 - Add profile methodology and sampling warnings.
-- Return both profile identities, profile diff, and both objective outcomes.
-- Update final decision logic to use candidate objectives explicitly.
+- Return both profile identities, profile diff, and both scenarios' outcomes
+  against the shared pair objectives.
+- Update final decision logic to use the candidate's outcomes against the shared
+  pair objectives.
 - Key conditional Network Coverage optimization by pair ID and use the candidate
-  request/profile/objectives.
+  request/profile with the pair objectives.
 - Add a pair-keyed suggested-configuration endpoint. Keep the profile-keyed route
   as a documented legacy route until old studies no longer need it.
 - Update all 12 report sections to display Scenario A and Scenario B inputs,
-  configuration changes, profile changes, warnings, and side-specific objectives.
+  configuration changes, profile changes, warnings, and shared objectives with
+  each scenario's outcome.
 - Keep terminal notifications one per parent study.
 - Update comparison, optimization, report, notification, and API tests.
 
@@ -484,7 +539,8 @@ Acceptance criteria:
 - Different solver grids still compare aggregate KPIs and explain unavailable
   spatial deltas.
 - Different propagation models show warnings rather than losing all KPI deltas.
-- Candidate optimization uses only candidate-side settings and objectives.
+- Candidate optimization uses only candidate-side settings while measuring
+  success against the shared pair objectives.
 - Reports never imply the profile was held constant when it was not.
 - Partial failures and missing jobs remain explicit.
 
@@ -508,11 +564,12 @@ Workflow:
    configuration diff.
 3. Display simulation types affected by configuration and profile changes.
 4. Add one or more profile-pair rows.
-5. Preselect compatible profiles where possible; allow same or different choices.
-6. Show profile differences and compatibility warnings per pair.
-7. Call dry-run preview and show planned, skipped, affected antennas/area, and
+5. Set the shared objectives for each Network Coverage pair.
+6. Preselect compatible profiles where possible; allow same or different choices.
+7. Show profile differences and compatibility warnings per pair.
+8. Call dry-run preview and show planned, skipped, affected antennas/area, and
    estimated job count.
-8. Creating a study is a separate explicit action.
+9. Creating a study is a separate explicit action.
 
 Add frontend API functions for preview and study creation. Keep unsaved selector
 state scene-scoped and separate from all manual simulation localStorage keys.
@@ -664,7 +721,7 @@ The architecture correction is complete only when all of the following are true:
 - Profile and configuration differences are both visible and snapshotted.
 - Aggregate KPIs survive reasonable profile-method differences with warnings.
 - Spatial comparison can be unavailable without invalidating aggregate KPIs.
-- Side-specific objectives are evaluated and labeled correctly.
+- Shared pair objectives are evaluated and labeled for both scenarios.
 - Optimization uses the candidate scenario only.
 - Legacy studies remain readable.
 - The Profiles GUI no longer implies one profile is automatically shared by both

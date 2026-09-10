@@ -104,7 +104,7 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   confirmation. It does not migrate or alter existing manual simulation drafts.
 - Saved simulation profiles are stored in PostgreSQL through
   `backend/services/simulation_profile_service.py`. Profiles keep explicit solver,
-  radio, objective, and role settings separate from antenna configuration
+  radio, sampling, and role settings separate from antenna configuration
   versions. Making a profile eligible requires an explicit readable same-scene
   configuration ID; published, superseded, and caller-owned drafts are valid
   targets. Network Coverage and RSRP receive enabled configuration antennas;
@@ -115,7 +115,7 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   and frontend localStorage remain unchanged.
 - The frontend `/profiles` route provides a structured Simulation Profiles
   workspace. Its ledger separates eligible profiles from disabled drafts; editors
-  cover the supported solver, radio, sampling, objective, and antenna-role
+  cover the supported solver, radio, sampling, and antenna-role
   fields. The eligibility panel defaults validation to the published configuration
   while allowing readable drafts and superseded versions, and its selection also
   supplies role antennas. Eligible means available for either scenario side, not
@@ -126,6 +126,13 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   schemas, frontend payloads, and simulation profiles because backend simulation
   services never consumed them. The interactive `Scene3DPreview` camera remains
   frontend-only and does not affect simulation inputs.
+- Decision objectives belong to an Impact Study profile pair, not a reusable
+  simulation profile. Policy-v2 preview accepts one shared objective list per
+  pair and applies it to both baseline and candidate results. Network Coverage
+  pairs require one or two unique coverage objectives; other simulation types
+  currently accept none. Profile create/update validation rejects objective
+  fields, and the Profiles UI no longer edits them. Persisting these pair-owned
+  objectives in durable studies remains part of the next study-migration slice.
 - `backend/services/configuration_diff_service.py` compares two network
   configuration snapshots deterministically. It reports antenna additions,
   removals, and before/after changes for enabled status, geographic position,
@@ -139,12 +146,12 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   it accepts one to 20 explicit ordered baseline/candidate profile pairs, loads
   only those enabled readable profiles, independently resolves each side against
   its configuration, and returns stable pair IDs, profile snapshots and diffs,
-  side-specific objectives/skips, warnings, affected antennas, and estimated job
-  count without creating rows or jobs. Same-profile pairs remain valid. Profile
-  changes trigger a run even when an analytical model ignores the accompanying
-  antenna-only change, and role applicability uses the union of both sides'
-  antenna roles. Existing durable Impact Study creation remains on an explicit
-  policy-v1 compatibility path until paired persistence is implemented.
+  shared pair objectives, side-specific skips, warnings, affected antennas, and
+  estimated job count without creating rows or jobs. Same-profile pairs remain
+  valid. Profile changes trigger a run even when an analytical model ignores the
+  accompanying antenna-only change, and role applicability uses the union of both
+  sides' antenna roles. Existing durable Impact Study creation remains on an
+  explicit policy-v1 compatibility path until paired persistence is implemented.
 - Durable impact studies are stored through
   `backend/services/impact_study_service.py`. Authenticated APIs create and list
   studies, inspect one study, start it, and cancel it. Starting creates exactly
@@ -346,7 +353,8 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 - `backend/services/configuration_diff_service.py`: deterministic field-level
   comparison of network configuration versions.
 - `backend/services/profile_diff_service.py`: deterministic recursive comparison
-  of canonical profile-template JSON, including objectives and role assignments.
+  of canonical profile-template JSON, including solver, radio, sampling, and role
+  assignments.
 - `backend/services/impact_planner.py`: policy-versioned dry-run mapping from
   configuration/profile changes and explicit scenario pairs to planned and
   skipped simulations.

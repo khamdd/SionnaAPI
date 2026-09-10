@@ -27,14 +27,14 @@ def test_nested_profile_changes_are_reported_in_deterministic_field_order():
     result = compare_profile_templates(
         {
             "bandwidth_mhz": 100,
-            "objectives": [{"metric": "coverage", "target": 90}],
+            "random_seed": 42,
             "roles": {"transmitter": "A1"},
             "solver": {"cell_size": 2, "max_depth": 5},
         },
         {
             "bandwidth_mhz": 80,
             "noise_figure_db": 7,
-            "objectives": [{"metric": "coverage", "target": 95}],
+            "random_seed": 84,
             "roles": {"transmitter": "A2"},
             "solver": {"cell_size": 4, "max_depth": 5},
         },
@@ -43,7 +43,7 @@ def test_nested_profile_changes_are_reported_in_deterministic_field_order():
     assert result["changed_fields"] == [
         "bandwidth_mhz",
         "noise_figure_db",
-        "objectives[0].target",
+        "random_seed",
         "roles.transmitter",
         "solver.cell_size",
     ]

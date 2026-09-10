@@ -33,13 +33,6 @@ const PROPAGATION_MODELS = [
   ["friis", "Friis"],
 ];
 
-const OBJECTIVE_METRICS = [
-  ["uncovered_area_percent", "Uncovered area", "%", "<=", 2],
-  ["covered_area_percent", "Covered area", "%", ">=", 98],
-  ["overlap_area_percent", "Overlap area", "%", "<=", 25],
-  ["average_overlap_count", "Average overlap", "antennas", "<=", 2],
-];
-
 const ROLE_TYPES = {
   coverage_map: [["transmitter", "Transmitter"]],
   sinr: [
@@ -588,7 +581,6 @@ function ProfileEditorFields({
         </div>
       </section>
 
-      {type === "network_coverage" && <ObjectiveFields draft={draft} onChange={onChange} />}
     </div>
   );
 }
@@ -712,50 +704,6 @@ function SolverFields({ draft, onChange }) {
 }
 
 
-function ObjectiveFields({ draft, onChange }) {
-  const objectives = draft.request_template.objectives || [];
-  function update(index, field, value) {
-    const next = objectives.map((objective, objectiveIndex) => {
-      if (objectiveIndex !== index) return objective;
-      if (field === "metric") {
-        const metric = OBJECTIVE_METRICS.find(([metricId]) => metricId === value);
-        return { metric: value, operator: metric[3], target: metric[4] };
-      }
-      return { ...objective, [field]: value };
-    });
-    onTemplateChange(draft, onChange, "objectives", next);
-  }
-  return (
-    <section className="profile-form-section objective-section">
-      <div className="profile-section-heading">
-        <div><h3>Decision objectives</h3><p>One or two measurable conditions determine whether the candidate passes.</p></div>
-        <span>{objectives.length} of 2</span>
-      </div>
-      <div className="profile-objective-list">
-        {objectives.map((objective, index) => {
-          const metric = OBJECTIVE_METRICS.find(([metricId]) => metricId === objective.metric);
-          return (
-            <div className="profile-objective-row" key={`${objective.metric}-${index}`}>
-              <span>Target {index + 1}</span>
-              <label><small>Metric</small><select value={objective.metric} onChange={(event) => update(index, "metric", event.target.value)}>{OBJECTIVE_METRICS.map(([value, label]) => <option key={value} value={value} disabled={objectives.some((item, itemIndex) => itemIndex !== index && item.metric === value)}>{label}</option>)}</select></label>
-              <label><small>Condition</small><select value={objective.operator} onChange={(event) => update(index, "operator", event.target.value)}>{["<=", ">=", "<", ">", "="].map((operator) => <option key={operator}>{operator}</option>)}</select></label>
-              <label><small>Target</small><span className="profile-unit-input"><input type="number" min={0} max={objective.metric === "average_overlap_count" ? 10 : 100} step="any" value={objective.target} onChange={(event) => update(index, "target", parseNumber(event.target.value))} /><i>{metric?.[2]}</i></span></label>
-              {index > 0 && <button className="ghost-button" type="button" onClick={() => onTemplateChange(draft, onChange, "objectives", objectives.filter((_, itemIndex) => itemIndex !== index))}>Remove</button>}
-            </div>
-          );
-        })}
-      </div>
-      {objectives.length < 2 && (
-        <button className="ghost-button profile-add-objective" type="button" onClick={() => {
-          const metric = OBJECTIVE_METRICS.find(([metricId]) => !objectives.some((item) => item.metric === metricId));
-          onTemplateChange(draft, onChange, "objectives", [...objectives, { metric: metric[0], operator: metric[3], target: metric[4] }]);
-        }}>Add objective</button>
-      )}
-    </section>
-  );
-}
-
-
 function TextField({ label, maxLength, onChange, value }) {
   return <label className="profile-field"><span>{label}</span><input type="text" maxLength={maxLength} value={value} onChange={(event) => onChange(event.target.value)} /></label>;
 }
@@ -797,7 +745,6 @@ function ProfileSummary({ profile, template }) {
       <section><h3>Purpose</h3><p>{typeInfo[2]}</p></section>
       <section><h3>Execution</h3><p>{template.propagation_model ? propagationLabel(template.propagation_model) : "Sionna scene simulation"}; {template.solver?.cell_size ?? "–"} m cells; {Number(template.solver?.samples_per_tx || 0).toLocaleString()} samples per transmitter.</p></section>
       {roleText && <section><h3>Roles</h3><p>{roleText}</p></section>}
-      {Array.isArray(template.objectives) && <section><h3>Objectives</h3><p>{template.objectives.map(formatObjective).join("; ") || "No objective configured."}</p></section>}
     </div>
   );
 }
@@ -881,7 +828,6 @@ function createProfileDraft(simulationType, activeScene) {
       solver,
       bandwidth_mhz: 100,
       mimo_layers: 4,
-      objectives: [{ metric: "covered_area_percent", operator: ">=", target: 90 }],
     },
     coverage_map: {
       roles: { transmitter: "" },
@@ -936,19 +882,11 @@ function evaluateProfileDraft(draft, validationConfiguration, antennas) {
   );
   const numericValues = requiredNumericValues(draft.simulation_type, template);
   const numericComplete = numericValues.every((value) => Number.isFinite(Number(value)));
-  const objectives = template.objectives || [];
-  const objectivesValid = draft.simulation_type !== "network_coverage" || (
-    objectives.length >= 1
-    && objectives.length <= 2
-    && new Set(objectives.map((item) => item.metric)).size === objectives.length
-    && objectives.every((item) => Number.isFinite(Number(item.target)))
-  );
   return [
     { ok: Boolean(String(draft.name || "").trim()), label: "Profile identity", detail: "A unique scene-level name is required." },
     { ok: Boolean(validationConfiguration), label: "Validation configuration", detail: validationConfiguration ? `${configurationLabel(validationConfiguration)} will resolve antennas.` : "Choose a readable configuration before validation." },
     { ok: numericComplete, label: "Explicit settings", detail: numericComplete ? "Required solver and radio values are present." : "One or more numeric settings are incomplete." },
     { ok: assignedRoles, label: "Antenna roles", detail: roles.length === 0 ? "This simulation uses every enabled configuration antenna." : assignedRoles ? "Distinct enabled antennas are assigned." : "Assign a different enabled antenna to every role." },
-    { ok: objectivesValid, label: "Decision objectives", detail: draft.simulation_type === "network_coverage" ? (objectivesValid ? "Coverage objectives are ready." : "Add one or two unique valid objectives.") : "Objectives are not required for this simulation type." },
   ];
 }
 
@@ -965,7 +903,9 @@ function requiredNumericValues(type, template) {
 
 
 function normalizeTemplate(template) {
-  return structuredClone(template || {});
+  const normalized = structuredClone(template || {});
+  delete normalized.objectives;
+  return normalized;
 }
 
 
@@ -1008,12 +948,6 @@ function configurationStatusLabel(status) {
   if (status === "superseded") return "Superseded";
   if (status === "draft") return "Draft";
   return status || "Configuration";
-}
-
-
-function formatObjective(objective) {
-  const metric = OBJECTIVE_METRICS.find(([value]) => value === objective.metric);
-  return `${metric?.[1] || objective.metric} ${objective.operator} ${objective.target}${metric?.[2] === "%" ? "%" : ` ${metric?.[2] || ""}`}`;
 }
 
 

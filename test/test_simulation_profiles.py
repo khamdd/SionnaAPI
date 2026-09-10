@@ -95,13 +95,6 @@ def network_coverage_template():
         "solver": solver(),
         "bandwidth_mhz": 100,
         "mimo_layers": 4,
-        "objectives": [
-            {
-                "metric": "covered_area_percent",
-                "operator": ">=",
-                "target": 90,
-            }
-        ],
     }
 
 
@@ -149,7 +142,6 @@ def test_network_profile_builds_an_existing_request_model():
     request = NetworkCoverageRequest.model_validate(result["request"])
     assert [item.id for item in request.antennas] == ["A1", "A2", "A3"]
     assert all("enabled" not in item for item in result["request"]["antennas"])
-    assert result["objectives"][0]["target"] == 90
 
 
 def test_incomplete_profile_cannot_be_enabled():
@@ -295,6 +287,40 @@ def test_camera_is_not_a_supported_profile_field():
     assert result["status_code"] == 422
     assert result["error_code"] == "unknown_profile_field"
     assert "camera" in result["error"]
+
+
+def test_objectives_are_not_supported_in_profiles():
+    template = network_coverage_template()
+    template["objectives"] = [
+        {
+            "metric": "covered_area_percent",
+            "operator": ">=",
+            "target": 90,
+        }
+    ]
+
+    result = service.validate_profile_definition(
+        "network_coverage",
+        template,
+        configuration(),
+        scene_info(),
+    )
+
+    assert result["status_code"] == 422
+    assert result["error_code"] == "study_field_in_profile"
+
+
+def test_profile_schema_rejects_objectives_in_request_template():
+    template = network_coverage_template()
+    template["objectives"] = []
+
+    with pytest.raises(ValidationError, match="objectives belong to an impact study"):
+        SimulationProfileCreateRequest(
+            scene_id="scene-1",
+            name="Coverage",
+            simulation_type="network_coverage",
+            request_template=template,
+        )
 
 
 def test_profile_update_rejects_explicit_null():
