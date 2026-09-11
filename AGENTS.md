@@ -247,7 +247,10 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   coordinates remain read-only in the UI. Coverage API exposes azimuth as a
   simulation field: fixed antennas initialize it from base data, custom
   transmitters default to 0 degrees, and the backend applies it to transmitter
-  orientation.
+  orientation. All antenna azimuth values are compass convention (0 = north,
+  clockwise); `backend/simulations/antenna_factory.py:sionna_azimuth_rad`
+  converts them to Sionna's math-convention Euler angle (0 = +x/east,
+  counterclockwise) before transmitter orientation is set.
 - SINR API uses exactly three role antennas: one transmitter, one receiver, and
   one interferer. The page builds candidates from fixed type 1 scene antennas and
   SINR-only type 2 antennas. Users can add SINR-only type 2 candidates even when

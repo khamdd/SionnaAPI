@@ -8,7 +8,11 @@ from backend.constants import (
     STATIC_DIR,
 )
 from backend.schemas.requests import CoverageRequest, NetworkCoverageRequest
-from backend.simulations.antenna_factory import remove_entity, sync_transmitter
+from backend.simulations.antenna_factory import (
+    remove_entity,
+    sionna_azimuth_rad,
+    sync_transmitter,
+)
 from backend.simulations.overlap import build_overlap_info, summarize_overlap
 from backend.simulations.radio_calculator import (
     calculate_5g_throughput,
@@ -21,7 +25,7 @@ def calculate_coverage_map_service(req: CoverageRequest, base_url, scene):
     try:
         solver = req.solver
         tilt_rad = req.tilt * np.pi / 180
-        azimuth_rad = req.azimuth * np.pi / 180
+        azimuth_rad = sionna_azimuth_rad(req.azimuth)
 
         remove_entity(scene, "tx0")
 

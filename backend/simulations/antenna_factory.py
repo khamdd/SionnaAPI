@@ -7,6 +7,10 @@ from sionna.rt import (
 from backend.constants import DEFAULT_TRANSMITTER_PATTERN
 
 
+def sionna_azimuth_rad(azimuth_deg):
+    return np.radians(90.0 - float(azimuth_deg))
+
+
 def sync_transmitter(
     scene,
     name,
@@ -18,7 +22,7 @@ def sync_transmitter(
     configure_tx_array=True,
 ):
     tilt_rad = tilt_deg * np.pi / 180
-    azimuth_rad = azimuth_deg * np.pi / 180
+    azimuth_rad = sionna_azimuth_rad(azimuth_deg)
 
     tx = scene.transmitters.get(name)
 
