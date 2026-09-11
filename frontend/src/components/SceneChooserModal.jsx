@@ -19,6 +19,7 @@ import { importAntennasFromWorkbook } from "../utils/antennaImport";
 import { downloadAntennaTemplate } from "../utils/antennaTemplate";
 import { formatMaybeNumber } from "../utils/format";
 import { lngLatInsideBounds } from "../utils/scene";
+import { filterWards, parseWardCsv } from "../utils/wardSearch";
 
 export default function SceneChooserPage({
   onCancel,
@@ -43,6 +44,9 @@ export default function SceneChooserPage({
   const [bounds, setBounds] = useState(null);
   const [previewBounds, setPreviewBounds] = useState(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
+  const [wards, setWards] = useState([]);
+  const [wardQuery, setWardQuery] = useState("");
+  const [isWardOptionsOpen, setIsWardOptionsOpen] = useState(false);
   const [status, setStatus] = useState(
     "Move and zoom the map, then click Select area to draw a scene rectangle.",
   );
@@ -50,9 +54,38 @@ export default function SceneChooserPage({
   const [error, setError] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [isControlPanelVisible, setIsControlPanelVisible] = useState(true);
+  const selectedWardCodeRef = useRef(null);
 
   const metrics = bounds ? calculateMetrics(bounds) : null;
   const antennaDisplayBounds = antennaPlacementBounds;
+  const wardMatches = filterWards(wards, wardQuery);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch(`${offlineMapDataBaseUrl()}hanoi-wards.csv`)
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return response.text();
+      })
+      .then((text) => {
+        if (!cancelled) {
+          setWards(parseWardCsv(text));
+        }
+      })
+      .catch((caught) => {
+        if (!cancelled) {
+          setStatus(`Ward list could not be loaded: ${caught.message}`);
+          setError(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const node = mapNodeRef.current;
@@ -93,6 +126,7 @@ export default function SceneChooserPage({
 
     map.on("load", () => {
       ensureSelectionLayers(map);
+      ensureWardLayers(map);
       setIsMapReady(true);
       setStatus(
         "Offline map loaded. Move and zoom the map, then click Select area to draw a scene rectangle.",
@@ -266,6 +300,106 @@ export default function SceneChooserPage({
     }
   }
 
+  function clearWardOverlay() {
+    const map = mapRef.current;
+    selectedWardCodeRef.current = null;
+
+    if (map?.getSource("ward-boundary")) {
+      map.getSource("ward-boundary").setData(emptyFeatureCollection());
+    }
+  }
+
+  async function showWardBoundary(ward) {
+    const map = mapRef.current;
+
+    if (!map || !isMapReady) {
+      return;
+    }
+
+    ensureWardLayers(map);
+    selectedWardCodeRef.current = ward.ward_code;
+
+    try {
+      const feature = await loadWardFeature(ward.ward_code);
+
+      if (selectedWardCodeRef.current !== ward.ward_code) {
+        return;
+      }
+
+      const source = map.getSource("ward-boundary");
+
+      if (!source) {
+        return;
+      }
+
+      source.setData(
+        feature
+          ? { type: "FeatureCollection", features: [feature] }
+          : emptyFeatureCollection(),
+      );
+
+      if (!feature) {
+        setStatus(`Ward boundary geometry was not found for ${ward.ward_name}.`);
+        setError(true);
+      }
+    } catch (caught) {
+      if (selectedWardCodeRef.current === ward.ward_code) {
+        setStatus(`Ward boundary could not be displayed: ${caught.message}`);
+        setError(true);
+      }
+    }
+  }
+
+  function selectWard(ward) {
+    if (isBusy || !isMapReady) {
+      return;
+    }
+
+    const wardBounds = {
+      south: Number(ward.bbox_south),
+      west: Number(ward.bbox_west),
+      north: Number(ward.bbox_north),
+      east: Number(ward.bbox_east),
+    };
+
+    if (
+      ![
+        wardBounds.south,
+        wardBounds.west,
+        wardBounds.north,
+        wardBounds.east,
+      ].every(Number.isFinite)
+    ) {
+      return;
+    }
+
+    setIsWardOptionsOpen(false);
+    setWardQuery(ward.ward_name);
+    setBounds(wardBounds);
+    setPreviewBounds(wardBounds);
+    setIsPreviewing(true);
+    setIsSelectingArea(false);
+    setSceneNameError("");
+    setError(false);
+
+    if (!sceneName.trim()) {
+      setSceneName(ward.ward_name);
+    }
+
+    setStatus(
+      `Selected ${ward.ward_full_name}. The covering rectangle is ready for preview.`,
+    );
+
+    const map = mapRef.current;
+
+    if (map) {
+      updateSelectionBounds(map, wardBounds);
+    }
+
+    showWardBoundary(ward);
+    focusMapOnBounds(wardBounds);
+  }
+
   function clearAntennaMarkers() {
     antennaMarkersRef.current.forEach((marker) => marker.remove());
     antennaMarkersRef.current = [];
@@ -281,6 +415,9 @@ export default function SceneChooserPage({
     setPreviewBounds(null);
     setBounds(null);
     removeRectangle();
+    clearWardOverlay();
+    setWardQuery("");
+    setIsWardOptionsOpen(false);
     setIsSelectingArea(true);
   }
 
@@ -301,6 +438,9 @@ export default function SceneChooserPage({
     setIsPreviewing(false);
     setPreviewBounds(null);
     removeRectangle();
+    clearWardOverlay();
+    setWardQuery("");
+    setIsWardOptionsOpen(false);
     setIsSelectingArea(false);
     setError(false);
     setStatus(`Moved map to ${place.name}.`);
@@ -474,6 +614,9 @@ export default function SceneChooserPage({
     setPreviewBounds(null);
     setBounds(null);
     removeRectangle();
+    clearWardOverlay();
+    setWardQuery("");
+    setIsWardOptionsOpen(false);
     setError(false);
     setIsSelectingArea(true);
     setStatus(
@@ -590,6 +733,43 @@ export default function SceneChooserPage({
 
           {!isPreviewing && (
             <div className="scene-page-form">
+              <div className="scene-ward-field">
+                <label htmlFor="scene-ward-search">
+                  Ward search (Hà Nội)
+                </label>
+                <input
+                  id="scene-ward-search"
+                  type="text"
+                  value={wardQuery}
+                  placeholder="Search a ward, e.g. Cầu Giấy"
+                  autoComplete="off"
+                  disabled={isBusy || !isMapReady || wards.length === 0}
+                  onChange={(event) => {
+                    setWardQuery(event.target.value);
+                    setIsWardOptionsOpen(true);
+                  }}
+                  onFocus={() => setIsWardOptionsOpen(true)}
+                  onBlur={() => setIsWardOptionsOpen(false)}
+                />
+                {isWardOptionsOpen && wardMatches.length > 0 && (
+                  <ul className="scene-ward-options">
+                    {wardMatches.map((ward) => (
+                      <li key={ward.ward_code}>
+                        <button
+                          type="button"
+                          onMouseDown={(event) => {
+                            event.preventDefault();
+                            selectWard(ward);
+                          }}
+                        >
+                          <span>{ward.ward_name}</span>
+                          <small>{ward.ward_type}</small>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
               <label className="scene-city-field">
                 <span>Location</span>
                 <select
@@ -1003,6 +1183,70 @@ function ensureSelectionLayers(map) {
       },
     });
   }
+}
+
+function ensureWardLayers(map) {
+  if (!map.getSource("ward-boundary")) {
+    map.addSource("ward-boundary", {
+      type: "geojson",
+      data: emptyFeatureCollection(),
+    });
+  }
+
+  const beforeLayerId = map.getLayer("scene-selection-fill")
+    ? "scene-selection-fill"
+    : undefined;
+
+  if (!map.getLayer("ward-boundary-fill")) {
+    map.addLayer(
+      {
+        id: "ward-boundary-fill",
+        type: "fill",
+        source: "ward-boundary",
+        paint: {
+          "fill-color": "#dc2626",
+          "fill-opacity": 0.07,
+        },
+      },
+      beforeLayerId,
+    );
+  }
+
+  if (!map.getLayer("ward-boundary-line")) {
+    map.addLayer(
+      {
+        id: "ward-boundary-line",
+        type: "line",
+        source: "ward-boundary",
+        paint: {
+          "line-color": "#dc2626",
+          "line-width": 2.5,
+        },
+      },
+      beforeLayerId,
+    );
+  }
+}
+
+let wardGeometryCache = null;
+
+async function loadWardFeature(wardCode) {
+  if (!wardGeometryCache) {
+    const response = await fetch(`${offlineMapDataBaseUrl()}hanoi-wards.geojson`);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const collection = await response.json();
+    wardGeometryCache = new Map(
+      (Array.isArray(collection?.features) ? collection.features : [])
+        .map((feature) => [feature?.properties?.ward_code, feature])
+        .filter(([code]) => typeof code === "string"),
+    );
+  }
+
+  return wardGeometryCache.get(wardCode) || null;
 }
 
 function updateSelectionBounds(map, bounds) {

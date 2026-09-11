@@ -111,6 +111,45 @@ def format_number(value) -> str:
     return text if text else "0"
 
 
+def ensure_full_dataset(workdir: Path):
+    """Load (downloading if needed) the official province/ward name dataset."""
+    full_json_path = workdir / FULL_JSON_NAME
+    if not full_json_path.exists():
+        full_json_path.write_bytes(download(f"{BASE_URL}/{FULL_JSON_NAME}"))
+    return json.loads(full_json_path.read_text(encoding="utf-8"))
+
+
+def ensure_geojson_root(workdir: Path) -> Path:
+    """Return the directory holding per-province GeoJSON folders."""
+    geojson_root = workdir / "geojson"
+    if not geojson_root.exists():
+        archive = download(f"{BASE_URL}/{GEOJSON_ZIP_NAME}")
+        with zipfile.ZipFile(BytesIO(archive)) as zip_file:
+            zip_file.extractall(workdir)
+
+    # The archive contains a top-level "geojson" folder; accept either layout.
+    def has_province_folders(path):
+        return path.exists() and any(
+            child.is_dir() and child.name[:2].isdigit() and "_" in child.name
+            for child in path.iterdir()
+        )
+
+    if not has_province_folders(geojson_root):
+        candidates = [
+            path
+            for path in [geojson_root / "geojson", workdir / "geojson" / "geojson"]
+            if has_province_folders(path)
+        ] or [path for path in workdir.rglob("geojson") if has_province_folders(path)]
+        if candidates:
+            geojson_root = candidates[0]
+
+    if not has_province_folders(geojson_root):
+        raise FileNotFoundError(
+            f"no province GeoJSON folders found under {workdir}"
+        )
+    return geojson_root
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -130,32 +169,8 @@ def main() -> int:
     args.workdir.mkdir(parents=True, exist_ok=True)
     args.out.mkdir(parents=True, exist_ok=True)
 
-    full_json_path = args.workdir / FULL_JSON_NAME
-    if not full_json_path.exists():
-        full_json_path.write_bytes(download(f"{BASE_URL}/{FULL_JSON_NAME}"))
-    dataset = json.loads(full_json_path.read_text(encoding="utf-8"))
-
-    geojson_root = args.workdir / "geojson"
-    if not geojson_root.exists():
-        archive = download(f"{BASE_URL}/{GEOJSON_ZIP_NAME}")
-        with zipfile.ZipFile(BytesIO(archive)) as zip_file:
-            zip_file.extractall(args.workdir)
-
-    # The archive contains a top-level "geojson" folder; accept either layout.
-    def has_province_folders(path):
-        return path.exists() and any(
-            child.is_dir() and child.name[:2].isdigit() and "_" in child.name
-            for child in path.iterdir()
-        )
-
-    if not has_province_folders(geojson_root):
-        candidates = [
-            path
-            for path in [geojson_root / "geojson", args.workdir / "geojson" / "geojson"]
-            if has_province_folders(path)
-        ] or [path for path in args.workdir.rglob("geojson") if has_province_folders(path)]
-        if candidates:
-            geojson_root = candidates[0]
+    dataset = ensure_full_dataset(args.workdir)
+    geojson_root = ensure_geojson_root(args.workdir)
 
     provinces_out = []
     wards_out = []

@@ -27,6 +27,7 @@ data/processed/
 *.pmtiles
 *.mbtiles
 *.geojson
+!frontend/public/data/hanoi-wards.geojson
 *.gpkg
 *.geoparquet
 *.parquet

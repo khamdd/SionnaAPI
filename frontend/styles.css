@@ -2878,6 +2878,70 @@ textarea:disabled {
   font-weight: 600;
 }
 
+.scene-ward-field {
+  position: relative;
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.scene-ward-field input {
+  min-height: 38px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 0 12px;
+  font-weight: 500;
+}
+
+.scene-ward-options {
+  position: absolute;
+  top: calc(100% - 8px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+}
+
+.scene-ward-options button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.scene-ward-options button:hover {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.scene-ward-options small {
+  color: var(--muted);
+  font-weight: 600;
+}
+
 .scene-page > .scene-selection-footer {
   right: 18px;
   bottom: 18px;
@@ -4054,6 +4118,7 @@ textarea,
 .form-field select,
 .scene-name-field input,
 .scene-city-field select,
+.scene-ward-field input,
 .scene-location-search input {
   border-color: var(--line-strong);
   border-radius: 3px;
