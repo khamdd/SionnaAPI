@@ -301,22 +301,32 @@ different backend, set `VITE_API_BASE_URL` in `frontend/.env`.
 
 ## Tests
 
-Run backend tests from the repository root:
+Run backend tests from the repository root when a compatible Python environment
+is available:
 
 ```powershell
 python -m pytest test -q
+```
+
+On a host without the required Python/Sionna environment, use the reproducible
+test-only Docker target. It does not add pytest or httpx to the production image:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/test-backend.ps1
 ```
 
 Verify the frontend production build:
 
 ```powershell
 cd frontend
-npm install
+npm ci
 npm run build
 ```
 
 Full Sionna simulations are hardware-dependent and are not part of the normal unit
-test suite.
+test suite. The behavior-preserving refactor contracts and smoke checklist are in
+`docs/refactor-contract.md`, `docs/frontend-route-matrix.md`,
+`docs/scene-draft-compatibility.md`, and `docs/refactor-smoke-checklist.md`.
 
 ## Main API endpoints
 
@@ -382,9 +392,10 @@ Confirm that `.env.docker` exists and that you used `--env-file .env.docker`.
 
 ### A port is already in use
 
-Change `POSTGRES_HOST_PORT` in `.env.docker` for PostgreSQL. For ports 8000, 8080,
-9200, or 5601, stop the conflicting program or change the corresponding host-side
-port in `docker-compose.yml`.
+Change the corresponding value in `.env.docker`: `POSTGRES_HOST_PORT`,
+`BACKEND_HOST_PORT`, `FRONTEND_HOST_PORT`, `ELASTICSEARCH_HOST_PORT`, or
+`KIBANA_HOST_PORT`. The container-side ports and service-to-service addresses do
+not change.
 
 ### Login or history does not work
 

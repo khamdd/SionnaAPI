@@ -9,6 +9,11 @@ def test_sionna_engine_starts_without_loaded_scene():
 
 def test_sionna_engine_loads_scene_lazily_once(monkeypatch):
     engine = SionnaEngine()
+    engine.set_active_scene({
+        "id": "test-scene",
+        "name": "Test scene",
+        "scene_path": "static/scenes/test-scene/runtime_scene/osm_scene.xml",
+    })
     loaded_scene = object()
     calls = []
 

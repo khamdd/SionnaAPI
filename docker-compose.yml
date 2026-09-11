@@ -28,7 +28,7 @@ services:
       xpack.security.enabled: "false"
       ES_JAVA_OPTS: -Xms1g -Xmx1g
     ports:
-      - "127.0.0.1:9200:9200"
+      - "127.0.0.1:${ELASTICSEARCH_HOST_PORT:-9200}:9200"
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
     healthcheck:
@@ -49,7 +49,7 @@ services:
       ELASTICSEARCH_HOSTS: http://elasticsearch:9200
       SERVER_DEFAULTROUTE: /app/discover
     ports:
-      - "127.0.0.1:5601:5601"
+      - "127.0.0.1:${KIBANA_HOST_PORT:-5601}:5601"
 
   observability-setup:
     image: sionna-simulation-backend:local
@@ -123,7 +123,7 @@ services:
       database-migrate:
         condition: service_completed_successfully
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:${BACKEND_HOST_PORT:-8000}:8000"
     volumes:
       - ./static:/app/static
     healthcheck:
@@ -179,7 +179,7 @@ services:
       backend:
         condition: service_healthy
     ports:
-      - "127.0.0.1:8080:80"
+      - "127.0.0.1:${FRONTEND_HOST_PORT:-8080}:80"
 
 volumes:
   postgres-data:

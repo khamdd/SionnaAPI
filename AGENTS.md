@@ -323,6 +323,12 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   candidates, and candidate-request preview endpoints were removed in a
   cleanup pass; only `/run` remains under `/optimizations/network-coverage/`.
   Core search logic lives in `backend/services/optimization_service.py`.
+- Behavior-preserving modernization now has a Phase 0 safety baseline. The
+  normalized OpenAPI contract, canonical simulation requests, frontend route and
+  localStorage contracts, smoke checklist, and recorded results live under
+  `docs/` and `test/fixtures/refactor/`. `Dockerfile.backend` has a test-only
+  target, invoked by `scripts/test-backend.ps1`; the default application target
+  remains the production backend image and does not install test packages.
 
 ## Important Files
 
@@ -374,6 +380,13 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 - `docs/scenario-comparison-v2-handoff.md`: accepted next-stage plan for replacing
   the shared-profile Impact Study assumption with explicit scenario profile pairs,
   followed by the Impact UI and nationwide execution roadmap.
+- `docs/codebase-cleanup-plan.md`: ordered modernization passes and migration
+  boundaries.
+- `docs/refactor-contract.md`, `docs/frontend-route-matrix.md`,
+  `docs/scene-draft-compatibility.md`, and `docs/refactor-smoke-checklist.md`:
+  Phase 0 behavior contracts and parity checks.
+- `docs/refactor-baseline.md`: last known backend, frontend, OpenAPI, and isolated
+  Docker validation results.
 - `backend/services/scene_service.py`: scene registry, preview lifecycle, activate
   and delete behavior.
 - `backend/services/osm_scene_builder.py`: OSM/Overpass to Sionna scene generation.
@@ -473,6 +486,8 @@ Recent commits before this briefing included:
   `npm run build` from `frontend/` when practical.
 - Useful checks:
   - `python -m pytest test -q`
+  - `powershell -ExecutionPolicy Bypass -File scripts/test-backend.ps1` when a
+    compatible host Python/Sionna environment is unavailable
   - `cd frontend && npm run build`
   - `docker compose --env-file .env.docker up --build -d`
 - If you add new routes, services, persistent fields, scene behavior, or major UI

@@ -1,0 +1,69 @@
+{
+  "keys": {
+    "USER_STORAGE_KEY": "sionna_user",
+    "AUTH_TOKEN_STORAGE_KEY": "sionna_auth_token",
+    "SCENE_FIXED_ANTENNAS_STORAGE_KEY": "sionna_scene_fixed_antennas",
+    "NETWORK_TYPE2_ANTENNAS_STORAGE_KEY": "sionna_network_type2_antennas",
+    "NETWORK_ANTENNA_SETTINGS_STORAGE_KEY": "sionna_network_antenna_settings",
+    "NETWORK_OPTIMIZATION_OBJECTIVES_STORAGE_KEY": "sionna_network_optimization_objectives",
+    "RSRP_TYPE2_ANTENNAS_STORAGE_KEY": "sionna_rsrp_type2_antennas",
+    "RSRP_ANTENNA_SETTINGS_STORAGE_KEY": "sionna_rsrp_antenna_settings",
+    "SINR_TYPE2_ANTENNAS_STORAGE_KEY": "sionna_sinr_type2_antennas",
+    "SINR_ANTENNA_SETTINGS_STORAGE_KEY": "sionna_sinr_antenna_settings",
+    "SINR_ROLE_SELECTION_STORAGE_KEY": "sionna_sinr_role_selection",
+    "THROUGHPUT_TYPE2_ANTENNAS_STORAGE_KEY": "sionna_throughput_type2_antennas",
+    "THROUGHPUT_ANTENNA_SETTINGS_STORAGE_KEY": "sionna_throughput_antenna_settings",
+    "THROUGHPUT_ROLE_SELECTION_STORAGE_KEY": "sionna_throughput_role_selection"
+  },
+  "derived_keys": [
+    "sionna_network_optimization_objectives:run:{scene_id}"
+  ],
+  "representative_state": {
+    "sionna_user": {"id": "user-contract", "username": "contract-user"},
+    "sionna_auth_token": "contract-token",
+    "sionna_scene_fixed_antennas": {
+      "scene-contract": [
+        {
+          "id": "A1",
+          "longitude": 105.834,
+          "latitude": 21.0278,
+          "height_m": 30.0,
+          "tilt": {"min": 2.0, "current": 8.0, "max": 18.0},
+          "azimuth": 45.0,
+          "tx_power": {"min": 20.0, "current": 30.0, "max": 40.0}
+        }
+      ]
+    },
+    "sionna_network_type2_antennas": {"scene-contract": []},
+    "sionna_network_antenna_settings": {
+      "scene-contract": {
+        "A1": {
+          "azimuth": 45.0,
+          "enabled": true,
+          "tilt_current": 8.0,
+          "tx_power_current": 30.0
+        }
+      }
+    },
+    "sionna_network_optimization_objectives": {
+      "scene-contract": {
+        "simulation_type": "network_coverage",
+        "objectives": [
+          {"metric": "uncovered_area_percent", "operator": "<=", "target": 2.0}
+        ]
+      }
+    },
+    "sionna_rsrp_type2_antennas": {"scene-contract": []},
+    "sionna_rsrp_antenna_settings": {"scene-contract": {}},
+    "sionna_sinr_type2_antennas": {"scene-contract": []},
+    "sionna_sinr_antenna_settings": {"scene-contract": {}},
+    "sionna_sinr_role_selection": {
+      "scene-contract": {"transmitter": "A1", "receiver": "A2", "interferer": "A3"}
+    },
+    "sionna_throughput_type2_antennas": {"scene-contract": []},
+    "sionna_throughput_antenna_settings": {"scene-contract": {}},
+    "sionna_throughput_role_selection": {
+      "scene-contract": {"transmitter": "A1", "receiver": "A2", "interferer": "A3"}
+    }
+  }
+}

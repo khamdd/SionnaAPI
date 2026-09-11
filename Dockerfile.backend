@@ -1,4 +1,4 @@
-FROM python:3.11-slim-bookworm
+FROM python:3.11-slim-bookworm AS backend-base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -42,6 +42,20 @@ COPY backend ./backend
 COPY alembic.ini ./alembic.ini
 
 RUN mkdir -p /app/static/scenes /app/static/generated /app/static/simulation-results
+
+FROM backend-base AS test
+
+# The production image intentionally omits test-only packages. Reuse the pinned
+# test versions in this target so backend tests are reproducible on
+# hosts that do not have a compatible Python/Sionna environment.
+RUN python -m pip install pytest==9.0.3 httpx==0.28.1
+
+COPY test ./test
+COPY frontend/src/constants ./frontend/src/constants
+
+CMD ["python", "-m", "pytest", "test", "-q"]
+
+FROM backend-base AS application
 
 EXPOSE 8000
 

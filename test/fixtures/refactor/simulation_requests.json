@@ -1,0 +1,146 @@
+{
+  "coverage_map": {
+    "tilt": 8.0,
+    "azimuth": 45.0,
+    "transmitter_position": [25.0, -15.0, 30.0],
+    "tx_power": 30.0,
+    "transmitter_pattern": "tr38901",
+    "solver": {
+      "max_depth": 8,
+      "samples_per_tx": 1000000,
+      "cell_size": 5.0,
+      "center": [0.0, 0.0, 0.0],
+      "size": [300.0, 300.0]
+    }
+  },
+  "network_coverage": {
+    "antennas": [
+      {
+        "id": "A1",
+        "longitude": 105.834,
+        "latitude": 21.0278,
+        "height_m": 30.0,
+        "tilt": {"min": 2.0, "current": 8.0, "max": 18.0},
+        "azimuth": 45.0,
+        "tx_power": {"min": 20.0, "current": 30.0, "max": 40.0}
+      }
+    ],
+    "transmitter_pattern": "tr38901",
+    "solver": {
+      "max_depth": 8,
+      "samples_per_tx": 1000000,
+      "cell_size": 5.0,
+      "center": [0.0, 0.0, 0.0],
+      "size": [300.0, 300.0]
+    },
+    "bandwidth_mhz": 100.0,
+    "mimo_layers": 4
+  },
+  "network_coverage_optimization": {
+    "scene_id": "scene-contract",
+    "base_request": {
+      "antennas": [
+        {
+          "id": "A1",
+          "longitude": 105.834,
+          "latitude": 21.0278,
+          "height_m": 30.0,
+          "tilt": {"min": 2.0, "current": 8.0, "max": 18.0},
+          "azimuth": 45.0,
+          "tx_power": {"min": 20.0, "current": 30.0, "max": 40.0}
+        }
+      ],
+      "transmitter_pattern": "tr38901",
+      "solver": {
+        "max_depth": 8,
+        "samples_per_tx": 1000000,
+        "cell_size": 5.0,
+        "center": [0.0, 0.0, 0.0],
+        "size": [300.0, 300.0]
+      },
+      "bandwidth_mhz": 100.0,
+      "mimo_layers": 4
+    },
+    "tilt_step": 2.0,
+    "power_step": 2.0,
+    "azimuth_step": 30.0,
+    "max_candidates": 300,
+    "objectives": [
+      {"metric": "uncovered_area_percent", "operator": "<=", "target": 2.0},
+      {"metric": "overlap_area_percent", "operator": "<=", "target": 25.0}
+    ],
+    "variables": [
+      {"field": "tilt", "scope": "enabled_antennas"},
+      {"field": "tx_power", "scope": "enabled_antennas"},
+      {"field": "azimuth", "scope": "enabled_antennas"}
+    ]
+  },
+  "rsrp_simulation": {
+    "antennas": [
+      {
+        "id": "A1",
+        "longitude": 105.834,
+        "latitude": 21.0278,
+        "height_m": 30.0,
+        "tilt": {"min": 2.0, "current": 8.0, "max": 18.0},
+        "azimuth": 45.0,
+        "tx_power": {"min": 20.0, "current": 30.0, "max": 40.0}
+      }
+    ],
+    "transmitter_pattern": "tr38901",
+    "solver": {
+      "max_depth": 8,
+      "samples_per_tx": 1000000,
+      "cell_size": 5.0,
+      "center": [0.0, 0.0, 0.0],
+      "size": [300.0, 300.0]
+    },
+    "user_count": 1000,
+    "user_height_m": 1.5,
+    "random_seed": 42
+  },
+  "sinr": {
+    "propagation_model": "sionna",
+    "carrier_frequency_ghz": 3.5,
+    "bandwidth_mhz": 100.0,
+    "noise_figure_db": 7.0,
+    "tilt": 8.0,
+    "transmitter_position": [-60.0, 0.0, 30.0],
+    "receiver_position": [0.0, 0.0, 1.5],
+    "interferer_position": [60.0, 0.0, 30.0],
+    "interferer_tilt": 10.0,
+    "tx_power": 30.0,
+    "interferer_tx_power": 28.0,
+    "transmitter_pattern": "tr38901",
+    "solver": {
+      "max_depth": 8,
+      "samples_per_tx": 1000000,
+      "cell_size": 5.0,
+      "center": [0.0, 0.0, 0.0],
+      "size": [300.0, 300.0]
+    }
+  },
+  "throughput_comparison": {
+    "propagation_model": "sionna",
+    "carrier_frequency_ghz": 3.5,
+    "noise_figure_db": 7.0,
+    "base_tilt": 6.0,
+    "target_tilt": 12.0,
+    "transmitter_position": [-60.0, 0.0, 30.0],
+    "receiver_position": [0.0, 0.0, 1.5],
+    "interferer_position": [60.0, 0.0, 30.0],
+    "interferer_tilt": 10.0,
+    "tx_power": 30.0,
+    "interferer_tx_power": 28.0,
+    "transmitter_pattern": "tr38901",
+    "bandwidth_mhz": 100.0,
+    "mimo_layers": 4,
+    "solver": {
+      "max_depth": 8,
+      "samples_per_tx": 1000000,
+      "cell_size": 5.0,
+      "center": [0.0, 0.0, 0.0],
+      "size": [300.0, 300.0]
+    }
+  }
+}

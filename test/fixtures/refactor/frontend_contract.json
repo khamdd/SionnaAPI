@@ -1,0 +1,19 @@
+{
+  "navbar_routes": [
+    {"path": "/scenes", "label": "Scenes"},
+    {"path": "/network", "label": "Network Coverage"},
+    {"path": "/configurations", "label": "Configurations"},
+    {"path": "/profiles", "label": "Simulation Profiles"},
+    {"path": "/queue", "label": "Simulation Queue"},
+    {"path": "/coverage", "label": "Coverage Map"},
+    {"path": "/rsrp", "label": "RSRP Analysis"},
+    {"path": "/sinr", "label": "SINR Analysis"},
+    {"path": "/throughput", "label": "Throughput"},
+    {"path": "/history", "label": "Saved Results"}
+  ],
+  "internal_routes": [
+    "/choose-scene",
+    "/network/optimization"
+  ],
+  "fallback_route": "/scenes"
+}
