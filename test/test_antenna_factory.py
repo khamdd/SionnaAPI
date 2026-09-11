@@ -14,6 +14,10 @@ def test_sionna_azimuth_accepts_numeric_strings():
     assert sionna_azimuth_rad("45") == math.radians(45)
 
 
+def test_sionna_azimuth_returns_python_float_for_mitsuba():
+    assert type(sionna_azimuth_rad(90)) is float
+
+
 def test_sionna_azimuth_produces_equivalent_direction_across_full_circle():
     two_pi = 2 * math.pi
     assert sionna_azimuth_rad(360) % two_pi == sionna_azimuth_rad(0) % two_pi

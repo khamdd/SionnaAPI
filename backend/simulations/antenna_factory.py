@@ -8,7 +8,7 @@ from backend.constants import DEFAULT_TRANSMITTER_PATTERN
 
 
 def sionna_azimuth_rad(azimuth_deg):
-    return np.radians(90.0 - float(azimuth_deg))
+    return float(np.radians(90.0 - float(azimuth_deg)))
 
 
 def sync_transmitter(
