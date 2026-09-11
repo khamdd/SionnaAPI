@@ -14,27 +14,63 @@ async function requestJson(path, options = {}) {
 }
 
 export function runNetworkCoverage(payload) {
-  return runSimulationRequest("/api/v1/network-coverage", payload);
+  return requestJson("/api/v1/network-coverage", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
 }
 
 export function runNetworkCoverageOptimization(payload) {
-  return runSimulationRequest("/api/v1/optimizations/network-coverage/run", payload);
+  return requestJson("/api/v1/optimizations/network-coverage/run", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
 }
 
 export function runCoverageMap(payload) {
-  return runSimulationRequest("/api/v1/coverage-map", payload);
+  return requestJson("/api/v1/coverage-map", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
 }
 
 export function runRsrpSimulation(payload) {
-  return runSimulationRequest("/api/v1/rsrp-simulation", payload);
+  return requestJson("/api/v1/rsrp-simulation", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
 }
 
 export function runSinr(payload) {
-  return runSimulationRequest("/api/v1/sinr", payload);
+  return requestJson("/api/v1/sinr", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
 }
 
 export function runThroughputComparison(payload) {
-  return runSimulationRequest("/api/v1/throughput-comparison", payload);
+  return requestJson("/api/v1/throughput-comparison", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
 }
 
 export function getCurrentUser() {
@@ -146,22 +182,6 @@ export function buildSimulationProfileRequest(profileId, configurationId) {
     },
     body: JSON.stringify({ configuration_id: configurationId }),
   });
-}
-
-async function runSimulationRequest(path, payload) {
-  const response = await requestJson(path, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response?.job_id) {
-    return response;
-  }
-
-  return response;
 }
 
 export function registerUser(payload) {
