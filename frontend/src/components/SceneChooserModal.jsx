@@ -1042,17 +1042,6 @@ function updateSelectionBounds(map, bounds) {
   });
 }
 
-function scenePositionToLngLat(position, bounds, metrics) {
-  const [x, y] = position;
-  const westEastRatio = (x + metrics.widthM / 2) / metrics.widthM;
-  const southNorthRatio = (y + metrics.heightM / 2) / metrics.heightM;
-
-  return [
-    bounds.west + westEastRatio * (bounds.east - bounds.west),
-    bounds.south + southNorthRatio * (bounds.north - bounds.south),
-  ];
-}
-
 function antennasForSelectedBounds(antennas, _placementBounds, selectedBounds) {
   if (!Array.isArray(antennas) || antennas.length === 0 || !selectedBounds) {
     return [];

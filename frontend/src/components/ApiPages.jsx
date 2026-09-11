@@ -23,7 +23,6 @@ import {
 import {
   lngLatInsideBounds,
   lngLatToScenePosition,
-  solverBounds,
   solverForScene,
   validatePositionInsideSolver,
 } from "../utils/scene";
@@ -1700,35 +1699,6 @@ function NumberField({ hint = "", label, max, min, onChange, step = "any", unit 
   );
 }
 
-function PositionField({ error = "", label, onChange, solver = null, value }) {
-  const bounds = solverBounds(solver);
-
-  return (
-    <label className="form-field">
-      <span>{label}</span>
-      <div>
-        <div className="vector-inputs">
-          {["x", "y", "z"].map((axis, index) => (
-            <input
-              key={axis}
-              type="number"
-              aria-invalid={Boolean(error) && index < 2}
-              aria-label={`${label} ${axis}`}
-              value={value[index]}
-              min={axis === "x" ? bounds?.xMin : axis === "y" ? bounds?.yMin : undefined}
-              max={axis === "x" ? bounds?.xMax : axis === "y" ? bounds?.yMax : undefined}
-              step="any"
-              required
-              onChange={(event) => onChange(replaceArrayValue(value, index, parseNumericInput(event.target.value)))}
-            />
-          ))}
-        </div>
-        {error && <small className="field-error">{error}</small>}
-      </div>
-    </label>
-  );
-}
-
 function CoverageResult({ activeScene, onSceneLoadingChange, result }) {
   const request = result.request || {};
   const solver = result.solver || request.solver || {};
@@ -1767,25 +1737,6 @@ function CoverageResult({ activeScene, onSceneLoadingChange, result }) {
   );
 }
 
-function SinrResult({ activeScene, onSceneLoadingChange, result }) {
-  const request = result.request || {};
-
-  return (
-    <div className="result-summary">
-      <ApiResultScene
-        activeScene={activeScene}
-        antennas={linkResultAntennas(result, request)}
-        result={result}
-        onSceneLoadingChange={onSceneLoadingChange}
-        sceneBadges={sinrSceneBadges(result)}
-        signalLinks={radioLinkVisuals(request)}
-        solver={result.solver || request.solver}
-      />
-      <SinrResultDetails result={result} />
-    </div>
-  );
-}
-
 function SinrResultDetails({ result }) {
   const request = result.request || {};
   const isAnalytical = isFormulaPropagationModel(result.propagation_model);
@@ -1815,25 +1766,6 @@ function SinrResultDetails({ result }) {
         <dt>Tilt</dt><dd>{formatMaybeNumber(request.interferer_tilt)} deg</dd>
       </dl>
     </>
-  );
-}
-
-function ThroughputResult({ activeScene, onSceneLoadingChange, result }) {
-  const request = result.request || {};
-
-  return (
-    <div className="result-summary">
-      <ApiResultScene
-        activeScene={activeScene}
-        antennas={linkResultAntennas(result, request)}
-        result={result}
-        onSceneLoadingChange={onSceneLoadingChange}
-        sceneBadges={throughputSceneBadges(result)}
-        signalLinks={radioLinkVisuals(request)}
-        solver={result.solver || request.solver}
-      />
-      <ThroughputResultDetails result={result} />
-    </div>
   );
 }
 
@@ -1878,7 +1810,6 @@ function ApiResultScene({
   coverageGrid = null,
   fallbackImageUrl = "",
   onSceneLoadingChange = null,
-  result,
   sceneBadges = EMPTY_ARRAY,
   signalLinks = EMPTY_ARRAY,
   solver = null,
@@ -2454,12 +2385,6 @@ function updateObject(onChange, current, field, value) {
     ...current,
     [field]: value,
   });
-}
-
-function replaceArrayValue(values, index, value) {
-  return values.map((item, itemIndex) => (
-    itemIndex === index ? value : item
-  ));
 }
 
 function clampNumber(value, min, max) {

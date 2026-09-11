@@ -494,6 +494,10 @@ Recent commits before this briefing included:
     for backend static analysis; Ruff 0.16.7 is pinned for development only, is
     configured in the root `pyproject.toml` with behavior-neutral rules scoped
     to `backend/` and `test/`, and is not part of the production image
+  - `cd frontend && npm run lint`; ESLint 10.10.0, `@eslint/js` 10.0.1, and
+    `eslint-plugin-react-hooks` 7.1.1 are pinned as development-only
+    dependencies, configured in `frontend/eslint.config.mjs` scoped to
+    `frontend/src/` with unused-variable and React Hook rules
   - `cd frontend && npm run build`
   - `docker compose --env-file .env.docker up --build -d`
 - If you add new routes, services, persistent fields, scene behavior, or major UI

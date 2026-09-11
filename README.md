@@ -328,6 +328,14 @@ undefined-name, unused-import/variable, import-ordering, and obvious
 syntax/whitespace checks. It is development tooling only and is not installed in
 the production image.
 
+Run the frontend lint guardrails (unused variables and React Hook rules,
+scoped to `frontend/src/`):
+
+```powershell
+cd frontend
+npm run lint
+```
+
 Verify the frontend production build:
 
 ```powershell

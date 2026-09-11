@@ -291,33 +291,6 @@ function waitForRetry(delayMs, signal) {
   });
 }
 
-function parseOsmElement(item, index) {
-  if (Array.isArray(item.geometry) && item.geometry.length >= 3) {
-    return [
-      buildBuildingRecord(item.id || `osm-${index}`, item.tags, item.geometry),
-    ];
-  }
-
-  if (Array.isArray(item.members)) {
-    return item.members
-      .filter(
-        (member) =>
-          member.role === "outer" &&
-          Array.isArray(member.geometry) &&
-          member.geometry.length >= 3,
-      )
-      .map((member, memberIndex) =>
-        buildBuildingRecord(
-          `${item.id || index}-${memberIndex}`,
-          item.tags,
-          member.geometry,
-        ),
-      );
-  }
-
-  return [];
-}
-
 function buildBuildingRecord(id, tags = {}, geometry) {
   const heightInfo = inferBuildingHeight(tags);
 
@@ -1727,34 +1700,6 @@ function polygonArea(points) {
   }
 
   return Math.abs(area) / 2;
-}
-
-function generateFallbackBuildings(bounds) {
-  const centerLat = (bounds.south + bounds.north) / 2;
-  const centerLon = (bounds.west + bounds.east) / 2;
-  const latStep = (bounds.north - bounds.south) / 7;
-  const lonStep = (bounds.east - bounds.west) / 7;
-
-  return Array.from({ length: 18 }, (_, index) => {
-    const col = index % 6;
-    const row = Math.floor(index / 6);
-    const lat = centerLat + (row - 1) * latStep * 1.3;
-    const lon = centerLon + (col - 2.5) * lonStep;
-    const halfLat = latStep * (0.18 + (index % 3) * 0.04);
-    const halfLon = lonStep * (0.18 + (index % 4) * 0.035);
-
-    return {
-      id: `fallback-${index}`,
-      height: 6 + (index % 7) * 4,
-      heightSource: "estimated",
-      points: [
-        { lat: lat - halfLat, lon: lon - halfLon },
-        { lat: lat - halfLat, lon: lon + halfLon },
-        { lat: lat + halfLat, lon: lon + halfLon },
-        { lat: lat + halfLat, lon: lon - halfLon },
-      ],
-    };
-  });
 }
 
 function buildHeightStatus(buildings) {

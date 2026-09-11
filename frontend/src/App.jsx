@@ -4,9 +4,7 @@ import {
   listScenes,
   deleteSimulationRun,
   getSimulationJob,
-  getSimulationJobResult,
   getSimulationRun,
-  getSimulationRunResult,
   listSimulationRuns,
   listSimulationJobs,
   runNetworkCoverage,
@@ -374,102 +372,6 @@ export default function App() {
       setJobProgressLabel("");
     }
   }, []);
-
-  const loadLatestNetworkCoverageResult = useCallback(async () => {
-    if (Array.isArray(latestGrid?.cells) && latestGrid.cells.length > 0) {
-      return {
-        grid: latestGrid,
-        solver: latestSolver,
-      };
-    }
-
-    const result = await listSimulationJobs(JOB_PAGE_LIMIT);
-
-    if (!result.database_configured) {
-      return null;
-    }
-
-    if (result.error) {
-      throw new Error(result.error);
-    }
-
-    const jobs = (result.items || []).filter((item) => (
-      item.simulation_type === "network_coverage"
-      && item.status === "succeeded"
-      && item.scene?.id === activeScene?.id
-    ));
-
-    for (const job of jobs) {
-      const fullResult = await loadJobOrSavedRunResult(job);
-      if (Array.isArray(fullResult?.grid?.cells) && fullResult.grid.cells.length > 0) {
-        setLatestGrid(fullResult.grid);
-        if (fullResult.solver) {
-          setLatestSolver(fullResult.solver);
-        }
-        setCoverageImageUrl(fullResult.coverage_map_image_url ? `${fullResult.coverage_map_image_url}?t=${Date.now()}` : "");
-        return fullResult;
-      }
-    }
-
-    const historyResult = await loadLatestNetworkCoverageHistoryResult();
-    if (Array.isArray(historyResult?.grid?.cells) && historyResult.grid.cells.length > 0) {
-      setLatestGrid(historyResult.grid);
-      if (historyResult.solver) {
-        setLatestSolver(historyResult.solver);
-      }
-      setCoverageImageUrl(historyResult.coverage_map_image_url ? `${historyResult.coverage_map_image_url}?t=${Date.now()}` : "");
-      return historyResult;
-    }
-
-    return null;
-  }, [activeScene?.id, latestGrid, latestSolver]);
-
-  async function loadJobOrSavedRunResult(job) {
-    try {
-      return await getSimulationJobResult(job.id);
-    } catch {
-      if (!job.result_run_id) {
-        return null;
-      }
-    }
-
-    try {
-      return await getSimulationRunResult(job.result_run_id);
-    } catch {
-      return null;
-    }
-  }
-
-  async function loadLatestNetworkCoverageHistoryResult() {
-    const result = await listSimulationRuns(HISTORY_PAGE_LIMIT, activeScene?.id);
-
-    if (!result.database_configured) {
-      return null;
-    }
-
-    if (result.error) {
-      throw new Error(result.error);
-    }
-
-    const runs = (result.items || []).filter((item) => (
-      item.simulation_type === "network_coverage"
-      && item.status === "success"
-      && item.scene_id === activeScene?.id
-    ));
-
-    for (const run of runs) {
-      try {
-        const fullResult = await getSimulationRunResult(run.id);
-        if (Array.isArray(fullResult?.grid?.cells) && fullResult.grid.cells.length > 0) {
-          return fullResult;
-        }
-      } catch {
-        // Try the next saved run.
-      }
-    }
-
-    return null;
-  }
 
   const loadScenes = useCallback(async (options = {}) => {
     const syncActiveScene = options.syncActiveScene ?? hasWorkScene;
@@ -3101,7 +3003,7 @@ function normalizeStoredFixedAntennas(antennas) {
         return null;
       }
 
-      const { position, ...rest } = antenna;
+      const { position: _position, ...rest } = antenna;
 
       return {
         ...rest,
