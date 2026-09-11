@@ -1,4 +1,10 @@
 import { useEffect, useState } from "react";
+import {
+  formatAntennaCoordinate,
+  isAntennaEnabled,
+  parseAntennaNumericInput,
+  validateRange,
+} from "../utils/antennas";
 import { lngLatBoundsError } from "../utils/scene";
 import { formatLngLatPosition, formatMaybeNumber } from "../utils/format";
 
@@ -306,7 +312,7 @@ function AntennaCard({
               step="any"
               value={antenna.azimuth}
               disabled={disabled}
-              onChange={(event) => onChange(antenna.id, "azimuth", parseNumericInput(event.target.value))}
+              onChange={(event) => onChange(antenna.id, "azimuth", parseAntennaNumericInput(event.target.value))}
             />
             <small>deg</small>
           </div>
@@ -325,10 +331,6 @@ function AntennaCard({
       )}
     </article>
   );
-}
-
-function isAntennaEnabled(antenna) {
-  return antenna?.enabled !== false;
 }
 
 function TextField({ disabled, label, onChange, value }) {
@@ -357,7 +359,7 @@ function NumberField({ disabled, hint = "", label, max, min, onChange, value }) 
           min={min}
           max={max}
           step="any"
-          onChange={(event) => onChange(parseNumericInput(event.target.value))}
+          onChange={(event) => onChange(parseAntennaNumericInput(event.target.value))}
         />
         {hint && <small className="input-hint">{hint}</small>}
       </div>
@@ -372,13 +374,13 @@ function fieldLabel(label) {
 function fieldHint(label, bounds = null) {
   if (label === "longitude") {
     return bounds
-      ? `${formatCoordinate(bounds.west)} to ${formatCoordinate(bounds.east)} for the selected scene.`
+      ? `${formatAntennaCoordinate(bounds.west)} to ${formatAntennaCoordinate(bounds.east)} for the selected scene.`
       : "-180 to 180; must be inside the selected scene.";
   }
 
   if (label === "latitude") {
     return bounds
-      ? `${formatCoordinate(bounds.south)} to ${formatCoordinate(bounds.north)} for the selected scene.`
+      ? `${formatAntennaCoordinate(bounds.south)} to ${formatAntennaCoordinate(bounds.north)} for the selected scene.`
       : "-90 to 90; must be inside the selected scene.";
   }
 
@@ -415,16 +417,6 @@ function fieldHint(label, bounds = null) {
   }
 
   return "";
-}
-
-function formatCoordinate(value) {
-  const numericValue = Number(value);
-
-  if (!Number.isFinite(numericValue)) {
-    return "--";
-  }
-
-  return numericValue.toFixed(4);
 }
 
 function validateType2Draft(draft, antennas, activeScene) {
@@ -513,18 +505,6 @@ function validateType2Draft(draft, antennas, activeScene) {
   return { antenna };
 }
 
-function validateRange(range, label) {
-  if (range.min > range.max) {
-    return `${label}_min must be less than or equal to ${label}_max.`;
-  }
-
-  if (range.current < range.min || range.current > range.max) {
-    return `${label}_current must be between ${label}_min and ${label}_max.`;
-  }
-
-  return "";
-}
-
 function suggestedType2Id(antennas) {
   const usedIds = new Set(antennas.map((item) => item.id.toLowerCase()));
   let index = 1;
@@ -536,8 +516,4 @@ function suggestedType2Id(antennas) {
   }
 
   return id;
-}
-
-function parseNumericInput(value) {
-  return value === "" ? "" : Number(value);
 }

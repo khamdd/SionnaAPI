@@ -16,6 +16,11 @@ import {
   TRANSMITTER_PATTERN,
 } from "../constants";
 import {
+  formatAntennaCoordinate,
+  parseAntennaNumericInput,
+  toValidatedAntennaRequest,
+} from "../utils/antennas";
+import {
   formatMaybeNumber,
   formatPositionValue,
   formatText,
@@ -511,7 +516,7 @@ export function RsrpSimulationPage({
     }
 
     const payload = {
-      antennas: simulationAntennas.map(toAntennaRequest),
+      antennas: simulationAntennas.map(toValidatedAntennaRequest),
       transmitter_pattern: TRANSMITTER_PATTERN,
       ...form,
       solver: sceneSolver,
@@ -1281,7 +1286,7 @@ function CoverageTransmitterFields({
       )}
       {selected && (
         <p className="form-help">
-          {selected.id}: {formatCoordinate(selected.longitude)}, {formatCoordinate(selected.latitude)}, {formatMaybeNumber(selected.height_m)} m.
+          {selected.id}: {formatAntennaCoordinate(selected.longitude)}, {formatAntennaCoordinate(selected.latitude)}, {formatMaybeNumber(selected.height_m)} m.
         </p>
       )}
       {error && <small className="field-error">{error}</small>}
@@ -1689,7 +1694,7 @@ function NumberField({ hint = "", label, max, min, onChange, step = "any", unit 
             max={max}
             step={step}
             required
-            onChange={(event) => onChange(parseNumericInput(event.target.value))}
+            onChange={(event) => onChange(parseAntennaNumericInput(event.target.value))}
           />
           {unit && <small>{unit}</small>}
         </div>
@@ -1953,7 +1958,7 @@ function formatTransmitterCoordinates(transmitter) {
     return "--";
   }
 
-  return `${formatCoordinate(transmitter.longitude)}, ${formatCoordinate(transmitter.latitude)}`;
+  return `${formatAntennaCoordinate(transmitter.longitude)}, ${formatAntennaCoordinate(transmitter.latitude)}`;
 }
 
 function validateSimulationAntennas(antennas, activeScene, maxAntennas, label) {
@@ -1967,7 +1972,7 @@ function validateSimulationAntennas(antennas, activeScene, maxAntennas, label) {
 
   const seenIds = new Set();
   for (const antenna of antennas) {
-    const request = toAntennaRequest(antenna);
+    const request = toValidatedAntennaRequest(antenna);
 
     if (!request) {
       return `Antenna ${antenna?.id || ""} has incomplete configuration.`;
@@ -1993,61 +1998,6 @@ function validateSimulationAntennas(antennas, activeScene, maxAntennas, label) {
   }
 
   return "";
-}
-
-function toAntennaRequest(antenna) {
-  const id = String(antenna?.id || "").trim();
-  const longitude = Number(antenna?.longitude);
-  const latitude = Number(antenna?.latitude);
-  const heightM = Number(antenna?.height_m);
-  const azimuth = Number(antenna?.azimuth);
-  const tilt = toRangeRequest(antenna?.tilt);
-  const txPower = toRangeRequest(antenna?.tx_power);
-
-  if (
-    !id
-    || !Number.isFinite(longitude)
-    || !Number.isFinite(latitude)
-    || !Number.isFinite(heightM)
-    || !Number.isFinite(azimuth)
-    || !tilt
-    || !txPower
-  ) {
-    return null;
-  }
-
-  return {
-    id,
-    longitude,
-    latitude,
-    height_m: heightM,
-    azimuth,
-    tilt,
-    tx_power: txPower,
-  };
-}
-
-function toRangeRequest(range) {
-  const min = Number(range?.min);
-  const current = Number(range?.current);
-  const max = Number(range?.max);
-
-  if (
-    !Number.isFinite(min)
-    || !Number.isFinite(current)
-    || !Number.isFinite(max)
-    || min > max
-    || current < min
-    || current > max
-  ) {
-    return null;
-  }
-
-  return {
-    min,
-    current,
-    max,
-  };
 }
 
 function linkResultAntennas(result, request) {
@@ -2193,8 +2143,8 @@ function coordinateHint(axis, bounds) {
   }
 
   return axis === "longitude"
-    ? `${formatCoordinate(bounds.west)} to ${formatCoordinate(bounds.east)} for the selected scene.`
-    : `${formatCoordinate(bounds.south)} to ${formatCoordinate(bounds.north)} for the selected scene.`;
+    ? `${formatAntennaCoordinate(bounds.west)} to ${formatAntennaCoordinate(bounds.east)} for the selected scene.`
+    : `${formatAntennaCoordinate(bounds.south)} to ${formatAntennaCoordinate(bounds.north)} for the selected scene.`;
 }
 
 function rangeHint(range, unit) {
@@ -2206,16 +2156,6 @@ function rangeHint(range, unit) {
   }
 
   return `${formatMaybeNumber(min)} to ${formatMaybeNumber(max)} ${unit}.`;
-}
-
-function formatCoordinate(value) {
-  const numericValue = Number(value);
-
-  if (!Number.isFinite(numericValue)) {
-    return "--";
-  }
-
-  return numericValue.toFixed(4);
 }
 
 function ApiCoverageCellDialog({ cell, onClose }) {
@@ -2403,8 +2343,4 @@ function clampNumber(value, min, max) {
   }
 
   return value;
-}
-
-function parseNumericInput(value) {
-  return value === "" ? "" : Number(value);
 }

@@ -77,6 +77,16 @@ export function isAntennaEnabled(antenna) {
   return antenna?.enabled !== false;
 }
 
+export function parseAntennaNumericInput(value) {
+  return value === "" ? "" : Number(value);
+}
+
+export function formatAntennaCoordinate(value, fallback = "--") {
+  const numericValue = Number(value);
+
+  return Number.isFinite(numericValue) ? numericValue.toFixed(4) : fallback;
+}
+
 export function validateNetworkCoverageSimulationAntennas(
   antennas,
   activeScene,
@@ -151,6 +161,28 @@ export function toAntennaRequest(antenna) {
     height_m: base.height_m,
     tilt: base.tilt,
     azimuth: base.azimuth,
+    tx_power: base.tx_power,
+  };
+}
+
+export function toValidatedAntennaRequest(antenna) {
+  const base = normalizeAntennaBase(antenna);
+
+  if (
+    !base
+    || validateRange(base.tilt, "tilt")
+    || validateRange(base.tx_power, "tx_power")
+  ) {
+    return null;
+  }
+
+  return {
+    id: base.id,
+    longitude: base.longitude,
+    latitude: base.latitude,
+    height_m: base.height_m,
+    azimuth: base.azimuth,
+    tilt: base.tilt,
     tx_power: base.tx_power,
   };
 }

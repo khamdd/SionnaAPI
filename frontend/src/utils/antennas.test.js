@@ -4,12 +4,15 @@ import {
   MAX_NETWORK_COVERAGE_ANTENNAS,
   antennasForActiveScene,
   applySimulationSettings,
+  formatAntennaCoordinate,
   isAntennaEnabled,
   networkCoverageAntennasForScene,
   normalizeAntennaBase,
   normalizeRangeValue,
+  parseAntennaNumericInput,
   simulationSettingsForAntenna,
   toAntennaRequest,
+  toValidatedAntennaRequest,
   validateNetworkCoverageSimulationAntennas,
   validateRange,
 } from "./antennas";
@@ -112,6 +115,31 @@ describe("normalizeAntennaBase", () => {
   });
 });
 
+describe("parseAntennaNumericInput", () => {
+  it("preserves an empty input and converts numeric input", () => {
+    expect(parseAntennaNumericInput("")).toBe("");
+    expect(parseAntennaNumericInput("12.5")).toBe(12.5);
+    expect(parseAntennaNumericInput(null)).toBe(0);
+  });
+
+  it("returns NaN for non-numeric input", () => {
+    expect(parseAntennaNumericInput("not-a-number")).toBeNaN();
+  });
+});
+
+describe("formatAntennaCoordinate", () => {
+  it("uses four decimal places for numbers and numeric strings", () => {
+    expect(formatAntennaCoordinate(106.123456)).toBe("106.1235");
+    expect(formatAntennaCoordinate("10.5")).toBe("10.5000");
+  });
+
+  it("preserves the existing fallback and Number coercion behavior", () => {
+    expect(formatAntennaCoordinate("invalid")).toBe("--");
+    expect(formatAntennaCoordinate("invalid", "—")).toBe("—");
+    expect(formatAntennaCoordinate(null)).toBe("0.0000");
+  });
+});
+
 describe("validateRange", () => {
   it("requires min to be less than or equal to max", () => {
     expect(validateRange({ min: 10, current: 5, max: 0 }, "tilt")).toBe(
@@ -174,6 +202,36 @@ describe("toAntennaRequest", () => {
     expect(request.id).toBe("x1");
     expect(request.height_m).toBe(12);
     expect(request.tilt).toEqual({ min: 0, current: 6, max: 20 });
+  });
+});
+
+describe("toValidatedAntennaRequest", () => {
+  it("normalizes valid values and removes non-request fields", () => {
+    expect(toValidatedAntennaRequest({
+      ...baseAntenna(),
+      longitude: "10.5",
+      enabled: false,
+      _type: "type2",
+      position: [1, 2, 3],
+    })).toEqual({
+      id: "A1",
+      longitude: 10.5,
+      latitude: 20.5,
+      height_m: 12,
+      tilt: TILT,
+      azimuth: 90,
+      tx_power: POWER,
+    });
+  });
+
+  it("rejects incomplete values and invalid ranges", () => {
+    expect(toValidatedAntennaRequest({ id: "A1" })).toBeNull();
+    expect(toValidatedAntennaRequest(baseAntenna({
+      tilt: { min: 10, current: 5, max: 0 },
+    }))).toBeNull();
+    expect(toValidatedAntennaRequest(baseAntenna({
+      tx_power: { min: -40, current: 50, max: 40 },
+    }))).toBeNull();
   });
 });
 
