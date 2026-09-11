@@ -382,6 +382,8 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   followed by the Impact UI and nationwide execution roadmap.
 - `docs/codebase-cleanup-plan.md`: ordered modernization passes and migration
   boundaries.
+- `docs/codebase-cleanup-walkthrough.md`: agent-executable cleanup work units,
+  validation gates, stop conditions, and handoff template.
 - `docs/refactor-contract.md`, `docs/frontend-route-matrix.md`,
   `docs/scene-draft-compatibility.md`, and `docs/refactor-smoke-checklist.md`:
   Phase 0 behavior contracts and parity checks.

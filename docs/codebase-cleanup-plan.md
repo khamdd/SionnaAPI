@@ -10,6 +10,10 @@ Modernize the codebase through small, reviewable, behavior-preserving changes.
 Public APIs, stored data, simulation behavior, and user workflows remain stable
 unless a separate migration or product change explicitly authorizes a change.
 
+For an agent-ready, step-by-step execution sequence with commit boundaries,
+commands, stop conditions, and handoff templates, see
+`docs/codebase-cleanup-walkthrough.md`.
+
 This plan replaces the earlier cleanup plan. That version had become stale: it
 proposed deleting optimization preview endpoints that were removed in commit
 `540a850`, and it treated the absence of a frontend caller as sufficient evidence
