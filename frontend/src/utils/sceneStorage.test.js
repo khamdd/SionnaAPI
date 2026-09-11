@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SCENE_FIXED_ANTENNAS_STORAGE_KEY } from "../constants";
+import localStorageContract from "../../../test/fixtures/refactor/local_storage_contract.json";
 import {
   enrichScene,
   normalizeStoredAntennaSettings,
@@ -10,8 +11,10 @@ import {
   persistSceneMap,
   readSceneFixedAntennas,
   readStoredSceneMap,
+  removeStoredSceneMapValue,
   saveSceneFixedAntennas,
   setSceneMapValue,
+  updateStoredSceneMap,
 } from "./sceneStorage";
 
 const SCENE_ID = "scene-1";
@@ -47,6 +50,16 @@ afterEach(() => {
 });
 
 describe("readStoredSceneMap", () => {
+  it("reads the Phase 0 representative scene maps without changing their shapes", () => {
+    const representative = localStorageContract.representative_state;
+    const key = localStorageContract.keys.NETWORK_ANTENNA_SETTINGS_STORAGE_KEY;
+    storage.set(key, JSON.stringify(representative[key]));
+
+    const sceneMap = readStoredSceneMap(key, normalizeStoredAntennaSettings);
+
+    expect(Object.fromEntries(sceneMap)).toEqual(representative[key]);
+  });
+
   it("reads stored scene entries and drops values that fail normalization", () => {
     storage.set(
       "draft-key",
@@ -95,6 +108,22 @@ describe("readStoredSceneMap", () => {
 
     expect(storage.get("draft-key")).toBe("{}");
   });
+
+  it("returns an empty map when reading storage throws", () => {
+    localStorage.getItem = () => {
+      throw new Error("storage unavailable");
+    };
+
+    expect(readStoredSceneMap("draft-key", normalizeStoredType2Antennas)).toEqual(new Map());
+  });
+
+  it("preserves write failures for callers to handle", () => {
+    localStorage.setItem = () => {
+      throw new Error("storage full");
+    };
+
+    expect(() => persistSceneMap("draft-key", new Map())).toThrow("storage full");
+  });
 });
 
 describe("setSceneMapValue", () => {
@@ -112,6 +141,65 @@ describe("setSceneMapValue", () => {
     setSceneMapValue(sceneMap, SCENE_ID, "junk", normalizeStoredType2Antennas);
 
     expect(sceneMap.has(SCENE_ID)).toBe(false);
+  });
+});
+
+describe("updateStoredSceneMap", () => {
+  it("updates one scene, normalizes it, and persists the complete map", () => {
+    const current = new Map([["scene-2", [baseAntenna({ id: "A2" })]]]);
+
+    const next = updateStoredSceneMap(
+      "draft-key",
+      current,
+      SCENE_ID,
+      [baseAntenna({ longitude: "10.5" })],
+      normalizeStoredType2Antennas,
+    );
+
+    expect(next).not.toBe(current);
+    expect(current.has(SCENE_ID)).toBe(false);
+    expect(next.get(SCENE_ID)).toEqual([baseAntenna()]);
+    expect(JSON.parse(storage.get("draft-key"))).toEqual(Object.fromEntries(next));
+  });
+
+  it("supports updater functions and removes invalid normalized values", () => {
+    const current = new Map([[SCENE_ID, [baseAntenna()]]]);
+
+    const next = updateStoredSceneMap(
+      "draft-key",
+      current,
+      SCENE_ID,
+      (antennas) => [...antennas, baseAntenna({ id: "A2" })],
+      normalizeStoredType2Antennas,
+    );
+    const removed = updateStoredSceneMap(
+      "draft-key",
+      next,
+      SCENE_ID,
+      [],
+      normalizeStoredType2Antennas,
+    );
+
+    expect(next.get(SCENE_ID).map((antenna) => antenna.id)).toEqual(["A1", "A2"]);
+    expect(removed.has(SCENE_ID)).toBe(false);
+    expect(storage.get("draft-key")).toBe("{}");
+  });
+});
+
+describe("removeStoredSceneMapValue", () => {
+  it("removes one scene without changing the input map and persists the result", () => {
+    const current = new Map([
+      [SCENE_ID, [baseAntenna()]],
+      ["scene-2", [baseAntenna({ id: "A2" })]],
+    ]);
+
+    const next = removeStoredSceneMapValue("draft-key", current, SCENE_ID);
+
+    expect(current.has(SCENE_ID)).toBe(true);
+    expect(next.has(SCENE_ID)).toBe(false);
+    expect(JSON.parse(storage.get("draft-key"))).toEqual({
+      "scene-2": [baseAntenna({ id: "A2" })],
+    });
   });
 });
 

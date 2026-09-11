@@ -58,10 +58,10 @@ import {
   normalizeStoredAntennaSettings,
   normalizeStoredSinrRoles,
   normalizeStoredType2Antennas,
-  persistSceneMap,
   readStoredSceneMap,
+  removeStoredSceneMapValue,
   saveSceneFixedAntennas,
-  setSceneMapValue,
+  updateStoredSceneMap,
 } from "./utils/sceneStorage";
 import {
   CoverageApiPage,
@@ -628,29 +628,32 @@ export default function App() {
     }
 
     setNetworkAntennaSettingsByScene((current) => {
-      const next = new Map(current);
-      const sceneSettings = {
-        ...(next.get(activeScene.id) || {}),
-      };
-      const currentSetting = {
-        ...simulationSettingsForAntenna(antenna),
-        ...(sceneSettings[antennaId] || {}),
-      };
+      return updateStoredSceneMap(
+        NETWORK_ANTENNA_SETTINGS_STORAGE_KEY,
+        current,
+        activeScene.id,
+        (storedSettings) => {
+          const sceneSettings = { ...(storedSettings || {}) };
+          const currentSetting = {
+            ...simulationSettingsForAntenna(antenna),
+            ...(sceneSettings[antennaId] || {}),
+          };
 
-      if (field === "tilt") {
-        currentSetting.tilt_current = value;
-      } else if (field === "tx_power") {
-        currentSetting.tx_power_current = value;
-      } else if (field === "azimuth") {
-        currentSetting.azimuth = value;
-      } else if (field === "enabled") {
-        currentSetting.enabled = Boolean(value);
-      }
+          if (field === "tilt") {
+            currentSetting.tilt_current = value;
+          } else if (field === "tx_power") {
+            currentSetting.tx_power_current = value;
+          } else if (field === "azimuth") {
+            currentSetting.azimuth = value;
+          } else if (field === "enabled") {
+            currentSetting.enabled = Boolean(value);
+          }
 
-      sceneSettings[antennaId] = currentSetting;
-      setSceneMapValue(next, activeScene.id, sceneSettings, normalizeStoredAntennaSettings);
-      persistSceneMap(NETWORK_ANTENNA_SETTINGS_STORAGE_KEY, next);
-      return next;
+          sceneSettings[antennaId] = currentSetting;
+          return sceneSettings;
+        },
+        normalizeStoredAntennaSettings,
+      );
     });
   }
 
@@ -682,24 +685,25 @@ export default function App() {
     }
 
     setNetworkType2AntennasByScene((current) => {
-      const next = new Map(current);
-      const sceneAntennas = [
-        ...(next.get(activeScene.id) || []),
-        normalized,
-      ];
-      setSceneMapValue(next, activeScene.id, sceneAntennas, normalizeStoredType2Antennas);
-      persistSceneMap(NETWORK_TYPE2_ANTENNAS_STORAGE_KEY, next);
-      return next;
+      return updateStoredSceneMap(
+        NETWORK_TYPE2_ANTENNAS_STORAGE_KEY,
+        current,
+        activeScene.id,
+        (sceneAntennas) => [...(sceneAntennas || []), normalized],
+        normalizeStoredType2Antennas,
+      );
     });
     setNetworkAntennaSettingsByScene((current) => {
-      const next = new Map(current);
-      const sceneSettings = {
-        ...(next.get(activeScene.id) || {}),
-        [normalized.id]: simulationSettingsForAntenna(normalized),
-      };
-      setSceneMapValue(next, activeScene.id, sceneSettings, normalizeStoredAntennaSettings);
-      persistSceneMap(NETWORK_ANTENNA_SETTINGS_STORAGE_KEY, next);
-      return next;
+      return updateStoredSceneMap(
+        NETWORK_ANTENNA_SETTINGS_STORAGE_KEY,
+        current,
+        activeScene.id,
+        (sceneSettings) => ({
+          ...(sceneSettings || {}),
+          [normalized.id]: simulationSettingsForAntenna(normalized),
+        }),
+        normalizeStoredAntennaSettings,
+      );
     });
     clearLatestNetworkResult();
     return { ok: true };
@@ -717,23 +721,26 @@ export default function App() {
     }
 
     setNetworkType2AntennasByScene((current) => {
-      const next = new Map(current);
-      const sceneAntennas = (next.get(activeScene.id) || []).filter((item) => (
-        item.id !== antennaId
-      ));
-      setSceneMapValue(next, activeScene.id, sceneAntennas, normalizeStoredType2Antennas);
-      persistSceneMap(NETWORK_TYPE2_ANTENNAS_STORAGE_KEY, next);
-      return next;
+      return updateStoredSceneMap(
+        NETWORK_TYPE2_ANTENNAS_STORAGE_KEY,
+        current,
+        activeScene.id,
+        (sceneAntennas) => (sceneAntennas || []).filter((item) => item.id !== antennaId),
+        normalizeStoredType2Antennas,
+      );
     });
     setNetworkAntennaSettingsByScene((current) => {
-      const next = new Map(current);
-      const sceneSettings = {
-        ...(next.get(activeScene.id) || {}),
-      };
-      delete sceneSettings[antennaId];
-      setSceneMapValue(next, activeScene.id, sceneSettings, normalizeStoredAntennaSettings);
-      persistSceneMap(NETWORK_ANTENNA_SETTINGS_STORAGE_KEY, next);
-      return next;
+      return updateStoredSceneMap(
+        NETWORK_ANTENNA_SETTINGS_STORAGE_KEY,
+        current,
+        activeScene.id,
+        (storedSettings) => {
+          const sceneSettings = { ...(storedSettings || {}) };
+          delete sceneSettings[antennaId];
+          return sceneSettings;
+        },
+        normalizeStoredAntennaSettings,
+      );
     });
     clearLatestNetworkResult();
   }
@@ -749,29 +756,32 @@ export default function App() {
     }
 
     setRsrpAntennaSettingsByScene((current) => {
-      const next = new Map(current);
-      const sceneSettings = {
-        ...(next.get(activeScene.id) || {}),
-      };
-      const currentSetting = {
-        ...simulationSettingsForAntenna(antenna),
-        ...(sceneSettings[antennaId] || {}),
-      };
+      return updateStoredSceneMap(
+        RSRP_ANTENNA_SETTINGS_STORAGE_KEY,
+        current,
+        activeScene.id,
+        (storedSettings) => {
+          const sceneSettings = { ...(storedSettings || {}) };
+          const currentSetting = {
+            ...simulationSettingsForAntenna(antenna),
+            ...(sceneSettings[antennaId] || {}),
+          };
 
-      if (field === "tilt") {
-        currentSetting.tilt_current = value;
-      } else if (field === "tx_power") {
-        currentSetting.tx_power_current = value;
-      } else if (field === "azimuth") {
-        currentSetting.azimuth = value;
-      } else if (field === "enabled") {
-        currentSetting.enabled = Boolean(value);
-      }
+          if (field === "tilt") {
+            currentSetting.tilt_current = value;
+          } else if (field === "tx_power") {
+            currentSetting.tx_power_current = value;
+          } else if (field === "azimuth") {
+            currentSetting.azimuth = value;
+          } else if (field === "enabled") {
+            currentSetting.enabled = Boolean(value);
+          }
 
-      sceneSettings[antennaId] = currentSetting;
-      setSceneMapValue(next, activeScene.id, sceneSettings, normalizeStoredAntennaSettings);
-      persistSceneMap(RSRP_ANTENNA_SETTINGS_STORAGE_KEY, next);
-      return next;
+          sceneSettings[antennaId] = currentSetting;
+          return sceneSettings;
+        },
+        normalizeStoredAntennaSettings,
+      );
     });
   }
 
@@ -803,24 +813,25 @@ export default function App() {
     }
 
     setRsrpType2AntennasByScene((current) => {
-      const next = new Map(current);
-      const sceneAntennas = [
-        ...(next.get(activeScene.id) || []),
-        normalized,
-      ];
-      setSceneMapValue(next, activeScene.id, sceneAntennas, normalizeStoredType2Antennas);
-      persistSceneMap(RSRP_TYPE2_ANTENNAS_STORAGE_KEY, next);
-      return next;
+      return updateStoredSceneMap(
+        RSRP_TYPE2_ANTENNAS_STORAGE_KEY,
+        current,
+        activeScene.id,
+        (sceneAntennas) => [...(sceneAntennas || []), normalized],
+        normalizeStoredType2Antennas,
+      );
     });
     setRsrpAntennaSettingsByScene((current) => {
-      const next = new Map(current);
-      const sceneSettings = {
-        ...(next.get(activeScene.id) || {}),
-        [normalized.id]: simulationSettingsForAntenna(normalized),
-      };
-      setSceneMapValue(next, activeScene.id, sceneSettings, normalizeStoredAntennaSettings);
-      persistSceneMap(RSRP_ANTENNA_SETTINGS_STORAGE_KEY, next);
-      return next;
+      return updateStoredSceneMap(
+        RSRP_ANTENNA_SETTINGS_STORAGE_KEY,
+        current,
+        activeScene.id,
+        (sceneSettings) => ({
+          ...(sceneSettings || {}),
+          [normalized.id]: simulationSettingsForAntenna(normalized),
+        }),
+        normalizeStoredAntennaSettings,
+      );
     });
     return { ok: true };
   }
@@ -837,23 +848,26 @@ export default function App() {
     }
 
     setRsrpType2AntennasByScene((current) => {
-      const next = new Map(current);
-      const sceneAntennas = (next.get(activeScene.id) || []).filter((item) => (
-        item.id !== antennaId
-      ));
-      setSceneMapValue(next, activeScene.id, sceneAntennas, normalizeStoredType2Antennas);
-      persistSceneMap(RSRP_TYPE2_ANTENNAS_STORAGE_KEY, next);
-      return next;
+      return updateStoredSceneMap(
+        RSRP_TYPE2_ANTENNAS_STORAGE_KEY,
+        current,
+        activeScene.id,
+        (sceneAntennas) => (sceneAntennas || []).filter((item) => item.id !== antennaId),
+        normalizeStoredType2Antennas,
+      );
     });
     setRsrpAntennaSettingsByScene((current) => {
-      const next = new Map(current);
-      const sceneSettings = {
-        ...(next.get(activeScene.id) || {}),
-      };
-      delete sceneSettings[antennaId];
-      setSceneMapValue(next, activeScene.id, sceneSettings, normalizeStoredAntennaSettings);
-      persistSceneMap(RSRP_ANTENNA_SETTINGS_STORAGE_KEY, next);
-      return next;
+      return updateStoredSceneMap(
+        RSRP_ANTENNA_SETTINGS_STORAGE_KEY,
+        current,
+        activeScene.id,
+        (storedSettings) => {
+          const sceneSettings = { ...(storedSettings || {}) };
+          delete sceneSettings[antennaId];
+          return sceneSettings;
+        },
+        normalizeStoredAntennaSettings,
+      );
     });
   }
 
@@ -868,27 +882,30 @@ export default function App() {
     }
 
     setSinrAntennaSettingsByScene((current) => {
-      const next = new Map(current);
-      const sceneSettings = {
-        ...(next.get(activeScene.id) || {}),
-      };
-      const currentSetting = {
-        ...simulationSettingsForAntenna(antenna),
-        ...(sceneSettings[antennaId] || {}),
-      };
+      return updateStoredSceneMap(
+        SINR_ANTENNA_SETTINGS_STORAGE_KEY,
+        current,
+        activeScene.id,
+        (storedSettings) => {
+          const sceneSettings = { ...(storedSettings || {}) };
+          const currentSetting = {
+            ...simulationSettingsForAntenna(antenna),
+            ...(sceneSettings[antennaId] || {}),
+          };
 
-      if (field === "tilt") {
-        currentSetting.tilt_current = value;
-      } else if (field === "tx_power") {
-        currentSetting.tx_power_current = value;
-      } else if (field === "azimuth") {
-        currentSetting.azimuth = value;
-      }
+          if (field === "tilt") {
+            currentSetting.tilt_current = value;
+          } else if (field === "tx_power") {
+            currentSetting.tx_power_current = value;
+          } else if (field === "azimuth") {
+            currentSetting.azimuth = value;
+          }
 
-      sceneSettings[antennaId] = currentSetting;
-      setSceneMapValue(next, activeScene.id, sceneSettings, normalizeStoredAntennaSettings);
-      persistSceneMap(SINR_ANTENNA_SETTINGS_STORAGE_KEY, next);
-      return next;
+          sceneSettings[antennaId] = currentSetting;
+          return sceneSettings;
+        },
+        normalizeStoredAntennaSettings,
+      );
     });
   }
 
@@ -916,24 +933,25 @@ export default function App() {
     }
 
     setSinrType2AntennasByScene((current) => {
-      const next = new Map(current);
-      const sceneAntennas = [
-        ...(next.get(activeScene.id) || []),
-        normalized,
-      ];
-      setSceneMapValue(next, activeScene.id, sceneAntennas, normalizeStoredType2Antennas);
-      persistSceneMap(SINR_TYPE2_ANTENNAS_STORAGE_KEY, next);
-      return next;
+      return updateStoredSceneMap(
+        SINR_TYPE2_ANTENNAS_STORAGE_KEY,
+        current,
+        activeScene.id,
+        (sceneAntennas) => [...(sceneAntennas || []), normalized],
+        normalizeStoredType2Antennas,
+      );
     });
     setSinrAntennaSettingsByScene((current) => {
-      const next = new Map(current);
-      const sceneSettings = {
-        ...(next.get(activeScene.id) || {}),
-        [normalized.id]: simulationSettingsForAntenna(normalized),
-      };
-      setSceneMapValue(next, activeScene.id, sceneSettings, normalizeStoredAntennaSettings);
-      persistSceneMap(SINR_ANTENNA_SETTINGS_STORAGE_KEY, next);
-      return next;
+      return updateStoredSceneMap(
+        SINR_ANTENNA_SETTINGS_STORAGE_KEY,
+        current,
+        activeScene.id,
+        (sceneSettings) => ({
+          ...(sceneSettings || {}),
+          [normalized.id]: simulationSettingsForAntenna(normalized),
+        }),
+        normalizeStoredAntennaSettings,
+      );
     });
     return { ok: true };
   }
@@ -950,39 +968,45 @@ export default function App() {
     }
 
     setSinrType2AntennasByScene((current) => {
-      const next = new Map(current);
-      const sceneAntennas = (next.get(activeScene.id) || []).filter((item) => (
-        item.id !== antennaId
-      ));
-      setSceneMapValue(next, activeScene.id, sceneAntennas, normalizeStoredType2Antennas);
-      persistSceneMap(SINR_TYPE2_ANTENNAS_STORAGE_KEY, next);
-      return next;
+      return updateStoredSceneMap(
+        SINR_TYPE2_ANTENNAS_STORAGE_KEY,
+        current,
+        activeScene.id,
+        (sceneAntennas) => (sceneAntennas || []).filter((item) => item.id !== antennaId),
+        normalizeStoredType2Antennas,
+      );
     });
     setSinrAntennaSettingsByScene((current) => {
-      const next = new Map(current);
-      const sceneSettings = {
-        ...(next.get(activeScene.id) || {}),
-      };
-      delete sceneSettings[antennaId];
-      setSceneMapValue(next, activeScene.id, sceneSettings, normalizeStoredAntennaSettings);
-      persistSceneMap(SINR_ANTENNA_SETTINGS_STORAGE_KEY, next);
-      return next;
+      return updateStoredSceneMap(
+        SINR_ANTENNA_SETTINGS_STORAGE_KEY,
+        current,
+        activeScene.id,
+        (storedSettings) => {
+          const sceneSettings = { ...(storedSettings || {}) };
+          delete sceneSettings[antennaId];
+          return sceneSettings;
+        },
+        normalizeStoredAntennaSettings,
+      );
     });
     setSinrRoleSelectionsByScene((current) => {
-      const next = new Map(current);
-      const roles = {
-        ...(next.get(activeScene.id) || {}),
-      };
+      return updateStoredSceneMap(
+        SINR_ROLE_SELECTION_STORAGE_KEY,
+        current,
+        activeScene.id,
+        (storedRoles) => {
+          const roles = { ...(storedRoles || {}) };
 
-      for (const [role, selectedId] of Object.entries(roles)) {
-        if (selectedId === antennaId) {
-          roles[role] = "";
-        }
-      }
+          for (const [role, selectedId] of Object.entries(roles)) {
+            if (selectedId === antennaId) {
+              roles[role] = "";
+            }
+          }
 
-      setSceneMapValue(next, activeScene.id, roles, normalizeStoredSinrRoles);
-      persistSceneMap(SINR_ROLE_SELECTION_STORAGE_KEY, next);
-      return next;
+          return roles;
+        },
+        normalizeStoredSinrRoles,
+      );
     });
   }
 
@@ -992,10 +1016,13 @@ export default function App() {
     }
 
     setSinrRoleSelectionsByScene((current) => {
-      const next = new Map(current);
-      setSceneMapValue(next, activeScene.id, nextRoles, normalizeStoredSinrRoles);
-      persistSceneMap(SINR_ROLE_SELECTION_STORAGE_KEY, next);
-      return next;
+      return updateStoredSceneMap(
+        SINR_ROLE_SELECTION_STORAGE_KEY,
+        current,
+        activeScene.id,
+        nextRoles,
+        normalizeStoredSinrRoles,
+      );
     });
   }
 
@@ -1010,27 +1037,30 @@ export default function App() {
     }
 
     setThroughputAntennaSettingsByScene((current) => {
-      const next = new Map(current);
-      const sceneSettings = {
-        ...(next.get(activeScene.id) || {}),
-      };
-      const currentSetting = {
-        ...simulationSettingsForAntenna(antenna),
-        ...(sceneSettings[antennaId] || {}),
-      };
+      return updateStoredSceneMap(
+        THROUGHPUT_ANTENNA_SETTINGS_STORAGE_KEY,
+        current,
+        activeScene.id,
+        (storedSettings) => {
+          const sceneSettings = { ...(storedSettings || {}) };
+          const currentSetting = {
+            ...simulationSettingsForAntenna(antenna),
+            ...(sceneSettings[antennaId] || {}),
+          };
 
-      if (field === "tilt") {
-        currentSetting.tilt_current = value;
-      } else if (field === "tx_power") {
-        currentSetting.tx_power_current = value;
-      } else if (field === "azimuth") {
-        currentSetting.azimuth = value;
-      }
+          if (field === "tilt") {
+            currentSetting.tilt_current = value;
+          } else if (field === "tx_power") {
+            currentSetting.tx_power_current = value;
+          } else if (field === "azimuth") {
+            currentSetting.azimuth = value;
+          }
 
-      sceneSettings[antennaId] = currentSetting;
-      setSceneMapValue(next, activeScene.id, sceneSettings, normalizeStoredAntennaSettings);
-      persistSceneMap(THROUGHPUT_ANTENNA_SETTINGS_STORAGE_KEY, next);
-      return next;
+          sceneSettings[antennaId] = currentSetting;
+          return sceneSettings;
+        },
+        normalizeStoredAntennaSettings,
+      );
     });
   }
 
@@ -1058,24 +1088,25 @@ export default function App() {
     }
 
     setThroughputType2AntennasByScene((current) => {
-      const next = new Map(current);
-      const sceneAntennas = [
-        ...(next.get(activeScene.id) || []),
-        normalized,
-      ];
-      setSceneMapValue(next, activeScene.id, sceneAntennas, normalizeStoredType2Antennas);
-      persistSceneMap(THROUGHPUT_TYPE2_ANTENNAS_STORAGE_KEY, next);
-      return next;
+      return updateStoredSceneMap(
+        THROUGHPUT_TYPE2_ANTENNAS_STORAGE_KEY,
+        current,
+        activeScene.id,
+        (sceneAntennas) => [...(sceneAntennas || []), normalized],
+        normalizeStoredType2Antennas,
+      );
     });
     setThroughputAntennaSettingsByScene((current) => {
-      const next = new Map(current);
-      const sceneSettings = {
-        ...(next.get(activeScene.id) || {}),
-        [normalized.id]: simulationSettingsForAntenna(normalized),
-      };
-      setSceneMapValue(next, activeScene.id, sceneSettings, normalizeStoredAntennaSettings);
-      persistSceneMap(THROUGHPUT_ANTENNA_SETTINGS_STORAGE_KEY, next);
-      return next;
+      return updateStoredSceneMap(
+        THROUGHPUT_ANTENNA_SETTINGS_STORAGE_KEY,
+        current,
+        activeScene.id,
+        (sceneSettings) => ({
+          ...(sceneSettings || {}),
+          [normalized.id]: simulationSettingsForAntenna(normalized),
+        }),
+        normalizeStoredAntennaSettings,
+      );
     });
     return { ok: true };
   }
@@ -1092,39 +1123,45 @@ export default function App() {
     }
 
     setThroughputType2AntennasByScene((current) => {
-      const next = new Map(current);
-      const sceneAntennas = (next.get(activeScene.id) || []).filter((item) => (
-        item.id !== antennaId
-      ));
-      setSceneMapValue(next, activeScene.id, sceneAntennas, normalizeStoredType2Antennas);
-      persistSceneMap(THROUGHPUT_TYPE2_ANTENNAS_STORAGE_KEY, next);
-      return next;
+      return updateStoredSceneMap(
+        THROUGHPUT_TYPE2_ANTENNAS_STORAGE_KEY,
+        current,
+        activeScene.id,
+        (sceneAntennas) => (sceneAntennas || []).filter((item) => item.id !== antennaId),
+        normalizeStoredType2Antennas,
+      );
     });
     setThroughputAntennaSettingsByScene((current) => {
-      const next = new Map(current);
-      const sceneSettings = {
-        ...(next.get(activeScene.id) || {}),
-      };
-      delete sceneSettings[antennaId];
-      setSceneMapValue(next, activeScene.id, sceneSettings, normalizeStoredAntennaSettings);
-      persistSceneMap(THROUGHPUT_ANTENNA_SETTINGS_STORAGE_KEY, next);
-      return next;
+      return updateStoredSceneMap(
+        THROUGHPUT_ANTENNA_SETTINGS_STORAGE_KEY,
+        current,
+        activeScene.id,
+        (storedSettings) => {
+          const sceneSettings = { ...(storedSettings || {}) };
+          delete sceneSettings[antennaId];
+          return sceneSettings;
+        },
+        normalizeStoredAntennaSettings,
+      );
     });
     setThroughputRoleSelectionsByScene((current) => {
-      const next = new Map(current);
-      const roles = {
-        ...(next.get(activeScene.id) || {}),
-      };
+      return updateStoredSceneMap(
+        THROUGHPUT_ROLE_SELECTION_STORAGE_KEY,
+        current,
+        activeScene.id,
+        (storedRoles) => {
+          const roles = { ...(storedRoles || {}) };
 
-      for (const [role, selectedId] of Object.entries(roles)) {
-        if (selectedId === antennaId) {
-          roles[role] = "";
-        }
-      }
+          for (const [role, selectedId] of Object.entries(roles)) {
+            if (selectedId === antennaId) {
+              roles[role] = "";
+            }
+          }
 
-      setSceneMapValue(next, activeScene.id, roles, normalizeStoredSinrRoles);
-      persistSceneMap(THROUGHPUT_ROLE_SELECTION_STORAGE_KEY, next);
-      return next;
+          return roles;
+        },
+        normalizeStoredSinrRoles,
+      );
     });
   }
 
@@ -1134,10 +1171,13 @@ export default function App() {
     }
 
     setThroughputRoleSelectionsByScene((current) => {
-      const next = new Map(current);
-      setSceneMapValue(next, activeScene.id, nextRoles, normalizeStoredSinrRoles);
-      persistSceneMap(THROUGHPUT_ROLE_SELECTION_STORAGE_KEY, next);
-      return next;
+      return updateStoredSceneMap(
+        THROUGHPUT_ROLE_SELECTION_STORAGE_KEY,
+        current,
+        activeScene.id,
+        nextRoles,
+        normalizeStoredSinrRoles,
+      );
     });
   }
 
@@ -1173,16 +1213,10 @@ export default function App() {
     }
 
     setNetworkType2AntennasByScene((current) => {
-      const next = new Map(current);
-      next.delete(sceneId);
-      persistSceneMap(NETWORK_TYPE2_ANTENNAS_STORAGE_KEY, next);
-      return next;
+      return removeStoredSceneMapValue(NETWORK_TYPE2_ANTENNAS_STORAGE_KEY, current, sceneId);
     });
     setNetworkAntennaSettingsByScene((current) => {
-      const next = new Map(current);
-      next.delete(sceneId);
-      persistSceneMap(NETWORK_ANTENNA_SETTINGS_STORAGE_KEY, next);
-      return next;
+      return removeStoredSceneMapValue(NETWORK_ANTENNA_SETTINGS_STORAGE_KEY, current, sceneId);
     });
   }
 
@@ -1192,16 +1226,10 @@ export default function App() {
     }
 
     setRsrpType2AntennasByScene((current) => {
-      const next = new Map(current);
-      next.delete(sceneId);
-      persistSceneMap(RSRP_TYPE2_ANTENNAS_STORAGE_KEY, next);
-      return next;
+      return removeStoredSceneMapValue(RSRP_TYPE2_ANTENNAS_STORAGE_KEY, current, sceneId);
     });
     setRsrpAntennaSettingsByScene((current) => {
-      const next = new Map(current);
-      next.delete(sceneId);
-      persistSceneMap(RSRP_ANTENNA_SETTINGS_STORAGE_KEY, next);
-      return next;
+      return removeStoredSceneMapValue(RSRP_ANTENNA_SETTINGS_STORAGE_KEY, current, sceneId);
     });
   }
 
@@ -1211,22 +1239,13 @@ export default function App() {
     }
 
     setSinrType2AntennasByScene((current) => {
-      const next = new Map(current);
-      next.delete(sceneId);
-      persistSceneMap(SINR_TYPE2_ANTENNAS_STORAGE_KEY, next);
-      return next;
+      return removeStoredSceneMapValue(SINR_TYPE2_ANTENNAS_STORAGE_KEY, current, sceneId);
     });
     setSinrAntennaSettingsByScene((current) => {
-      const next = new Map(current);
-      next.delete(sceneId);
-      persistSceneMap(SINR_ANTENNA_SETTINGS_STORAGE_KEY, next);
-      return next;
+      return removeStoredSceneMapValue(SINR_ANTENNA_SETTINGS_STORAGE_KEY, current, sceneId);
     });
     setSinrRoleSelectionsByScene((current) => {
-      const next = new Map(current);
-      next.delete(sceneId);
-      persistSceneMap(SINR_ROLE_SELECTION_STORAGE_KEY, next);
-      return next;
+      return removeStoredSceneMapValue(SINR_ROLE_SELECTION_STORAGE_KEY, current, sceneId);
     });
   }
 
@@ -1236,22 +1255,13 @@ export default function App() {
     }
 
     setThroughputType2AntennasByScene((current) => {
-      const next = new Map(current);
-      next.delete(sceneId);
-      persistSceneMap(THROUGHPUT_TYPE2_ANTENNAS_STORAGE_KEY, next);
-      return next;
+      return removeStoredSceneMapValue(THROUGHPUT_TYPE2_ANTENNAS_STORAGE_KEY, current, sceneId);
     });
     setThroughputAntennaSettingsByScene((current) => {
-      const next = new Map(current);
-      next.delete(sceneId);
-      persistSceneMap(THROUGHPUT_ANTENNA_SETTINGS_STORAGE_KEY, next);
-      return next;
+      return removeStoredSceneMapValue(THROUGHPUT_ANTENNA_SETTINGS_STORAGE_KEY, current, sceneId);
     });
     setThroughputRoleSelectionsByScene((current) => {
-      const next = new Map(current);
-      next.delete(sceneId);
-      persistSceneMap(THROUGHPUT_ROLE_SELECTION_STORAGE_KEY, next);
-      return next;
+      return removeStoredSceneMapValue(THROUGHPUT_ROLE_SELECTION_STORAGE_KEY, current, sceneId);
     });
   }
 

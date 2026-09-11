@@ -67,6 +67,30 @@ export function setSceneMapValue(sceneMap, sceneId, value, normalizeValue) {
   }
 }
 
+export function updateStoredSceneMap(
+  storageKey,
+  sceneMap,
+  sceneId,
+  valueOrUpdater,
+  normalizeValue,
+) {
+  const next = new Map(sceneMap);
+  const value = typeof valueOrUpdater === "function"
+    ? valueOrUpdater(next.get(sceneId))
+    : valueOrUpdater;
+
+  setSceneMapValue(next, sceneId, value, normalizeValue);
+  persistSceneMap(storageKey, next);
+  return next;
+}
+
+export function removeStoredSceneMapValue(storageKey, sceneMap, sceneId) {
+  const next = new Map(sceneMap);
+  next.delete(sceneId);
+  persistSceneMap(storageKey, next);
+  return next;
+}
+
 export function saveSceneFixedAntennas(sceneId, antennas) {
   if (!sceneId || !Array.isArray(antennas)) {
     return;
