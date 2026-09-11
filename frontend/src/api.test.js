@@ -86,6 +86,26 @@ describe("authentication headers", () => {
     const [, options] = lastCall();
     expect(options.headers).toEqual({});
   });
+
+  it.each([
+    ["deleteSimulationJob", "job-1", "/api/v1/simulation-jobs/job-1"],
+    ["deleteScene", "scene-1", "/api/v1/scenes/scene-1"],
+    ["deleteSimulationRun", "run-1", "/api/v1/simulation-runs/run-1"],
+  ])("%s omits the Authorization header without a stored token", async (name, id, path) => {
+    setToken(null);
+    const body = { deleted: true };
+    fetchMock = vi.fn(async () => respond(body));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await api[name](id);
+
+    expectRequest({
+      method: "DELETE",
+      path,
+      headers: {},
+    });
+    expect(result).toBe(body);
+  });
 });
 
 describe("error message extraction", () => {
