@@ -10,7 +10,6 @@ from backend.main import app
 from backend.schemas.network_configurations import NetworkConfigurationCreateRequest
 from backend.services import network_configuration_service as service
 
-
 client = TestClient(app)
 USER_ID = "11111111-1111-1111-1111-111111111111"
 OTHER_USER_ID = "22222222-2222-2222-2222-222222222222"

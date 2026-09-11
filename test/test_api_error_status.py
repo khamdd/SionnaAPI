@@ -7,7 +7,6 @@ from backend.api import sinr as api_module
 from backend.api.dependencies import require_current_user
 from backend.main import app
 
-
 client = TestClient(app)
 
 

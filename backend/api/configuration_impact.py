@@ -4,7 +4,6 @@ from backend.api.dependencies import require_current_user
 from backend.schemas.configuration_impact import ConfigurationImpactPreviewRequest
 from backend.services import impact_planner
 
-
 router = APIRouter(tags=["Configuration impact"])
 
 

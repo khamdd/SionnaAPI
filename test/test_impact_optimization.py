@@ -4,7 +4,6 @@ from types import SimpleNamespace
 from backend.schemas.impact_studies import ImpactStudyCreateRequest
 from backend.services import impact_study_service
 
-
 STUDY_ID = "cccccccc-cccc-cccc-cccc-cccccccccccc"
 PROFILE_ID = "dddddddd-dddd-dddd-dddd-dddddddddddd"
 CANDIDATE_ID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"

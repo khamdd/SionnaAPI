@@ -1,14 +1,11 @@
-import numpy as np
 
 from backend.exceptions import ClientInputError
 from backend.schemas.requests import SINRRequest
 from backend.services.analytical_service import calculate_selected_analytical_link
-
 from backend.simulations.antenna_factory import (
-    sync_transmitter,
     remove_entity,
+    sync_transmitter,
 )
-
 from backend.simulations.radio_calculator import (
     calculate_interference_plus_noise_power,
     execute_radio_map,

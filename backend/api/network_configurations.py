@@ -10,7 +10,6 @@ from backend.schemas.network_configurations import (
 )
 from backend.services import network_configuration_service
 
-
 router = APIRouter(tags=["Network configurations"])
 
 

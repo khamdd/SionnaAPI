@@ -14,7 +14,6 @@ from backend.services.configuration_diff_service import compare_configuration_sn
 from backend.services.scene_service import list_scenes
 from backend.services.simulation_store import ensure_scene_reference
 
-
 logger = logging.getLogger(__name__)
 
 def normalize_antennas(antennas: Iterable[Any]) -> list[dict]:

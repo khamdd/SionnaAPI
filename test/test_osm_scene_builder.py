@@ -1,6 +1,5 @@
-from pathlib import Path
-from types import SimpleNamespace
 import xml.etree.ElementTree as ET
+from types import SimpleNamespace
 
 import pytest
 

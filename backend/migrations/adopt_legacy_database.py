@@ -19,7 +19,6 @@ from backend.migrations.schema import (
 )
 from backend.models import Base
 
-
 BASELINE_REVISION = "0001_initial_schema"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 ALEMBIC_CONFIG_PATH = PROJECT_ROOT / "alembic.ini"

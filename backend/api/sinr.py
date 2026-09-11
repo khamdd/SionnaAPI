@@ -2,42 +2,36 @@ import math
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from backend.constants import MAX_GRID_CELLS
 from backend.api.dependencies import require_current_user
+from backend.constants import MAX_GRID_CELLS
 from backend.database import is_database_configured
 from backend.schemas.requests import (
     CoverageRequest,
-    NetworkCoverageRequest,
     NetworkCoverageOptimizationRequest,
+    NetworkCoverageRequest,
     RSRPRequest,
     SceneBoundsRequest,
     SINRRequest,
     ThroughputRequest,
 )
-
+from backend.services.coordinate_service import with_runtime_antenna_positions
 from backend.services.coverage_service import (
     calculate_coverage_map_service,
     calculate_network_coverage_service,
 )
-
-from backend.services.sinr_service import (
-    calculate_sinr_service,
+from backend.services.event_logger import log_event
+from backend.services.optimization_service import (
+    run_network_coverage_optimization,
 )
 from backend.services.rsrp_service import (
     calculate_rsrp_service,
 )
-
-from backend.services.throughput_service import (
-    compare_throughput_service,
-)
-
-from backend.services.simulation_store import (
-    delete_simulation_run,
-    get_simulation_run,
-    get_simulation_run_result,
-    list_simulation_runs,
-    store_simulation_result,
-    utc_now,
+from backend.services.scene_service import (
+    activate_scene,
+    create_scene_preview,
+    delete_scene,
+    get_active_scene,
+    list_scenes,
 )
 from backend.services.simulation_job_store import (
     create_simulation_job,
@@ -48,19 +42,20 @@ from backend.services.simulation_job_store import (
     request_simulation_job_cancellation,
     save_simulation_job_result,
 )
-from backend.services.scene_service import (
-    activate_scene,
-    create_scene_preview,
-    delete_scene,
-    get_active_scene,
-    list_scenes,
+from backend.services.simulation_store import (
+    delete_simulation_run,
+    get_simulation_run,
+    get_simulation_run_result,
+    list_simulation_runs,
+    store_simulation_result,
+    utc_now,
 )
-from backend.services.coordinate_service import with_runtime_antenna_positions
-from backend.services.event_logger import log_event
-from backend.services.optimization_service import (
-    run_network_coverage_optimization,
+from backend.services.sinr_service import (
+    calculate_sinr_service,
 )
-
+from backend.services.throughput_service import (
+    compare_throughput_service,
+)
 from backend.simulations.sionna_engine import engine
 
 router = APIRouter(

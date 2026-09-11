@@ -2,7 +2,6 @@ import math
 
 from backend.services.pathgain_model import PathGainModel
 
-
 MODEL_NAMES = {
     "uma": "UMa",
     "ericsson": "Ericsson",

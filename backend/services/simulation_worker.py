@@ -14,17 +14,17 @@ from backend.core.config import get_simulation_job_settings
 from backend.database import is_database_configured
 from backend.schemas.requests import (
     CoverageRequest,
-    NetworkCoverageRequest,
     NetworkCoverageOptimizationRequest,
+    NetworkCoverageRequest,
     RSRPRequest,
     SINRRequest,
     ThroughputRequest,
 )
+from backend.services.coordinate_service import with_runtime_antenna_positions
 from backend.services.coverage_service import (
     calculate_coverage_map_service,
     calculate_network_coverage_service,
 )
-from backend.services.coordinate_service import with_runtime_antenna_positions
 from backend.services.rsrp_service import calculate_rsrp_service
 from backend.services.simulation_job_store import (
     claim_next_simulation_job,
@@ -32,14 +32,15 @@ from backend.services.simulation_job_store import (
     heartbeat_simulation_job,
     is_simulation_job_cancel_requested,
     mark_simulation_job_cancelled,
-    mark_simulation_job_failed,
+    # Kept as the worker module's monkeypatch/test surface even though the
+    # worker currently routes failures through handle_simulation_job_failure.
+    mark_simulation_job_failed,  # noqa: F401
     mark_simulation_job_succeeded,
     recover_expired_simulation_jobs,
     update_optimization_progress,
 )
 from backend.services.sinr_service import calculate_sinr_service
 from backend.services.throughput_service import compare_throughput_service
-
 
 logger = logging.getLogger(__name__)
 

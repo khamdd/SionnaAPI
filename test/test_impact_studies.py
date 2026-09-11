@@ -9,7 +9,6 @@ from backend.api.dependencies import require_current_user
 from backend.main import app
 from backend.services import impact_study_service
 
-
 client = TestClient(app)
 USER_ID = "11111111-1111-1111-1111-111111111111"
 BASELINE_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"

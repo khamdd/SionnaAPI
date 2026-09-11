@@ -1,5 +1,7 @@
+from typing import List, Literal, Tuple
+
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from typing import Any, List, Literal, Tuple
+
 from backend.constants import (
     DEFAULT_RSRP_USER_COUNT,
     DEFAULT_TRANSMITTER_PATTERN,

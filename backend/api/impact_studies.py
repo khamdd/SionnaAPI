@@ -8,7 +8,6 @@ from backend.api.dependencies import require_current_user
 from backend.schemas.impact_studies import ImpactStudyCreateRequest
 from backend.services import impact_report_service, impact_study_service
 
-
 router = APIRouter(tags=["Impact studies"])
 
 ImpactStudyStatus = Literal[

@@ -11,7 +11,6 @@ from backend.constants import (
 from backend.schemas.requests import CoverageRequest, NetworkCoverageRequest
 from backend.simulations.overlap import build_overlap_info, summarize_overlap
 
-
 DEFAULT_FREQUENCY_HZ = 3.5e9
 DEFAULT_BANDWIDTH_MHZ = 100.0
 NO_COVERAGE_DBM = -140.0

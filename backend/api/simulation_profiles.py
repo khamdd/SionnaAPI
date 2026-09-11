@@ -12,7 +12,6 @@ from backend.schemas.simulation_profiles import (
 )
 from backend.services import simulation_profile_service
 
-
 router = APIRouter(tags=["Simulation profiles"])
 
 

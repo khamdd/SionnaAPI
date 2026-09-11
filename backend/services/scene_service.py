@@ -11,8 +11,8 @@ from backend.constants import (
     MAX_IMPORTED_SCENES,
     MAX_SCENE_AREA_KM2,
     MAX_SCENE_SIDE_M,
-    SCENE_REGISTRY_PATH,
     SCENE_PREVIEW_TTL_HOURS,
+    SCENE_REGISTRY_PATH,
     SCENE_ROOT,
 )
 from backend.schemas.requests import SceneBoundsRequest
@@ -21,7 +21,6 @@ from backend.services.osm_scene_builder import (
     validate_sionna_scene,
 )
 from backend.services.simulation_store import mark_scene_reference_deleted, utc_now
-
 
 _lock = threading.RLock()
 

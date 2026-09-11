@@ -22,7 +22,6 @@ from backend.schemas.simulation_profiles import (
 )
 from backend.services import simulation_profile_service as service
 
-
 client = TestClient(app)
 USER_ID = "11111111-1111-1111-1111-111111111111"
 PROFILE_ID = "22222222-2222-2222-2222-222222222222"

@@ -33,7 +33,6 @@ from backend.services.simulation_store import (
     serialize_datetime,
 )
 
-
 logger = logging.getLogger(__name__)
 
 TERMINAL_STUDY_STATUSES = {

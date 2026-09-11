@@ -1,7 +1,6 @@
 import itertools
 import math
 
-
 NO_COVERAGE_LEVEL = "no_coverage"
 OVERLAP_MIN_COUNT = 2
 

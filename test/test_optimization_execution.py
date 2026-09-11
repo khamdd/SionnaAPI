@@ -5,8 +5,9 @@ import pytest
 from fastapi import HTTPException
 
 from backend.api import sinr as api
-from backend.services import simulation_worker as worker, simulation_job_store as store
-from test.test_optimization_service import optimization_request, coverage_result
+from backend.services import simulation_job_store as store
+from backend.services import simulation_worker as worker
+from test.test_optimization_service import coverage_result, optimization_request
 
 
 def scene_info():

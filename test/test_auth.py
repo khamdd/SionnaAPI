@@ -5,10 +5,9 @@ from fastapi.testclient import TestClient
 
 from backend.api import auth as auth_module
 from backend.main import app
+from backend.models import AppUser
 from backend.services import auth_service
 from backend.services.auth_service import hash_password, verify_password
-from backend.models import AppUser
-
 
 client = TestClient(app)
 

@@ -10,7 +10,6 @@ from backend.models import ImpactStudy, Notification
 from backend.services.impact_decision_service import final_decision
 from backend.services.simulation_store import normalize_json_value, serialize_datetime
 
-
 logger = logging.getLogger(__name__)
 
 NOTIFIABLE_STUDY_STATUSES = {

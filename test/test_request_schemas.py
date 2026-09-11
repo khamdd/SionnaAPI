@@ -1,12 +1,12 @@
 import pytest
 from pydantic import ValidationError
-from backend.schemas.requests import RangeValue
 
 from backend.constants import DEFAULT_TRANSMITTER_PATTERN
 from backend.schemas.requests import (
     CoverageRequest,
     NetworkCoverageOptimizationRequest,
     NetworkCoverageRequest,
+    RangeValue,
     SceneBoundsRequest,
     SINRRequest,
     SolverConfig,

@@ -12,7 +12,6 @@ from sqlalchemy.orm import sessionmaker
 
 from backend.migrations.schema import set_application_search_path
 
-
 load_dotenv()
 
 

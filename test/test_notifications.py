@@ -9,7 +9,6 @@ from backend.api.dependencies import require_current_user
 from backend.main import app
 from backend.services import notification_service
 
-
 USER_ID = "11111111-1111-1111-1111-111111111111"
 OTHER_USER_ID = "22222222-2222-2222-2222-222222222222"
 STUDY_ID = "cccccccc-cccc-cccc-cccc-cccccccccccc"

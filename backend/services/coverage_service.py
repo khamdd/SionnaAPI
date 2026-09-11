@@ -1,13 +1,12 @@
+import numpy as np
+from sionna.rt import PlanarArray, RadioMapSolver, Transmitter
+
 from backend.constants import (
     GENERATED_IMAGE_QUOTA_BYTES,
     MIN_NEIGHBOR_SIGNAL_DBM,
     NEIGHBOR_SIGNAL_WINDOW_DB,
     STATIC_DIR,
 )
-
-import numpy as np
-from sionna.rt import PlanarArray, RadioMapSolver, Transmitter
-
 from backend.schemas.requests import CoverageRequest, NetworkCoverageRequest
 from backend.simulations.antenna_factory import remove_entity, sync_transmitter
 from backend.simulations.overlap import build_overlap_info, summarize_overlap

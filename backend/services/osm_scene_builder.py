@@ -3,20 +3,14 @@ import math
 import re
 import shutil
 import struct
-import urllib.parse
-import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.error import HTTPError, URLError
+
 from backend.constants.scenes import (
     DEFAULT_BUILDING_HEIGHT_M,
     MIN_POLYGON_AREA_M2,
     OFFLINE_BUILDINGS_DIR,
-    OVERPASS_FALLBACK_URL,
-    OVERPASS_HTTP_TIMEOUT_SECONDS,
-    OVERPASS_QUERY_TIMEOUT_SECONDS,
-    OVERPASS_URL,
 )
 
 

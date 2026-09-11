@@ -15,7 +15,6 @@ from backend.services.profile_diff_service import compare_profile_templates
 from backend.services.scene_service import list_scenes
 from backend.services.simulation_profile_service import validate_profile_definition
 
-
 logger = logging.getLogger(__name__)
 
 IMPACT_POLICY_VERSION = "impact-policy-v2"

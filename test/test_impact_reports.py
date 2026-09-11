@@ -1,4 +1,3 @@
-from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -6,7 +5,6 @@ from fastapi.testclient import TestClient
 from backend.api.dependencies import require_current_user
 from backend.main import app
 from backend.services import impact_report_service
-
 
 USER_ID = "11111111-1111-1111-1111-111111111111"
 STUDY_ID = "cccccccc-cccc-cccc-cccc-cccccccccccc"

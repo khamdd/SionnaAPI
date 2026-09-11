@@ -1,11 +1,10 @@
 import json
 import os
 import time
+from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
-from datetime import datetime, timezone
 from urllib.request import Request, urlopen
-
 
 ELASTICSEARCH_URL = os.getenv("ELASTICSEARCH_URL", "http://elasticsearch:9200").rstrip("/")
 KIBANA_URL = os.getenv("KIBANA_URL", "http://kibana:5601").rstrip("/")

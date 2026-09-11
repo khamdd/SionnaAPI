@@ -2,15 +2,17 @@ import math
 
 import pytest
 
+from backend.schemas.requests import (
+    NetworkCoverageOptimizationRequest,
+    NetworkCoverageRequest,
+)
 from backend.services.optimization_service import (
-    run_network_coverage_optimization,
     build_network_coverage_candidate_request,
     evaluate_network_coverage_objectives,
     evaluate_objective,
     extract_network_coverage_kpis,
+    run_network_coverage_optimization,
 )
-from backend.schemas.requests import NetworkCoverageRequest
-from backend.schemas.requests import NetworkCoverageOptimizationRequest
 
 
 def optimization_request(**kwargs):

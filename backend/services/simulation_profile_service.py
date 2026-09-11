@@ -23,7 +23,6 @@ from backend.services.coordinate_service import lng_lat_to_scene_position
 from backend.services.scene_service import list_scenes
 from backend.services.simulation_store import ensure_scene_reference
 
-
 logger = logging.getLogger(__name__)
 
 REQUEST_MODELS = {

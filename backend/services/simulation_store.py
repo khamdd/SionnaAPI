@@ -23,7 +23,6 @@ from backend.models import (
 )
 from backend.services.coordinate_service import lng_lat_to_scene_position
 
-
 logger = logging.getLogger(__name__)
 
 

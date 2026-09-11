@@ -15,7 +15,6 @@ from backend.schemas.requests import (
     ThroughputRequest,
 )
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_ROOT = PROJECT_ROOT / "test" / "fixtures" / "refactor"
 EXPECTED_OPENAPI_SHA256 = "a2ed3a1f2524129da668553520cdab2d8621f1fe832aff9f7b84f4b63289a6b6"

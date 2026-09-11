@@ -1,4 +1,4 @@
-import os 
+import os
 from pathlib import Path
 
 LEGACY_MUNICH_SCENE_ID = "munich"

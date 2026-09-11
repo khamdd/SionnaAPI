@@ -2,7 +2,6 @@ from decimal import Decimal, InvalidOperation
 from numbers import Number
 from typing import Any
 
-
 _MISSING = object()
 
 

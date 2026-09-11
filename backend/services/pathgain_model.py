@@ -1,6 +1,6 @@
-import numpy as np
 from typing import Literal
 
+import numpy as np
 
 PathGainName = Literal["UMa", "Ericsson", "Friis"]
 

@@ -10,7 +10,6 @@ from backend.services.optimization_service import (
 )
 from backend.services.simulation_job_store import load_simulation_job_result
 
-
 METRIC_SPECS = {
     "covered_area_percent": ("Covered area", "%", "higher", False),
     "uncovered_area_percent": ("Uncovered area", "%", "lower", False),

@@ -3,7 +3,6 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from backend.services.auth_service import authenticate_access_token
 
-
 bearer_scheme = HTTPBearer(auto_error=False)
 
 

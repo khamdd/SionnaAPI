@@ -10,7 +10,6 @@ from backend.schemas.network_configurations import NetworkConfigurationCompareRe
 from backend.services import configuration_diff_service as diff_service
 from backend.services import network_configuration_service
 
-
 client = TestClient(app)
 USER_ID = "11111111-1111-1111-1111-111111111111"
 BASELINE_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"

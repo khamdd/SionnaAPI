@@ -7,10 +7,9 @@ Create Date: 2026-09-09
 
 from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
-
 
 revision: str = "0006_notifications"
 down_revision: str | Sequence[str] | None = "0005_harden_simulation_jobs"

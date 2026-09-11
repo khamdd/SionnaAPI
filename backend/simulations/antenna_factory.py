@@ -1,10 +1,10 @@
 import numpy as np
-from backend.constants import DEFAULT_TRANSMITTER_PATTERN
-
 from sionna.rt import (
     PlanarArray,
     Transmitter,
 )
+
+from backend.constants import DEFAULT_TRANSMITTER_PATTERN
 
 
 def sync_transmitter(

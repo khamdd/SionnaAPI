@@ -4,7 +4,6 @@ from sqlalchemy.dialects.postgresql.base import ischema_names
 
 from backend.models import Geography, Geometry
 
-
 UNMANAGED_TABLE_NAMES = frozenset(
     {
         "alembic_version",

@@ -490,6 +490,10 @@ Recent commits before this briefing included:
   - `python -m pytest test -q`
   - `powershell -ExecutionPolicy Bypass -File scripts/test-backend.ps1` when a
     compatible host Python/Sionna environment is unavailable
+  - `pip install -r backend/requirements-dev.txt` then `ruff check backend test`
+    for backend static analysis; Ruff 0.16.7 is pinned for development only, is
+    configured in the root `pyproject.toml` with behavior-neutral rules scoped
+    to `backend/` and `test/`, and is not part of the production image
   - `cd frontend && npm run build`
   - `docker compose --env-file .env.docker up --build -d`
 - If you add new routes, services, persistent fields, scene behavior, or major UI

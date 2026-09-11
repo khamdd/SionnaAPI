@@ -315,6 +315,19 @@ test-only Docker target. It does not add pytest or httpx to the production image
 powershell -ExecutionPolicy Bypass -File scripts/test-backend.ps1
 ```
 
+Run the backend static-analysis lint (Ruff, behavior-neutral rules scoped to
+`backend/` and `test/`). Install the pinned development version first:
+
+```powershell
+pip install -r backend/requirements-dev.txt
+ruff check backend test
+```
+
+The Ruff configuration lives in the root `pyproject.toml` and only enables
+undefined-name, unused-import/variable, import-ordering, and obvious
+syntax/whitespace checks. It is development tooling only and is not installed in
+the production image.
+
 Verify the frontend production build:
 
 ```powershell

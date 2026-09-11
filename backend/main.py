@@ -12,8 +12,8 @@ from backend.api.network_configurations import router as network_configurations_
 from backend.api.notifications import router as notifications_router
 from backend.api.simulation_profiles import router as simulation_profiles_router
 from backend.api.sinr import router as sinr_router
-from backend.middleware.request_logging import RequestLoggingMiddleware
 from backend.database import ensure_database_is_current
+from backend.middleware.request_logging import RequestLoggingMiddleware
 from backend.services.event_logger import (
     start_event_logger,
     stop_event_logger,

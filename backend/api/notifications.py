@@ -5,7 +5,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from backend.api.dependencies import require_current_user
 from backend.services import notification_service
 
-
 router = APIRouter(tags=["Notifications"])
 
 

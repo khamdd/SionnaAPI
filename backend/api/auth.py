@@ -1,8 +1,8 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
+from backend.api.dependencies import require_current_user
 from backend.schemas.auth import AuthRequest
 from backend.services.auth_service import create_user, login_user
-from backend.api.dependencies import require_current_user
 
 router = APIRouter(
     tags=["Auth"]

@@ -1,6 +1,6 @@
-from dataclasses import dataclass
 import queue
 import time
+from dataclasses import dataclass
 
 from backend.services import event_logger
 

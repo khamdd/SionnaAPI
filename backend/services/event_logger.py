@@ -10,7 +10,6 @@ from urllib.request import Request, urlopen
 from backend.constants import SENSITIVE_KEYS
 from backend.core.config import get_elasticsearch_settings
 
-
 logger = logging.getLogger(__name__)
 
 LOG_QUEUE_MAX_SIZE = 256

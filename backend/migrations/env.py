@@ -14,7 +14,6 @@ from backend.migrations.schema import (
 )
 from backend.models import Base
 
-
 config = context.config
 
 if config.config_file_name is not None:

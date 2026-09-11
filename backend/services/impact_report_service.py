@@ -27,7 +27,6 @@ from backend.services.simulation_job_store import (
 )
 from backend.services.simulation_store import normalize_json_value
 
-
 REPORT_DIR = STATIC_DIR / "impact-reports"
 REPORT_SCHEMA_VERSION = "impact-report-v1"
 PREDICTION_NOTICE = (

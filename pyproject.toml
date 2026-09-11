@@ -1,0 +1,37 @@
+# Development-only tooling configuration. This file does not affect the
+# production image, runtime dependencies, or installed application behavior.
+
+[tool.ruff]
+# Static analysis is scoped to the backend and its test suite.
+include = ["backend/**/*.py", "test/**/*.py"]
+# Matches the Python version used by the production backend image.
+target-version = "py311"
+
+[tool.ruff.lint]
+# Behavior-neutral starting rules only. Do not enable broad complexity,
+# annotation, or formatting rules here without a separate review.
+select = [
+    # Obvious syntax/runtime errors that cannot change control flow.
+    "E9",
+    # Unused imports.
+    "F401",
+    # Undefined names.
+    "F821",
+    # Unused local variables.
+    "F841",
+    # Import ordering.
+    "I001",
+    # Trailing whitespace / missing trailing newline / blank-line whitespace.
+    "W291",
+    "W292",
+    "W293",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Intentional re-export surface: backend.constants is the public import path
+# for the domain constant modules. Re-exported names are unused locally.
+"backend/constants/__init__.py" = ["F401"]
+# Legacy compatibility module that only re-exports radio constants. It has no
+# repository caller today; its removal (and this ignore) is owned by the
+# separate dead-code work unit after a full dynamic-reference scan.
+"backend/constants/constants.py" = ["F401"]
