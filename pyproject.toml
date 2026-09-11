@@ -31,7 +31,3 @@ select = [
 # Intentional re-export surface: backend.constants is the public import path
 # for the domain constant modules. Re-exported names are unused locally.
 "backend/constants/__init__.py" = ["F401"]
-# Legacy compatibility module that only re-exports radio constants. It has no
-# repository caller today; its removal (and this ignore) is owned by the
-# separate dead-code work unit after a full dynamic-reference scan.
-"backend/constants/constants.py" = ["F401"]
