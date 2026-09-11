@@ -58,6 +58,57 @@ At completion, report:
 - proposed commit message.
 ```
 
+## Master Prompt for the Entire Cleanup
+
+Use this prompt when assigning the repository to an agent that will remain
+responsible for future cleanup steps. It governs every work unit, while still
+requiring a review boundary between units.
+
+```text
+Own the behavior-preserving cleanup described in
+docs/codebase-cleanup-walkthrough.md from the next incomplete work unit through
+Work Unit 11B.
+
+Operating procedure:
+1. Read AGENTS.md and every prerequisite document named by the walkthrough.
+2. Determine the next incomplete work unit from committed history and the
+   current worktree. Never infer completion solely from a heading or checklist.
+3. Execute exactly one work unit at a time.
+4. Before editing, identify and report:
+   - current behavior that must remain stable;
+   - intended structural improvement;
+   - targeted, regression, contract, build, and smoke checks that will prove
+     parity.
+5. Add characterization coverage before risky movement or deletion.
+6. Preserve public APIs, database compatibility, routes, request/response shapes,
+   localStorage compatibility, simulation behavior, and artifact lifecycles.
+7. Run the Mandatory Validation Gates after every work unit.
+8. At the final work unit of each phase, also run the complete phase parity gate,
+   including full backend/frontend checks, isolated Docker startup and migration
+   health when supported, and the applicable main application smoke flows.
+9. Stop immediately on a new regression, unexpected OpenAPI or fixture change,
+   migration mismatch, unavailable required parity check, or need for a product,
+   dependency, framework, schema, API, or architecture migration. Report it; do
+   not hide it by changing baselines or deleting data.
+10. After each work unit, provide a review report containing files changed,
+    behavior preserved, structural improvement, exact validation commands and
+    results, manual flows exercised, remaining risks, deferred findings, and the
+    proposed commit message.
+11. Wait for explicit approval before committing or starting the next work unit.
+12. After approval, commit only that reviewed work unit and continue with the
+    next incomplete unit using this same procedure.
+13. Keep docs/codebase-cleanup-walkthrough.md and AGENTS.md current when verified
+    architectural ownership or workflow changes make their guidance stale.
+
+Do not execute the whole cleanup as one diff or one commit. Do not skip validation
+because an earlier work unit passed. Each unit and phase must independently prove
+that the application and its main logic still work correctly.
+```
+
+If the agent cannot remain active while waiting for review, start a new session
+after each approval and reuse this same master prompt. The next agent must inspect
+Git history and validation records to identify the next incomplete work unit.
+
 ## Global Safety Rules
 
 ### Preserve these contracts
