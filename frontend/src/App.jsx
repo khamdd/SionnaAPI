@@ -4,6 +4,7 @@ import {
   listScenes,
   deleteSimulationRun,
   getSimulationJob,
+  getSimulationJobResult,
   getSimulationRun,
   listSimulationRuns,
   listSimulationJobs,
