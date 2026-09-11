@@ -336,6 +336,14 @@ cd frontend
 npm run lint
 ```
 
+Run the frontend characterization tests (pure utils, API boundary, and
+constants contracts):
+
+```powershell
+cd frontend
+npm test
+```
+
 Verify the frontend production build:
 
 ```powershell

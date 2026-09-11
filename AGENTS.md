@@ -498,6 +498,9 @@ Recent commits before this briefing included:
     `eslint-plugin-react-hooks` 7.1.1 are pinned as development-only
     dependencies, configured in `frontend/eslint.config.mjs` scoped to
     `frontend/src/` with unused-variable and React Hook rules
+  - `cd frontend && npm test`; Vitest 5.0.0 is pinned as a development-only
+    dependency with characterization coverage for `src/utils`, `src/api.js`,
+    and the route/storage constants against the Phase 0 contract fixtures
   - `cd frontend && npm run build`
   - `docker compose --env-file .env.docker up --build -d`
 - If you add new routes, services, persistent fields, scene behavior, or major UI
