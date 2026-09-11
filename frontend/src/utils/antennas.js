@@ -165,6 +165,27 @@ export function toAntennaRequest(antenna) {
   };
 }
 
+export function toConfigurationAntenna(antenna) {
+  return {
+    id: String(antenna.id).trim(),
+    longitude: Number(antenna.longitude),
+    latitude: Number(antenna.latitude),
+    height_m: Number(antenna.height_m),
+    enabled: isAntennaEnabled(antenna),
+    tilt: {
+      min: Number(antenna.tilt.min),
+      current: Number(antenna.tilt.current),
+      max: Number(antenna.tilt.max),
+    },
+    azimuth: Number(antenna.azimuth),
+    tx_power: {
+      min: Number(antenna.tx_power.min),
+      current: Number(antenna.tx_power.current),
+      max: Number(antenna.tx_power.max),
+    },
+  };
+}
+
 export function toValidatedAntennaRequest(antenna) {
   const base = normalizeAntennaBase(antenna);
 

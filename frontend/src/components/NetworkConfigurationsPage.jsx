@@ -5,6 +5,12 @@ import {
   listNetworkConfigurations,
   publishNetworkConfiguration,
 } from "../api";
+import {
+  formatAntennaCoordinate,
+  isAntennaEnabled,
+  toConfigurationAntenna,
+  validateRange,
+} from "../utils/antennas";
 import { formatDateTime, formatMaybeNumber } from "../utils/format";
 import AntennaPanel from "./AntennaPanel";
 
@@ -538,7 +544,8 @@ function AntennaSnapshotList({ antennas, baselineIds }) {
               </td>
               <td>{antenna.enabled === false ? "Disabled" : "Enabled"}</td>
               <td>
-                {formatCoordinate(antenna.longitude)}, {formatCoordinate(antenna.latitude)}
+                {formatAntennaCoordinate(antenna.longitude, "—")},{" "}
+                {formatAntennaCoordinate(antenna.latitude, "—")}
                 <small>{formatMaybeNumber(antenna.height_m)} m high</small>
               </td>
               <td>
@@ -655,30 +662,8 @@ function chooseSelectedConfiguration(items, preferredId) {
 function toEditorAntenna(antenna, type) {
   return {
     ...structuredClone(antenna),
-    enabled: antenna.enabled !== false,
+    enabled: isAntennaEnabled(antenna),
     _type: type,
-  };
-}
-
-
-function toConfigurationAntenna(antenna) {
-  return {
-    id: String(antenna.id).trim(),
-    longitude: Number(antenna.longitude),
-    latitude: Number(antenna.latitude),
-    height_m: Number(antenna.height_m),
-    enabled: antenna.enabled !== false,
-    tilt: {
-      min: Number(antenna.tilt.min),
-      current: Number(antenna.tilt.current),
-      max: Number(antenna.tilt.max),
-    },
-    azimuth: Number(antenna.azimuth),
-    tx_power: {
-      min: Number(antenna.tx_power.min),
-      current: Number(antenna.tx_power.current),
-      max: Number(antenna.tx_power.max),
-    },
   };
 }
 
@@ -707,18 +692,12 @@ function validateConfigurationAntennas(antennas) {
       if (![range.min, range.current, range.max].every(Number.isFinite)) {
         return `Antenna ${antenna.id} has an invalid ${label} range.`;
       }
-      if (range.min > range.max || range.current < range.min || range.current > range.max) {
+      if (validateRange(range, label)) {
         return `Antenna ${antenna.id} ${label} current value must stay inside its range.`;
       }
     }
   }
   return "";
-}
-
-
-function formatCoordinate(value) {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric.toFixed(4) : "—";
 }
 
 
@@ -768,7 +747,9 @@ function formatChangeValue(value) {
   }
   if (typeof value === "object") {
     if (value.id) {
-      return `${value.id} at ${formatCoordinate(value.longitude)}, ${formatCoordinate(value.latitude)}`;
+      const longitude = formatAntennaCoordinate(value.longitude, "—");
+      const latitude = formatAntennaCoordinate(value.latitude, "—");
+      return `${value.id} at ${longitude}, ${latitude}`;
     }
     return JSON.stringify(value);
   }

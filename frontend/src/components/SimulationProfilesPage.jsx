@@ -14,6 +14,7 @@ import {
   DEFAULT_USER_HEIGHT_M,
   TRANSMITTER_PATTERN,
 } from "../constants";
+import { isAntennaEnabled } from "../utils/antennas";
 import { formatDateTime, formatSimulationType } from "../utils/format";
 import { solverForScene } from "../utils/scene";
 
@@ -78,9 +79,7 @@ export default function SimulationProfilesPage({ activeScene, currentUser }) {
     [profiles],
   );
   const validationAntennas = useMemo(
-    () => (validationConfiguration?.antennas || []).filter(
-      (item) => item.enabled !== false,
-    ),
+    () => (validationConfiguration?.antennas || []).filter(isAntennaEnabled),
     [validationConfiguration],
   );
 

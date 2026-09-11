@@ -12,6 +12,7 @@ import {
   parseAntennaNumericInput,
   simulationSettingsForAntenna,
   toAntennaRequest,
+  toConfigurationAntenna,
   toValidatedAntennaRequest,
   validateNetworkCoverageSimulationAntennas,
   validateRange,
@@ -202,6 +203,37 @@ describe("toAntennaRequest", () => {
     expect(request.id).toBe("x1");
     expect(request.height_m).toBe(12);
     expect(request.tilt).toEqual({ min: 0, current: 6, max: 20 });
+  });
+});
+
+describe("toConfigurationAntenna", () => {
+  it("preserves the configuration enabled field and normalizes numeric values", () => {
+    expect(toConfigurationAntenna({
+      ...baseAntenna(),
+      id: " config-1 ",
+      longitude: "10.5",
+      enabled: false,
+      _type: "type2",
+    })).toEqual({
+      id: "config-1",
+      longitude: 10.5,
+      latitude: 20.5,
+      height_m: 12,
+      enabled: false,
+      tilt: TILT,
+      azimuth: 90,
+      tx_power: POWER,
+    });
+  });
+
+  it("defaults enabled to true and keeps invalid numbers for caller validation", () => {
+    const antenna = toConfigurationAntenna(baseAntenna({
+      longitude: "invalid",
+      enabled: undefined,
+    }));
+
+    expect(antenna.enabled).toBe(true);
+    expect(antenna.longitude).toBeNaN();
   });
 });
 
