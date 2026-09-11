@@ -366,6 +366,14 @@ button.hidden,
   padding: 18px;
 }
 
+.network-page .map-panel {
+  overflow-y: auto;
+}
+
+.network-solver-form {
+  padding: 14px 16px 16px;
+}
+
 .route-page {
   min-height: calc(100vh - 63px);
   padding: 18px;
@@ -1369,6 +1377,11 @@ textarea:disabled {
     #dfe5e8;
   background-size: 32px 32px;
   overflow: hidden;
+}
+
+.network-page .map-stage {
+  height: min(64vh, 680px);
+  min-height: 520px;
 }
 
 #coverage-image,

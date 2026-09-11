@@ -140,6 +140,7 @@ export default function App() {
   ));
   const [latestGrid, setLatestGrid] = useState(null);
   const [latestSolver, setLatestSolver] = useState(() => clone(DEFAULT_SOLVER));
+  const [networkSolverDraft, setNetworkSolverDraft] = useState(() => clone(DEFAULT_SOLVER));
   const [coverageImageUrl, setCoverageImageUrl] = useState("");
   const [runStatus, setRunStatus] = useState("Ready");
   const [runError, setRunError] = useState(false);
@@ -586,7 +587,7 @@ export default function App() {
         throw new Error(validationError);
       }
 
-      const result = await runNetworkCoverage(buildNetworkCoveragePayload(activeNetworkAntennas, activeScene));
+      const result = await runNetworkCoverage(buildNetworkCoveragePayload(activeNetworkAntennas, activeScene, networkSolverDraft));
 
       if (result.status === "queued") {
         showQueuedPrompt({
@@ -1846,6 +1847,8 @@ export default function App() {
           maxAntennas={MAX_NETWORK_COVERAGE_ANTENNAS}
           runError={runError}
           runStatus={runStatus}
+          solver={solverForScene(activeScene, networkSolverDraft)}
+          onSolverChange={setNetworkSolverDraft}
           summary={summary}
         />
       )}

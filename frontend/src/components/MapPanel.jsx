@@ -13,6 +13,7 @@ import {
   CoverageColorLegend,
   CoverageMapControls,
 } from "./CoverageMapPresentation";
+import { SolverFields } from "./ApiPages";
 import Scene3DPreview from "./Scene3DPreview";
 
 export default function MapPanel({
@@ -31,8 +32,10 @@ export default function MapPanel({
   onOptimize,
   onRun,
   onSceneLoadingChange,
+  onSolverChange,
   runError,
   runStatus,
+  solver,
   summary,
 }) {
   const showScene3D = Boolean(activeScene?.bounds);
@@ -151,6 +154,17 @@ export default function MapPanel({
           <strong>{summary.averageOverlap}</strong>
         </div>
       </div>
+
+      {solver && onSolverChange && (
+        <form
+          className="api-form api-scene-setup-form network-solver-form"
+          onSubmit={(event) => event.preventDefault()}
+        >
+          <fieldset className="api-form-lock" disabled={isBusy}>
+            <SolverFields solver={solver} onChange={onSolverChange} />
+          </fieldset>
+        </form>
+      )}
     </section>
   );
 }

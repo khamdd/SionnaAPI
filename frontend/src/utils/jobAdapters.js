@@ -3,11 +3,11 @@ import { formatText } from "./format";
 import { lngLatToScenePosition, solverForScene } from "./scene";
 import { toAntennaRequest } from "./antennas";
 
-export function buildNetworkCoveragePayload(antennas, activeScene) {
+export function buildNetworkCoveragePayload(antennas, activeScene, solverBase) {
   return {
     antennas: antennas.map(toAntennaRequest),
     transmitter_pattern: TRANSMITTER_PATTERN,
-    solver: solverForScene(activeScene),
+    solver: solverForScene(activeScene, solverBase),
     bandwidth_mhz: 100,
     mimo_layers: 4,
   };

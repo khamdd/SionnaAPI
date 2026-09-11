@@ -236,7 +236,11 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   Network Coverage antenna cards include an enabled checkbox; unchecked antennas
   remain in the sidebar draft but are hidden from the 3D scene and excluded from
   the simulation payload. Antenna-card longitude/latitude values are displayed
-  with four decimal places across the shared antenna-management pages.
+  with four decimal places across the shared antenna-management pages. The
+  Network Coverage page exposes editable solver settings (max depth, samples
+  per TX, cell size) in a form below the map, matching the RSRP page layout;
+  the run payload derives solver center/size from the active scene and enforces
+  the 50,000-grid-cell cell-size floor, matching the backend alignment.
 - Coverage API uses exactly one transmitter. If the selected scene has no fixed
   antennas, users enter one type 2 transmitter with antenna ID, longitude,
   latitude, and height. If fixed antennas exist, users can choose one fixed

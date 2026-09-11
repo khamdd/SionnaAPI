@@ -1671,7 +1671,7 @@ function PropagationFields({ form, includeBandwidth = false, onChange }) {
   );
 }
 
-function SolverFields({ solver, onChange }) {
+export function SolverFields({ solver, onChange }) {
   return (
     <FormSection title="Solver">
       <NumberField hint="0 to 10." label="Max depth" value={solver.max_depth} min={0} max={10} step={1} onChange={(value) => updateObject(onChange, solver, "max_depth", value)} />

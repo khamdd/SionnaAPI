@@ -22,13 +22,15 @@ export default function NetworkCoveragePage({
   onOptimize,
   onRun,
   onSceneLoadingChange,
+  onSolverChange,
   onUpdateAntenna,
   runError,
   runStatus,
+  solver,
   summary,
 }) {
   return (
-    <main className="app-shell">
+    <main className="app-shell network-page">
       <MapPanel
         activeScene={activeScene}
         antennas={displayAntennas}
@@ -45,8 +47,10 @@ export default function NetworkCoveragePage({
         onOptimize={onOptimize}
         onRun={onRun}
         onSceneLoadingChange={onSceneLoadingChange}
+        onSolverChange={onSolverChange}
         runError={runError}
         runStatus={runStatus}
+        solver={solver}
         summary={summary}
       />
       <aside className="control-panel" aria-label="Antenna controls">
