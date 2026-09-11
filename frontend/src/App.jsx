@@ -14,14 +14,12 @@ import {
 import {
   DEFAULT_SOLVER,
   ROUTES,
-  TRANSMITTER_PATTERN,
   AUTH_TOKEN_STORAGE_KEY,
   NETWORK_ANTENNA_SETTINGS_STORAGE_KEY,
   NETWORK_OPTIMIZATION_OBJECTIVES_STORAGE_KEY,
   NETWORK_TYPE2_ANTENNAS_STORAGE_KEY,
   RSRP_ANTENNA_SETTINGS_STORAGE_KEY,
   RSRP_TYPE2_ANTENNAS_STORAGE_KEY,
-  SCENE_FIXED_ANTENNAS_STORAGE_KEY,
   SINR_ANTENNA_SETTINGS_STORAGE_KEY,
   SINR_ROLE_SELECTION_STORAGE_KEY,
   SINR_TYPE2_ANTENNAS_STORAGE_KEY,
@@ -30,6 +28,44 @@ import {
   THROUGHPUT_TYPE2_ANTENNAS_STORAGE_KEY,
   USER_STORAGE_KEY,
 } from "./constants";
+import {
+  MAX_NETWORK_COVERAGE_ANTENNAS,
+  antennasForActiveScene,
+  isAntennaEnabled,
+  networkCoverageAntennasForScene,
+  normalizeAntennaBase,
+  simulationSettingsForAntenna,
+  validateNetworkCoverageSimulationAntennas,
+} from "./utils/antennas";
+import {
+  clone,
+  removeMapValue,
+  removeSetValue,
+  toggleSetValue,
+} from "./utils/collections";
+import {
+  buildNetworkCoveragePayload,
+  formatJobStatus,
+  simulationJobToHistoryItem,
+} from "./utils/jobAdapters";
+import {
+  NETWORK_OPTIMIZATION_ROUTE,
+  SCENE_CREATION_ROUTE,
+  SCENE_SELECTION_ROUTE,
+  SIMULATION_ENTRY_ROUTE,
+  isWorkSceneRequiredRoute,
+  normalizeRoute,
+} from "./utils/routes";
+import {
+  enrichScene,
+  normalizeStoredAntennaSettings,
+  normalizeStoredSinrRoles,
+  normalizeStoredType2Antennas,
+  persistSceneMap,
+  readStoredSceneMap,
+  saveSceneFixedAntennas,
+  setSceneMapValue,
+} from "./utils/sceneStorage";
 import AntennaPanel from "./components/AntennaPanel";
 import {
   CoverageApiPage,
@@ -61,22 +97,11 @@ import {
 } from "./utils/map";
 import {
   lngLatBoundsError,
-  lngLatInsideBounds,
-  lngLatToScenePosition,
   solverForScene,
 } from "./utils/scene";
 
-function clone(value) {
-  return structuredClone(value);
-}
-
-const SCENE_SELECTION_ROUTE = "/scenes";
-const SCENE_CREATION_ROUTE = "/choose-scene";
-const SIMULATION_ENTRY_ROUTE = "/network";
-const NETWORK_OPTIMIZATION_ROUTE = "/network/optimization";
 const HISTORY_PAGE_LIMIT = 200;
 const JOB_PAGE_LIMIT = 200;
-const MAX_NETWORK_COVERAGE_ANTENNAS = 10;
 const MAX_RSRP_SIMULATION_ANTENNAS = 10;
 
 export default function App() {
@@ -2518,276 +2543,6 @@ function JobResultDetail({
   );
 }
 
-function buildNetworkCoveragePayload(antennas, activeScene) {
-  return {
-    antennas: antennas.map(toAntennaRequest),
-    transmitter_pattern: TRANSMITTER_PATTERN,
-    solver: solverForScene(activeScene),
-    bandwidth_mhz: 100,
-    mimo_layers: 4,
-  };
-}
-
-function simulationJobToHistoryItem(job, result = null) {
-  const response = result || job.result || {};
-  const isOptimization = job.simulation_type === "network_coverage_optimization";
-  const request = isOptimization
-    ? response.optimization?.best_request || job.request?.base_request || {}
-    : job.request || {};
-  const scene = job.scene || {};
-
-  return {
-    id: job.result_run_id || job.id,
-    simulation_type: isOptimization ? "network_coverage" : job.simulation_type,
-    status: response.status || (job.status === "succeeded" ? "success" : job.status),
-    transmitter_pattern: request.transmitter_pattern || TRANSMITTER_PATTERN,
-    scene_id: scene.id,
-    scene_name: scene.name || scene.id,
-    scene_bounds: scene.bounds,
-    cell_size_m: request.solver?.cell_size,
-    bandwidth_mhz: request.bandwidth_mhz,
-    mimo_layers: request.mimo_layers,
-    coverage_map_image_url: response.coverage_map_image_url,
-    error_message: job.error_message || response.error,
-    started_at: job.started_at,
-    finished_at: job.finished_at,
-    created_at: job.queued_at,
-    solver: response.solver || request.solver,
-    request_json: request,
-    response_json: response,
-    antennas: antennaSnapshotsForJob(request, scene.bounds),
-    artifacts: [],
-  };
-}
-
-function antennaSnapshotsForJob(request, sceneBounds) {
-  if (!Array.isArray(request.antennas)) {
-    return [];
-  }
-
-  return request.antennas.map((antenna) => ({
-    antenna_code: antenna.id,
-    position: Array.isArray(antenna.position)
-      ? antenna.position
-      : lngLatToScenePosition(antenna, sceneBounds),
-    azimuth_deg: antenna.azimuth,
-    tilt: antenna.tilt,
-    tx_power: antenna.tx_power,
-  }));
-}
-
-function formatJobStatus(job) {
-  if (job.result_run_id) {
-    return "Saved";
-  }
-
-  return formatText(job.status);
-}
-
-function antennasForActiveScene(scene, sceneAntennaOverrides) {
-  const override = sceneAntennaOverrides.get(scene?.id);
-
-  if (Array.isArray(override) && override.length > 0) {
-    return clone(override);
-  }
-
-  if (Array.isArray(scene?.fixed_antennas) && scene.fixed_antennas.length > 0) {
-    return clone(scene.fixed_antennas);
-  }
-
-  return [];
-}
-
-function networkCoverageAntennasForScene(
-  scene,
-  fixedAntennas,
-  type2AntennasByScene,
-  settingsByScene,
-) {
-  if (!scene?.id) {
-    return [];
-  }
-
-  const settings = settingsByScene.get(scene.id) || {};
-  const type1Antennas = fixedAntennas
-    .map((antenna) => applySimulationSettings(antenna, settings[antenna.id], "type1"))
-    .filter(Boolean);
-  const type2Antennas = (type2AntennasByScene.get(scene.id) || [])
-    .map((antenna) => applySimulationSettings(antenna, settings[antenna.id], "type2"))
-    .filter(Boolean);
-
-  return [
-    ...type1Antennas,
-    ...type2Antennas,
-  ];
-}
-
-function applySimulationSettings(antenna, settings = {}, type) {
-  const base = normalizeAntennaBase(antenna);
-
-  if (!base) {
-    return null;
-  }
-
-  return {
-    ...base,
-    _type: type,
-    azimuth: settings.azimuth ?? base.azimuth,
-    enabled: settings.enabled ?? true,
-    tilt: {
-      ...base.tilt,
-      current: settings.tilt_current ?? base.tilt.current,
-    },
-    tx_power: {
-      ...base.tx_power,
-      current: settings.tx_power_current ?? base.tx_power.current,
-    },
-  };
-}
-
-function simulationSettingsForAntenna(antenna) {
-  return {
-    azimuth: antenna.azimuth,
-    enabled: antenna.enabled ?? true,
-    tilt_current: antenna.tilt?.current,
-    tx_power_current: antenna.tx_power?.current,
-  };
-}
-
-function isAntennaEnabled(antenna) {
-  return antenna?.enabled !== false;
-}
-
-function validateNetworkCoverageSimulationAntennas(
-  antennas,
-  activeScene,
-  maxAntennas = MAX_NETWORK_COVERAGE_ANTENNAS,
-) {
-  if (!Array.isArray(antennas) || antennas.length === 0) {
-    return "Add or check at least one antenna for Network Coverage.";
-  }
-
-  if (antennas.length > maxAntennas) {
-    return `Network Coverage supports up to ${maxAntennas} active antennas. The selected scene currently has ${antennas.length}.`;
-  }
-
-  const seenIds = new Set();
-  for (const antenna of antennas) {
-    const base = normalizeAntennaBase(antenna);
-    if (!base) {
-      return `Antenna ${antenna?.id || ""} has incomplete base configuration.`;
-    }
-
-    const idKey = base.id.toLowerCase();
-    if (seenIds.has(idKey)) {
-      return `Antenna ID ${base.id} is duplicated.`;
-    }
-    seenIds.add(idKey);
-
-    if (!lngLatInsideBounds(base, activeScene?.bounds)) {
-      return `Antenna ${base.id} must stay inside the selected scene.`;
-    }
-
-    if (base.height_m <= 0) {
-      return `Antenna ${base.id} height_m must be greater than 0.`;
-    }
-
-    if (base.azimuth < 0 || base.azimuth > 360) {
-      return `Antenna ${base.id} azimuth must be between 0 and 360.`;
-    }
-
-    const tiltError = validateRange(base.tilt, "tilt");
-    if (tiltError) {
-      return `Antenna ${base.id}: ${tiltError}`;
-    }
-
-    const powerError = validateRange(base.tx_power, "tx_power");
-    if (powerError) {
-      return `Antenna ${base.id}: ${powerError}`;
-    }
-  }
-
-  return "";
-}
-
-function validateRange(range, label) {
-  if (range.min > range.max) {
-    return `${label}_min must be less than or equal to ${label}_max.`;
-  }
-
-  if (range.current < range.min || range.current > range.max) {
-    return `${label}_current must be between ${label}_min and ${label}_max.`;
-  }
-
-  return "";
-}
-
-function toAntennaRequest(antenna) {
-  const base = normalizeAntennaBase(antenna);
-
-  return {
-    id: base.id,
-    longitude: base.longitude,
-    latitude: base.latitude,
-    height_m: base.height_m,
-    tilt: base.tilt,
-    azimuth: base.azimuth,
-    tx_power: base.tx_power,
-  };
-}
-
-function normalizeAntennaBase(antenna) {
-  const id = String(antenna?.id || "").trim();
-  const longitude = Number(antenna?.longitude);
-  const latitude = Number(antenna?.latitude);
-  const heightM = Number(antenna?.height_m);
-  const azimuth = Number(antenna?.azimuth);
-  const tilt = normalizeRangeValue(antenna?.tilt);
-  const txPower = normalizeRangeValue(antenna?.tx_power);
-
-  if (
-    !id
-    || !Number.isFinite(longitude)
-    || !Number.isFinite(latitude)
-    || !Number.isFinite(heightM)
-    || !Number.isFinite(azimuth)
-    || !tilt
-    || !txPower
-  ) {
-    return null;
-  }
-
-  return {
-    id,
-    longitude,
-    latitude,
-    height_m: heightM,
-    azimuth,
-    tilt,
-    tx_power: txPower,
-  };
-}
-
-function normalizeRangeValue(range) {
-  const min = Number(range?.min);
-  const current = Number(range?.current);
-  const max = Number(range?.max);
-
-  if (
-    !Number.isFinite(min)
-    || !Number.isFinite(current)
-    || !Number.isFinite(max)
-  ) {
-    return null;
-  }
-
-  return {
-    min,
-    current,
-    max,
-  };
-}
-
 async function loadComparisonDetails(selectedIds, cachedDetails) {
   const items = [];
   const details = new Map(cachedDetails);
@@ -2821,226 +2576,4 @@ async function loadComparisonDetails(selectedIds, cachedDetails) {
     items,
     details,
   };
-}
-
-function normalizeRoute(pathname) {
-  if (pathname === "/") {
-    return SCENE_SELECTION_ROUTE;
-  }
-
-  return ROUTES.some((item) => item.path === pathname)
-    || pathname === SCENE_CREATION_ROUTE
-    || pathname === NETWORK_OPTIMIZATION_ROUTE
-    ? pathname
-    : SCENE_SELECTION_ROUTE;
-}
-
-function isWorkSceneRequiredRoute(pathname) {
-  return pathname !== SCENE_SELECTION_ROUTE && pathname !== SCENE_CREATION_ROUTE;
-}
-
-function enrichScene(scene) {
-  const cachedFixedAntennas = readSceneFixedAntennas(scene?.id);
-
-  if (cachedFixedAntennas) {
-    return {
-      ...scene,
-      fixed_antennas: cachedFixedAntennas,
-    };
-  }
-
-  return scene;
-}
-
-function readSceneFixedAntennas(sceneId) {
-  if (!sceneId) {
-    return null;
-  }
-
-  try {
-    const saved = JSON.parse(localStorage.getItem(SCENE_FIXED_ANTENNAS_STORAGE_KEY) || "{}");
-    const antennas = normalizeStoredFixedAntennas(saved[sceneId]);
-
-    if (!antennas) {
-      delete saved[sceneId];
-      localStorage.setItem(SCENE_FIXED_ANTENNAS_STORAGE_KEY, JSON.stringify(saved));
-    }
-
-    return antennas;
-  } catch {
-    return null;
-  }
-}
-
-function readStoredSceneMap(storageKey, normalizeValue) {
-  try {
-    const saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
-    return new Map(
-      Object.entries(saved)
-        .map(([sceneId, value]) => [sceneId, normalizeValue(value)])
-        .filter(([, value]) => value !== null),
-    );
-  } catch {
-    return new Map();
-  }
-}
-
-function persistSceneMap(storageKey, sceneMap) {
-  const saved = {};
-
-  for (const [sceneId, value] of sceneMap) {
-    saved[sceneId] = value;
-  }
-
-  localStorage.setItem(storageKey, JSON.stringify(saved));
-}
-
-function setSceneMapValue(sceneMap, sceneId, value, normalizeValue) {
-  const normalized = normalizeValue(value);
-
-  if (normalized === null) {
-    sceneMap.delete(sceneId);
-  } else {
-    sceneMap.set(sceneId, normalized);
-  }
-}
-
-function saveSceneFixedAntennas(sceneId, antennas) {
-  if (!sceneId || !Array.isArray(antennas)) {
-    return;
-  }
-
-  try {
-    const saved = JSON.parse(localStorage.getItem(SCENE_FIXED_ANTENNAS_STORAGE_KEY) || "{}");
-    const normalized = normalizeStoredFixedAntennas(antennas);
-
-    if (!normalized) {
-      return;
-    }
-
-    saved[sceneId] = normalized;
-    localStorage.setItem(SCENE_FIXED_ANTENNAS_STORAGE_KEY, JSON.stringify(saved));
-  } catch {
-    // Local cache is best-effort; backend scene metadata is the primary store.
-  }
-}
-
-function normalizeStoredType2Antennas(antennas) {
-  if (!Array.isArray(antennas)) {
-    return null;
-  }
-
-  const normalized = antennas
-    .map(normalizeAntennaBase)
-    .filter(Boolean);
-
-  return normalized.length ? normalized : null;
-}
-
-function normalizeStoredAntennaSettings(settings) {
-  if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
-    return null;
-  }
-
-  const normalized = {};
-
-  for (const [antennaId, value] of Object.entries(settings)) {
-    const azimuth = Number(value?.azimuth);
-    const tiltCurrent = Number(value?.tilt_current);
-    const txPowerCurrent = Number(value?.tx_power_current);
-    const enabled = value?.enabled === undefined ? true : Boolean(value.enabled);
-
-    if (
-      !antennaId
-      || !Number.isFinite(azimuth)
-      || !Number.isFinite(tiltCurrent)
-      || !Number.isFinite(txPowerCurrent)
-    ) {
-      continue;
-    }
-
-    normalized[antennaId] = {
-      azimuth,
-      enabled,
-      tilt_current: tiltCurrent,
-      tx_power_current: txPowerCurrent,
-    };
-  }
-
-  return Object.keys(normalized).length ? normalized : null;
-}
-
-function normalizeStoredSinrRoles(roles) {
-  if (!roles || typeof roles !== "object" || Array.isArray(roles)) {
-    return null;
-  }
-
-  const normalized = {};
-
-  for (const role of ["transmitter", "receiver", "interferer"]) {
-    const antennaId = String(roles[role] || "").trim();
-
-    if (antennaId) {
-      normalized[role] = antennaId;
-    }
-  }
-
-  return Object.keys(normalized).length ? normalized : null;
-}
-
-function normalizeStoredFixedAntennas(antennas) {
-  if (!Array.isArray(antennas) || antennas.length === 0) {
-    return null;
-  }
-
-  const normalized = antennas
-    .map((antenna) => {
-      const longitude = Number(antenna?.longitude);
-      const latitude = Number(antenna?.latitude);
-      const height = Number(antenna?.height_m);
-
-      if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
-        return null;
-      }
-
-      const { position: _position, ...rest } = antenna;
-
-      return {
-        ...rest,
-        longitude,
-        latitude,
-        height_m: Number.isFinite(height) ? height : 0,
-      };
-    })
-    .filter(Boolean);
-
-  return normalized.length ? normalized : null;
-}
-
-function toggleSetValue(current, value) {
-  const next = new Set(current);
-
-  if (next.has(value)) {
-    next.delete(value);
-  } else {
-    next.add(value);
-  }
-
-  return next;
-}
-
-function removeSetValue(current, value) {
-  const next = new Set(current);
-  next.delete(value);
-  return next;
-}
-
-function removeMapValue(current, key) {
-  if (!current.has(key)) {
-    return current;
-  }
-
-  const next = new Map(current);
-  next.delete(key);
-  return next;
 }
