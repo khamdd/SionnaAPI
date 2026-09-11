@@ -9,7 +9,6 @@ from pathlib import Path
 from backend.constants import (
     LEGACY_MUNICH_SCENE_ID,
     MAX_IMPORTED_SCENES,
-    MAX_SCENE_AREA_KM2,
     MAX_SCENE_SIDE_M,
     SCENE_PREVIEW_TTL_HOURS,
     SCENE_REGISTRY_PATH,
@@ -220,9 +219,6 @@ def calculate_bounds_metrics(req: SceneBoundsRequest):
 
 
 def validate_scene_metrics(metrics):
-    if metrics["area_km2"] > MAX_SCENE_AREA_KM2:
-        return f"Selected area is too large. Maximum allowed area is {MAX_SCENE_AREA_KM2} km²."
-
     if metrics["width_m"] > MAX_SCENE_SIDE_M or metrics["height_m"] > MAX_SCENE_SIDE_M:
         return f"Selected area is too wide. Maximum width/height is {MAX_SCENE_SIDE_M:.0f} m."
 

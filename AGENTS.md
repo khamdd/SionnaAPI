@@ -75,7 +75,8 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   scene registry is loaded.
 - Imported scene previews are limited by count and size, expire while still in
   preview status, and are cleaned up if not kept.
-- Imported scene bounds allow up to 5 km² and up to 5000 m width/height.
+- Imported scene bounds allow up to 5000 m width/height; there is no scene area cap.
+  `MAX_GRID_CELLS` still protects the solver by enlarging cell size for large scenes.
 - The Choose scene modal uses a Docker-served offline MapLibre/PMTiles map from
   `frontend/public/data/` with `vietnam.pmtiles`, `building-regions.json`, and
   regional `vn-buildings-*.pmtiles` archives. At zoom 13.5+, visible 1-degree

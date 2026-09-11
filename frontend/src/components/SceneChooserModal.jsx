@@ -12,7 +12,6 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { activateScene, createScenePreview, deleteScene } from "../api";
 import {
-  MAX_SCENE_AREA_KM2,
   SCENE_CHOOSER_DEFAULT_CENTER,
   SCENE_CHOOSER_DEFAULT_ZOOM,
 } from "../constants";
@@ -53,7 +52,6 @@ export default function SceneChooserPage({
   const [isControlPanelVisible, setIsControlPanelVisible] = useState(true);
 
   const metrics = bounds ? calculateMetrics(bounds) : null;
-  const isTooLarge = metrics && metrics.areaKm2 > MAX_SCENE_AREA_KM2;
   const antennaDisplayBounds = antennaPlacementBounds;
 
   useEffect(() => {
@@ -400,13 +398,6 @@ export default function SceneChooserPage({
       return;
     }
 
-    if (isTooLarge) {
-      setStatus("Selected area is too large. Choose a smaller area.");
-      setSceneNameError("");
-      setError(true);
-      return;
-    }
-
     setPreviewBounds(bounds);
     setIsPreviewing(true);
     setIsSelectingArea(false);
@@ -650,7 +641,7 @@ export default function SceneChooserPage({
                 <button
                   className="primary-button"
                   type="button"
-                  disabled={isBusy || !isMapReady || isTooLarge}
+                  disabled={isBusy || !isMapReady}
                   onClick={previewSelectedArea}
                 >
                   Preview scene
@@ -727,11 +718,8 @@ export default function SceneChooserPage({
             <span>
               {metrics
                 ? `${formatMaybeNumber(metrics.areaKm2)} km2 selected`
-                : `Maximum ${MAX_SCENE_AREA_KM2} km2 per scene`}
+                : "Draw an area to see its size"}
             </span>
-            {isTooLarge && (
-              <span className="error-text">Selected area is too large.</span>
-            )}
           </div>
         </div>
       )}

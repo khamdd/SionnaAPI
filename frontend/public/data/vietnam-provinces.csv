@@ -1,0 +1,35 @@
+﻿code,name,name_en,full_name,full_name_en,code_name,unit_type,center_lat,center_lng,bbox_south,bbox_north,bbox_west,bbox_east,area_km2,ward_count
+91,An Giang,An Giang,Tỉnh An Giang,An Giang Province,an_giang,Tỉnh,10.182408,105.027611,9.286736,10.963408,102.877703,105.573884,9888.91,102
+24,Bắc Ninh,Bac Ninh,Tỉnh Bắc Ninh,Bac Ninh Province,bac_ninh,Tỉnh,21.315286,106.413877,20.970044,21.627101,105.879743,107.030336,4718.6,99
+96,Cà Mau,Ca Mau,Tỉnh Cà Mau,Ca Mau Province,ca_mau,Tỉnh,9.135287,105.181475,8.413653,9.637633,104.520498,105.858648,7942.39,64
+92,Cần Thơ,Can Tho,Thành phố Cần Thơ,Can Tho City,can_tho,Thành phố,9.743722,105.756951,9.246475,10.326026,105.223977,106.301682,6360.83,103
+04,Cao Bằng,Cao Bang,Tỉnh Cao Bằng,Cao Bang Province,cao_bang,Tỉnh,22.74556,106.083299,22.358478,23.119536,105.264845,106.834385,6700.39,56
+52,Gia Lai,Gia Lai,Tỉnh Gia Lai,Gia Lai Province,gia_lai,Tỉnh,13.890179,108.438437,12.997231,14.703668,107.448344,109.29687,21576.53,135
+01,Hà Nội,Hanoi,Thành phố Hà Nội,Hanoi City,ha_noi,Thành phố,21.000103,105.698007,20.564756,21.384203,105.28695,106.018302,3359.84,126
+42,Hà Tĩnh,Ha Tinh,Tỉnh Hà Tĩnh,Ha Tinh Province,ha_tinh,Tỉnh,18.29128,105.734977,17.914372,18.806728,105.102024,106.508304,5994.45,69
+31,Hải Phòng,Haiphong,Thành phố Hải Phòng,Haiphong City,hai_phong,Thành phố,20.870087,106.507318,20.125148,21.234481,106.126171,107.739616,3194.72,114
+79,Hồ Chí Minh,Ho Chi Minh,Thành phố Hồ Chí Minh,Ho Chi Minh City,ho_chi_minh,Thành phố,10.864358,106.843627,8.631498,11.502677,106.327727,107.56973,6772.59,168
+46,Huế,Hue,Thành phố Huế,Hue City,hue,Thành phố,16.331554,107.517311,15.996149,16.743931,107.03254,108.192161,4947.11,40
+33,Hưng Yên,Hung Yen,Tỉnh Hưng Yên,Hung Yen Province,hung_yen,Tỉnh,20.618868,106.270657,20.244262,21.007844,105.893333,106.652675,2514.81,104
+56,Khánh Hoà,Khanh Hoa,Tỉnh Khánh Hoà,Khanh Hoa Province,khanh_hoa,Tỉnh,11.125431,110.671132,7.183812,12.869092,108.549378,117.827998,8555.86,65
+12,Lai Châu,Lai Chau,Tỉnh Lai Châu,Lai Chau Province,lai_chau,Tỉnh,22.31805,103.185097,21.687088,22.812316,102.318061,103.983318,9068.73,38
+68,Lâm Đồng,Lam Dong,Tỉnh Lâm Đồng,Lam Dong Province,lam_dong,Tỉnh,11.673039,107.968934,10.486296,12.813424,107.203486,108.96677,24233.07,124
+20,Lạng Sơn,Lang Son,Tỉnh Lạng Sơn,Lang Son Province,lang_son,Tỉnh,21.839566,106.618827,21.324301,22.460922,106.093722,107.362807,8310.18,65
+15,Lào Cai,Lao Cai,Tỉnh Lào Cai,Lao Cai Province,lao_cai,Tỉnh,22.060477,104.347384,21.328475,22.845533,103.526827,105.099254,13256.92,99
+40,Nghệ An,Nghe An,Tỉnh Nghệ An,Nghe An Province,nghe_an,Tỉnh,19.237427,104.944107,18.553563,19.997322,103.872845,105.804233,16486.5,130
+37,Ninh Bình,Ninh Binh,Tỉnh Ninh Bình,Ninh Binh Province,ninh_binh,Tỉnh,20.312181,106.04631,19.922382,20.704582,105.541688,106.58711,3942.62,129
+25,Phú Thọ,Phu Tho,Tỉnh Phú Thọ,Phu Tho Province,phu_tho,Tỉnh,21.015253,105.284144,20.306507,21.720641,104.812105,105.854744,9361.38,148
+51,Quảng Ngãi,Quang Ngai,Tỉnh Quảng Ngãi,Quang Ngai Province,quang_ngai,Tỉnh,14.769234,108.143569,13.923521,15.433333,107.331266,109.142641,14832.55,96
+22,Quảng Ninh,Quang Ninh,Tỉnh Quảng Ninh,Quang Ninh Province,quang_ninh,Tỉnh,21.239865,107.256122,20.717361,21.664779,106.43726,108.085835,6207.95,54
+44,Quảng Trị,Quang Tri,Tỉnh Quảng Trị,Quang Tri Province,quang_tri,Tỉnh,17.240447,106.526944,16.300464,18.090919,105.606055,107.385952,12700,78
+14,Sơn La,Son La,Tỉnh Sơn La,Son La Province,son_la,Tỉnh,21.194743,104.069338,20.574944,22.030847,103.213318,105.021812,14108.89,75
+80,Tây Ninh,Tay Ninh,Tỉnh Tây Ninh,Tay Ninh Province,tay_ninh,Tỉnh,11.050111,106.164995,10.395975,11.783892,105.499718,106.745673,8536.44,96
+19,Thái Nguyên,Thai Nguyen,Tỉnh Thái Nguyên,Thai Nguyen Province,thai_nguyen,Tỉnh,22.023904,105.823826,21.326626,22.741687,105.429601,106.244848,8375.21,92
+38,Thanh Hoá,Thanh Hoa,Tỉnh Thanh Hoá,Thanh Hoa Province,thanh_hoa,Tỉnh,20.046469,105.317684,19.288795,20.670899,104.373788,106.073807,11114.71,166
+08,Tuyên Quang,Tuyen Quang,Tỉnh Tuyên Quang,Tuyen Quang Province,tuyen_quang,Tỉnh,22.48968,105.098741,21.502739,23.393308,104.334341,105.59403,13795.5,124
+86,Vĩnh Long,Vinh Long,Tỉnh Vĩnh Long,Vinh Long Province,vinh_long,Tỉnh,9.995642,106.29251,9.528662,10.341755,105.68095,106.848014,6296.2,124
+48,Đà Nẵng,Da Nang,Thành phố Đà Nẵng,Da Nang City,da_nang,Thành phố,15.670125,108.180989,14.953287,17.120279,107.208588,112.736122,11859.59,94
+66,Đắk Lắk,Dak Lak,Tỉnh Đắk Lắk,Dak Lak Province,dak_lak,Tỉnh,12.921772,108.444494,12.161823,13.695583,107.482394,109.457014,18096.4,102
+11,Điện Biên,Dien Bien,Tỉnh Điện Biên,Dien Bien Province,dien_bien,Tỉnh,21.711239,103.021024,20.894821,22.54864,102.141487,103.595035,9539.93,45
+75,Đồng Nai,Dong Nai,Thành phố Đồng Nai,Dong Nai City,dong_nai,Thành phố,11.436915,107.033743,10.579703,12.300009,106.411796,107.575787,12737.18,95
+82,Đồng Tháp,Dong Thap,Tỉnh Đồng Tháp,Dong Thap Province,dong_thap,Tỉnh,10.495157,105.899852,10.135172,10.974078,105.186424,106.812184,5938.64,102
