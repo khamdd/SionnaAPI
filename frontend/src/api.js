@@ -21,36 +21,6 @@ export function runNetworkCoverageOptimization(payload) {
   return runSimulationRequest("/api/v1/optimizations/network-coverage/run", payload);
 }
 
-export function evaluateNetworkCoverageOptimization(payload) {
-  return requestJson("/api/v1/optimizations/network-coverage/evaluate", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-}
-
-export function previewNetworkCoverageOptimizationCandidates(payload) {
-  return requestJson("/api/v1/optimizations/network-coverage/candidates", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-}
-
-export function previewNetworkCoverageOptimizationCandidateRequest(payload) {
-  return requestJson("/api/v1/optimizations/network-coverage/candidate-request", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-}
-
 export function runCoverageMap(payload) {
   return runSimulationRequest("/api/v1/coverage-map", payload);
 }

@@ -320,9 +320,9 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   stores the winning request/result as normal `network_coverage` history.
   Targets remain under `sionna_network_optimization_objectives`; latest job IDs
   and draft signatures use its `:run:<scene-id>` suffix. The older evaluate,
-  candidates, and candidate-request preview endpoints remain available, but
-  the UI no longer exposes their separate stages or frontend calculation
-  fallbacks. Core search logic lives in `backend/services/optimization_service.py`.
+  candidates, and candidate-request preview endpoints were removed in a
+  cleanup pass; only `/run` remains under `/optimizations/network-coverage/`.
+  Core search logic lives in `backend/services/optimization_service.py`.
 
 ## Important Files
 

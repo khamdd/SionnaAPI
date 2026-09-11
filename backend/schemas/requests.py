@@ -182,55 +182,6 @@ class NetworkCoverageOptimizationRequest(BaseModel):
         return self
 
 
-class NetworkCoverageOptimizationEvaluationRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    result: dict[str, Any]
-
-    objectives: List[OptimizationObjective] = Field(
-        min_length=1,
-        max_length=2,
-    )
-
-    @model_validator(mode="after")
-    def validate_unique_objective_metrics(self):
-        metrics = [
-            objective.metric
-            for objective in self.objectives
-        ]
-        if len(metrics) != len(set(metrics)):
-            raise ValueError("optimization objectives must use unique metrics")
-        return self
-
-
-class NetworkCoverageOptimizationCandidateRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    base_request: NetworkCoverageRequest
-
-    tilt_step: float = Field(
-        default=1.0,
-        gt=0.0,
-        le=20.0,
-    )
-
-    max_candidates: int = Field(
-        default=20,
-        ge=1,
-        le=100,
-    )
-
-
-class NetworkCoverageOptimizationCandidatePreviewRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    base_request: NetworkCoverageRequest
-
-    candidate_tilts: dict[str, float] = Field(
-        min_length=1,
-    )
-
-
 class RSRPRequest(BaseModel):
     antennas: List[AntennaConfig] = Field(
         min_length=1,
