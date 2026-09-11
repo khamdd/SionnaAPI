@@ -26,7 +26,9 @@ def make_request():
         antennas=[
             {
                 "id": "A1",
-                "position": [0.0, 0.0, 30.0],
+                "longitude": 0.0,
+                "latitude": 0.0,
+                "height_m": 30.0,
                 "tilt": {
                     "min": 2.0,
                     "current": 8.0,
@@ -41,7 +43,9 @@ def make_request():
             },
             {
                 "id": "A2",
-                "position": [10.0, 0.0, 30.0],
+                "longitude": 10.0,
+                "latitude": 0.0,
+                "height_m": 30.0,
                 "tilt": {
                     "min": 2.0,
                     "current": 8.0,

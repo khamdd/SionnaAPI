@@ -66,7 +66,9 @@ def test_create_scene_preview_registers_generated_osm_scene(tmp_path, monkeypatc
         make_request([
             {
                 "id": "HN-1",
-                "position": [12.0, 18.0, 35.0],
+                "longitude": 12.0,
+                "latitude": 18.0,
+                "height_m": 35.0,
                 "tilt": {
                     "min": 2.0,
                     "current": 8.0,
