@@ -25,7 +25,7 @@ const ANTENNAS_PAGE_SIZE = 20;
 export default function AntennasPage({ onInventoryChange }) {
   const [antennas, setAntennas] = useState([]);
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("active");
+  const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
   const [editor, setEditor] = useState(null);
   const [notice, setNotice] = useState("");
@@ -142,7 +142,7 @@ export default function AntennasPage({ onInventoryChange }) {
       {notice && <p className="configuration-notice error" role="alert">{notice}</p>}
       <section className="antenna-inventory-toolbar">
         <input type="search" placeholder="Search antenna ID" value={query} onChange={(event) => setQuery(event.target.value)} />
-        <select value={status} onChange={(event) => setStatus(event.target.value)}><option value="active">Active</option><option value="archived">Archived</option><option value="">All statuses</option></select>
+        <select value={status} onChange={(event) => setStatus(event.target.value)}><option value="">All statuses</option><option value="active">Active</option><option value="archived">Archived</option></select>
         <span>{visible.length} shown</span>
       </section>
       <div className="antenna-inventory-table-wrap">
