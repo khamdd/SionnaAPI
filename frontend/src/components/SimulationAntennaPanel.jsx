@@ -77,7 +77,11 @@ export default function SimulationAntennaPanel({
                   <span>{formatLngLatPosition(antenna)} · {formatMaybeNumber(antenna.height_m)} m</span>
                 </label>
               ))}
-              {available.length === 0 && <p className="history-status">No available antennas match this search.</p>}
+              {antennaPool.length === 0 ? (
+                <p className="history-status">No active inventory antennas are inside this scene. Add antennas within the scene bounds on the Antennas page.</p>
+              ) : (
+                <p className="history-status">No available antennas match this search.</p>
+              )}
             </div>
             {error && <p className="field-error">{error}</p>}
             <div className="antenna-picker-actions">
