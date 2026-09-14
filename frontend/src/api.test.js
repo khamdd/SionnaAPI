@@ -576,3 +576,39 @@ describe("offline buildings", () => {
     expect(options.signal).toBe(signal);
   });
 });
+
+describe("vietnam admin endpoints", () => {
+  it("lists provinces", async () => {
+    await api.listProvinces();
+
+    expectRequest({
+      path: "/api/v1/vietnam/provinces",
+      headers: { Authorization: "Bearer tok-123" },
+    });
+  });
+
+  it("searches wards with the query, default limit, and optional province", async () => {
+    await api.searchWards("cau giay");
+
+    expectRequest({
+      path: "/api/v1/vietnam/wards?q=cau+giay&limit=12",
+      headers: { Authorization: "Bearer tok-123" },
+    });
+
+    await api.searchWards("an khanh", { provinceCode: "01", limit: 5 });
+
+    expectRequest({
+      path: "/api/v1/vietnam/wards?q=an+khanh&limit=5&province_code=01",
+      headers: { Authorization: "Bearer tok-123" },
+    });
+  });
+
+  it("fetches a ward boundary by encoded ward code", async () => {
+    await api.getWardBoundary("00166");
+
+    expectRequest({
+      path: "/api/v1/vietnam/wards/00166/boundary",
+      headers: { Authorization: "Bearer tok-123" },
+    });
+  });
+});

@@ -2942,6 +2942,12 @@ textarea:disabled {
   font-weight: 600;
 }
 
+.scene-ward-hint {
+  padding: 8px 10px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
 .scene-page > .scene-selection-footer {
   right: 18px;
   bottom: 18px;

@@ -147,7 +147,8 @@ Vietnam admin invariants:
 
 - Province/ward rows are immutable reference data seeded from the generated
   CSV/GeoJSON assets; the APIs are read-only.
-- Ward search normalizes diacritics before matching `search_name`.
+- Ward search normalizes diacritics before matching `search_name` and ranks
+  prefix matches before substring matches.
 - Boundary responses are cached because the reference data does not change.
 
 Impact invariants:

@@ -10,7 +10,14 @@ import {
 import { Protocol } from "pmtiles";
 import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
-import { activateScene, createScenePreview, deleteScene } from "../api";
+import {
+  activateScene,
+  createScenePreview,
+  deleteScene,
+  getWardBoundary,
+  listProvinces,
+  searchWards,
+} from "../api";
 import {
   SCENE_CHOOSER_DEFAULT_CENTER,
   SCENE_CHOOSER_DEFAULT_ZOOM,
@@ -20,11 +27,10 @@ import { downloadAntennaTemplate } from "../utils/antennaTemplate";
 import { formatMaybeNumber } from "../utils/format";
 import { lngLatInsideBounds } from "../utils/scene";
 import { createSceneWardBoundary } from "../utils/wardBoundary";
-import {
-  filterWards,
-  indexWardFeatures,
-  parseWardCsv,
-} from "../utils/wardSearch";
+
+const WARD_SEARCH_DEBOUNCE_MS = 250;
+const WARD_SEARCH_LIMIT = 12;
+const WARD_BOUNDARY_CACHE_MAX_ENTRIES = 200;
 
 export default function SceneChooserPage({
   onCancel,
@@ -40,7 +46,7 @@ export default function SceneChooserPage({
   const antennaMarkersRef = useRef([]);
   const [isSelectingArea, setIsSelectingArea] = useState(false);
   const [isMapReady, setIsMapReady] = useState(false);
-  const [selectedCityId, setSelectedCityId] = useState("");
+  const [selectedProvinceCode, setSelectedProvinceCode] = useState("");
   const [sceneName, setSceneName] = useState("");
   const [importedAntennas, setImportedAntennas] = useState([]);
   const [antennaImportStatus, setAntennaImportStatus] = useState("");
@@ -49,7 +55,9 @@ export default function SceneChooserPage({
   const [bounds, setBounds] = useState(null);
   const [previewBounds, setPreviewBounds] = useState(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
-  const [wards, setWards] = useState([]);
+  const [provinces, setProvinces] = useState([]);
+  const [wardOptions, setWardOptions] = useState([]);
+  const [isSearchingWards, setIsSearchingWards] = useState(false);
   const [wardQuery, setWardQuery] = useState("");
   const [isWardOptionsOpen, setIsWardOptionsOpen] = useState(false);
   const [status, setStatus] = useState(
@@ -61,42 +69,86 @@ export default function SceneChooserPage({
   const [isControlPanelVisible, setIsControlPanelVisible] = useState(true);
   const selectedWardCodeRef = useRef(null);
   const autoSceneNameRef = useRef(null);
+  const wardSearchSequenceRef = useRef(0);
 
   const metrics = bounds ? calculateMetrics(bounds) : null;
   const antennaDisplayBounds = antennaPlacementBounds;
-  const wardMatches = filterWards(wards, wardQuery);
+  const selectedProvince =
+    provinces.find((province) => province.code === selectedProvinceCode) ||
+    null;
 
   useEffect(() => {
     let cancelled = false;
 
-    fetch(`${offlineMapDataBaseUrl()}hanoi-wards.csv`)
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        return response.text();
-      })
-      .then((text) => {
+    listProvinces()
+      .then((result) => {
         if (!cancelled) {
-          setWards(parseWardCsv(text));
+          setProvinces(Array.isArray(result?.items) ? result.items : []);
         }
       })
       .catch((caught) => {
         if (!cancelled) {
-          setStatus(`Ward list could not be loaded: ${caught.message}`);
+          setStatus(
+            `Province and ward data could not be loaded: ${caught.message}`,
+          );
           setError(true);
         }
       });
-
-    // Warm the ward-boundary cache so the red outline shows immediately on
-    // the first ward selection; a failure here is reported when a ward is
-    // picked instead of failing silently.
-    wardGeometryCollection().catch(() => {});
 
     return () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    const query = wardQuery.trim();
+
+    if (
+      !isWardOptionsOpen
+      || !selectedProvinceCode
+      || !query
+      || !isMapReady
+    ) {
+      wardSearchSequenceRef.current += 1;
+      setWardOptions([]);
+      setIsSearchingWards(false);
+      return undefined;
+    }
+
+    const requestId = wardSearchSequenceRef.current + 1;
+    wardSearchSequenceRef.current = requestId;
+    setIsSearchingWards(true);
+
+    const timer = window.setTimeout(() => {
+      searchWards(query, {
+        provinceCode: selectedProvinceCode,
+        limit: WARD_SEARCH_LIMIT,
+      })
+        .then((result) => {
+          if (wardSearchSequenceRef.current !== requestId) {
+            return;
+          }
+
+          setWardOptions(Array.isArray(result?.items) ? result.items : []);
+          setIsSearchingWards(false);
+        })
+        .catch((caught) => {
+          if (wardSearchSequenceRef.current !== requestId) {
+            return;
+          }
+
+          setWardOptions([]);
+          setIsSearchingWards(false);
+          setStatus(`Ward search failed: ${caught.message}`);
+          setError(true);
+        });
+    }, WARD_SEARCH_DEBOUNCE_MS);
+
+    return () => {
+      wardSearchSequenceRef.current += 1;
+      window.clearTimeout(timer);
+    };
+  }, [isMapReady, isWardOptionsOpen, selectedProvinceCode, wardQuery]);
 
   useEffect(() => {
     const node = mapNodeRef.current;
@@ -366,11 +418,12 @@ export default function SceneChooserPage({
       return;
     }
 
+    const wardBbox = ward?.bbox || {};
     const wardBounds = {
-      south: Number(ward.bbox_south),
-      west: Number(ward.bbox_west),
-      north: Number(ward.bbox_north),
-      east: Number(ward.bbox_east),
+      south: Number(wardBbox.south),
+      west: Number(wardBbox.west),
+      north: Number(wardBbox.north),
+      east: Number(wardBbox.east),
     };
 
     if (
@@ -444,19 +497,17 @@ export default function SceneChooserPage({
     setIsSelectingArea(true);
   }
 
-  function selectCity(event) {
-    const placeId = event.target.value;
-    const place = OFFLINE_VIETNAM_PLACES.find(
-      (item) => item.place_id === placeId,
-    );
+  function selectProvince(event) {
+    const provinceCode = event.target.value;
+    const province = provinces.find((item) => item.code === provinceCode);
 
-    setSelectedCityId(placeId);
+    setSelectedProvinceCode(provinceCode);
 
-    if (!place || isBusy) {
+    if (!province || isBusy) {
       return;
     }
 
-    moveMapToPlace(place);
+    moveMapToProvince(province);
     setBounds(null);
     setIsPreviewing(false);
     setPreviewBounds(null);
@@ -467,7 +518,7 @@ export default function SceneChooserPage({
     resetAutoSceneName();
     setIsSelectingArea(false);
     setError(false);
-    setStatus(`Moved map to ${place.name}.`);
+    setStatus(`Moved map to ${province.name}.`);
   }
 
   async function importAntennaFile(event) {
@@ -512,36 +563,38 @@ export default function SceneChooserPage({
     }
   }
 
-  function moveMapToPlace(place) {
+  function moveMapToProvince(province) {
     const map = mapRef.current;
 
     if (!map) {
       return;
     }
 
-    if (Array.isArray(place.boundingbox) && place.boundingbox.length === 4) {
-      const [south, north, west, east] = place.boundingbox.map(Number);
+    const provinceBbox = province?.bbox || {};
+    const south = Number(provinceBbox.south);
+    const west = Number(provinceBbox.west);
+    const north = Number(provinceBbox.north);
+    const east = Number(provinceBbox.east);
 
-      if ([south, north, west, east].every(Number.isFinite)) {
-        map.fitBounds(
-          [
-            [west, south],
-            [east, north],
-          ],
-          {
-            maxZoom: 16,
-            padding: [30, 30],
-          },
-        );
-        return;
-      }
+    if ([south, west, north, east].every(Number.isFinite)) {
+      map.fitBounds(
+        [
+          [west, south],
+          [east, north],
+        ],
+        {
+          maxZoom: 16,
+          padding: [30, 30],
+        },
+      );
+      return;
     }
 
-    const lat = Number(place.lat);
-    const lon = Number(place.lon);
+    const lat = Number(province?.center?.lat);
+    const lng = Number(province?.center?.lng);
 
-    if (Number.isFinite(lat) && Number.isFinite(lon)) {
-      map.flyTo({ center: [lon, lat], zoom: 15 });
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      map.flyTo({ center: [lng, lat], zoom: 15 });
     }
   }
 
@@ -769,30 +822,45 @@ export default function SceneChooserPage({
           {!isPreviewing && (
             <div className="scene-page-form">
               <label className="scene-city-field">
-                <span>City</span>
+                <span>Province</span>
                 <select
-                  value={selectedCityId}
-                  disabled={isBusy || !isMapReady}
-                  onChange={selectCity}
+                  value={selectedProvinceCode}
+                  disabled={isBusy || !isMapReady || provinces.length === 0}
+                  onChange={selectProvince}
                 >
-                  {OFFLINE_VIETNAM_PLACES.map((place) => (
-                    <option key={place.place_id} value={place.place_id}>
-                      {place.name}
+                  <option value="">
+                    {provinces.length === 0
+                      ? "Provinces unavailable"
+                      : "Select a province"}
+                  </option>
+                  {provinces.map((province) => (
+                    <option key={province.code} value={province.code}>
+                      {province.name}
                     </option>
                   ))}
                 </select>
               </label>
               <div className="scene-ward-field">
                 <label htmlFor="scene-ward-search">
-                  Ward search (Hà Nội)
+                  Ward search
+                  {selectedProvince ? ` (${selectedProvince.name})` : ""}
                 </label>
                 <input
                   id="scene-ward-search"
                   type="text"
                   value={wardQuery}
-                  placeholder="Search a ward, e.g. Cầu Giấy"
+                  placeholder={
+                    selectedProvince
+                      ? `Search a ward in ${selectedProvince.name}`
+                      : "Select a province first"
+                  }
                   autoComplete="off"
-                  disabled={isBusy || !isMapReady || wards.length === 0}
+                  disabled={isBusy || !isMapReady || !selectedProvinceCode}
+                  title={
+                    selectedProvinceCode
+                      ? undefined
+                      : "Select a province to search its wards"
+                  }
                   onChange={(event) => {
                     setWardQuery(event.target.value);
                     setIsWardOptionsOpen(true);
@@ -800,9 +868,19 @@ export default function SceneChooserPage({
                   onFocus={() => setIsWardOptionsOpen(true)}
                   onBlur={() => setIsWardOptionsOpen(false)}
                 />
-                {isWardOptionsOpen && wardMatches.length > 0 && (
+                {isWardOptionsOpen && wardQuery.trim() && (
                   <ul className="scene-ward-options">
-                    {wardMatches.map((ward) => (
+                    {isSearchingWards && (
+                      <li className="scene-ward-hint" aria-live="polite">
+                        Searching wards...
+                      </li>
+                    )}
+                    {!isSearchingWards && wardOptions.length === 0 && (
+                      <li className="scene-ward-hint">
+                        No ward matches this search.
+                      </li>
+                    )}
+                    {wardOptions.map((ward) => (
                       <li key={ward.ward_code}>
                         <button
                           type="button"
@@ -812,7 +890,9 @@ export default function SceneChooserPage({
                           }}
                         >
                           <span>{ward.ward_name}</span>
-                          <small>{ward.ward_type}</small>
+                          <small>
+                            {ward.ward_type} · {ward.province_name}
+                          </small>
                         </button>
                       </li>
                     ))}
@@ -1306,35 +1386,23 @@ function ensureWardLayers(map) {
   }
 }
 
-let wardGeometryPromise = null;
-
-function wardGeometryCollection() {
-  if (!wardGeometryPromise) {
-    wardGeometryPromise = fetch(
-      `${offlineMapDataBaseUrl()}hanoi-wards.geojson`,
-    )
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        return response.json();
-      })
-      .then((collection) => {
-        return indexWardFeatures(collection);
-      })
-      .catch((caught) => {
-        wardGeometryPromise = null;
-        throw caught;
-      });
-  }
-
-  return wardGeometryPromise;
-}
+const wardFeatureCache = new Map();
 
 async function loadWardFeature(wardCode) {
-  const cache = await wardGeometryCollection();
+  if (wardFeatureCache.has(wardCode)) {
+    return wardFeatureCache.get(wardCode);
+  }
 
-  return cache.get(wardCode) || null;
+  const result = await getWardBoundary(wardCode);
+  const feature = result?.feature || null;
+
+  if (feature && wardFeatureCache.size >= WARD_BOUNDARY_CACHE_MAX_ENTRIES) {
+    wardFeatureCache.delete(wardFeatureCache.keys().next().value);
+  }
+
+  wardFeatureCache.set(wardCode, feature);
+
+  return feature;
 }
 
 function updateSelectionBounds(map, bounds) {
@@ -1424,109 +1492,6 @@ function boundsFromLngLats(start, end) {
     east: Math.max(start.lng, end.lng),
   };
 }
-
-function buildOfflinePlace({ id, name, displayName, lat, lon, delta = 0.08 }) {
-  return {
-    boundingbox: [
-      String(lat - delta),
-      String(lat + delta),
-      String(lon - delta),
-      String(lon + delta),
-    ],
-    display_name: `${name}, ${displayName}`,
-    lat: String(lat),
-    lon: String(lon),
-    name,
-    place_id: id,
-  };
-}
-
-const OFFLINE_VIETNAM_PLACES = [
-  buildOfflinePlace({
-    id: "hanoi",
-    name: "Hanoi",
-    displayName: "Vietnam",
-    lat: 21.0278,
-    lon: 105.8342,
-  }),
-  buildOfflinePlace({
-    id: "ho-chi-minh-city",
-    name: "Ho Chi Minh City",
-    displayName: "Vietnam",
-    lat: 10.7769,
-    lon: 106.7009,
-  }),
-  buildOfflinePlace({
-    id: "da-nang",
-    name: "Da Nang",
-    displayName: "Vietnam",
-    lat: 16.0544,
-    lon: 108.2022,
-  }),
-  buildOfflinePlace({
-    id: "hai-phong",
-    name: "Hai Phong",
-    displayName: "Vietnam",
-    lat: 20.8449,
-    lon: 106.6881,
-  }),
-  buildOfflinePlace({
-    id: "can-tho",
-    name: "Can Tho",
-    displayName: "Vietnam",
-    lat: 10.0452,
-    lon: 105.7469,
-  }),
-  buildOfflinePlace({
-    id: "hue",
-    name: "Hue",
-    displayName: "Vietnam",
-    lat: 16.4637,
-    lon: 107.5909,
-  }),
-  buildOfflinePlace({
-    id: "nha-trang",
-    name: "Nha Trang",
-    displayName: "Vietnam",
-    lat: 12.2388,
-    lon: 109.1967,
-  }),
-  buildOfflinePlace({
-    id: "vung-tau",
-    name: "Vung Tau",
-    displayName: "Vietnam",
-    lat: 10.4114,
-    lon: 107.1362,
-  }),
-  buildOfflinePlace({
-    id: "da-lat",
-    name: "Da Lat",
-    displayName: "Vietnam",
-    lat: 11.9404,
-    lon: 108.4583,
-  }),
-  buildOfflinePlace({
-    id: "vinh",
-    name: "Vinh",
-    displayName: "Vietnam",
-    lat: 18.6796,
-    lon: 105.6813,
-  }),
-  buildOfflinePlace({
-    id: "thai-nguyen",
-    name: "Thai Nguyen",
-    displayName: "Vietnam",
-    lat: 21.5672,
-    lon: 105.8252,
-  }),
-  buildOfflinePlace({
-    id: "ha-long",
-    name: "Ha Long",
-    displayName: "Vietnam",
-    lat: 20.9712,
-    lon: 107.0448,
-  }),
-];
 
 function calculateMetrics(bounds) {
   const midLat = ((bounds.south + bounds.north) / 2) * (Math.PI / 180);

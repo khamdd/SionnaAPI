@@ -136,7 +136,33 @@ def test_search_wards_normalizes_diacritics_and_filters_province(monkeypatch):
     assert "vietnam_wards.province_code = '01'" in compiled
 
 
-def test_search_wards_database_unavailable():
+def test_search_wards_prefix_matches_rank_before_substring(monkeypatch):
+    session, factory = fake_db([(ward(), province())])
+    monkeypatch.setattr(vietnam_admin_service, "is_database_configured", lambda: True)
+    monkeypatch.setattr(vietnam_admin_service, "db_session", factory)
+
+    result = vietnam_admin_service.search_wards("khanh", limit=10)
+
+    assert result["status"] == "success"
+    assert result["items"][0]["ward_code"] == "09877"
+
+    statement, _ = session.statements[0]
+    compiled = str(
+        statement.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert "LIKE 'khanh%%'" in compiled
+    assert "LIKE '%%khanh%%'" in compiled
+    assert "CASE WHEN" in compiled.upper()
+
+
+def test_search_wards_database_unavailable(monkeypatch):
+    monkeypatch.setattr(
+        vietnam_admin_service, "is_database_configured", lambda: False
+    )
+
     result = vietnam_admin_service.search_wards("Cầu Giấy")
 
     assert result["status_code"] == 503

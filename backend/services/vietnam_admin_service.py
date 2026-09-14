@@ -2,7 +2,7 @@ import json
 import logging
 import unicodedata
 
-from sqlalchemy import select, text
+from sqlalchemy import case, or_, select, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from backend.database import db_session, is_database_configured
@@ -53,19 +53,26 @@ def search_wards(
 
     try:
         with db_session() as session:
+            prefix_condition = VietnamWard.search_name.like(
+                f"{_escape_like(normalized)}%"
+            )
+            contains_condition = VietnamWard.search_name.like(
+                f"%{_escape_like(normalized)}%"
+            )
             statement = (
                 select(VietnamWard, VietnamProvince)
                 .join(
                     VietnamProvince,
                     VietnamWard.province_code == VietnamProvince.code,
                 )
-                .where(VietnamWard.search_name.like(f"{_escape_like(normalized)}%"))
+                .where(or_(prefix_condition, contains_condition))
             )
             if province_code:
                 statement = statement.where(
                     VietnamWard.province_code == province_code
                 )
             statement = statement.order_by(
+                case((prefix_condition, 0), else_=1),
                 VietnamWard.province_code,
                 VietnamWard.search_name,
             ).limit(limit)
