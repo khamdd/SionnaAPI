@@ -367,6 +367,18 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   `docs/` and `test/fixtures/refactor/`. `Dockerfile.backend` has a test-only
   target, invoked by `scripts/test-backend.ps1`; the default application target
   remains the production backend image and does not install test packages.
+- A performance pass addressed UI jank and hot backend paths without changing
+  API contracts. `Scene3DPreview` is memoized and renders on demand (orbit,
+  hover, selection, texture load, and resize mark the frame dirty instead of
+  rendering at full FPS), parent pages memoize derived preview props so the
+  WebGL scene no longer rebuilds on unrelated state changes. Coverage-map mouse
+  hover uses an O(1) cell index plus rAF throttling, heatmap redraws are
+  rAF-throttled, and scene-scoped antenna draft localStorage writes are
+  debounced (deletions stay synchronous) with a pagehide flush. Backend reads
+  cache offline building GeoJSON and the scene registry by file mtime, request
+  logging skips `/health`, and migration `0008_performance_indexes` adds
+  indexes for per-scene history listing, queue ordering by `queued_at`, and
+  foreign-key cascades on run antennas, artifacts, and job result runs.
 
 ## Important Files
 

@@ -13,4 +13,5 @@ SKIPPED_REQUEST_LOG_PATH_PREFIXES = (
     "/docs",
     "/redoc",
     "/openapi.json",
+    "/health",
 )

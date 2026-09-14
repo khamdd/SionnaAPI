@@ -1,3 +1,4 @@
+import copy
 import json
 import math
 import shutil
@@ -21,6 +22,15 @@ from backend.services.osm_scene_builder import (
 from backend.services.simulation_store import mark_scene_reference_deleted, utc_now
 
 _lock = threading.RLock()
+_registry_cache = {"key": None, "registry": None}
+
+
+def _registry_file_key():
+    if not SCENE_REGISTRY_PATH.exists():
+        return None
+
+    stat = SCENE_REGISTRY_PATH.stat()
+    return (stat.st_mtime_ns, stat.st_size)
 
 
 def list_scenes():
@@ -234,8 +244,15 @@ def validate_scene_metrics(metrics):
 
 def load_registry():
     SCENE_ROOT.mkdir(parents=True, exist_ok=True)
+    cache_key = _registry_file_key()
 
-    if SCENE_REGISTRY_PATH.exists():
+    if (
+        _registry_cache["registry"] is not None
+        and _registry_cache["key"] == cache_key
+    ):
+        return copy.deepcopy(_registry_cache["registry"])
+
+    if cache_key is not None:
         registry = json.loads(SCENE_REGISTRY_PATH.read_text(encoding="utf-8"))
     else:
         registry = {
@@ -244,6 +261,8 @@ def load_registry():
         }
 
     normalize_scene_registry(registry)
+    _registry_cache["key"] = cache_key
+    _registry_cache["registry"] = copy.deepcopy(registry)
     return registry
 
 
@@ -253,6 +272,8 @@ def save_registry(registry):
         json.dumps(registry, indent=2),
         encoding="utf-8",
     )
+    _registry_cache["key"] = _registry_file_key()
+    _registry_cache["registry"] = copy.deepcopy(registry)
 
 
 def normalize_scene_registry(registry):

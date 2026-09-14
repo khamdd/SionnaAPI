@@ -5,6 +5,7 @@ import shutil
 import struct
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 from backend.constants.scenes import (
@@ -84,8 +85,12 @@ def load_offline_building_elements(bounds):
     elements = []
 
     for path in files:
-        with path.open("r", encoding="utf-8") as handle:
-            data = json.load(handle)
+        stat = path.stat()
+        data = _load_geojson_document(
+            str(path),
+            stat.st_mtime_ns,
+            stat.st_size,
+        )
 
         for index, feature in enumerate(data.get("features", [])):
             elements.extend(
@@ -97,6 +102,14 @@ def load_offline_building_elements(bounds):
             )
 
     return elements
+
+
+@lru_cache(maxsize=4)
+def _load_geojson_document(path_str, mtime_ns, size):
+    del mtime_ns, size
+
+    with Path(path_str).open("r", encoding="utf-8") as handle:
+        return json.load(handle)
 
 
 def offline_geojson_files_for_bounds(bounds):

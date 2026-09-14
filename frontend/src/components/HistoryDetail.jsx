@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { fetchArtifactJson } from "../api";
 import {
   firstArtifactUrl,
@@ -175,10 +175,18 @@ function HistoryCoveragePreview({
   wardBoundary,
 }) {
   const fullResult = useFullResultArtifact(item);
-  const grid = historyPreviewGrid(fullResult ? {
-    ...item,
-    response_json: fullResult,
-  } : item);
+  const grid = useMemo(
+    () => historyPreviewGrid(fullResult ? {
+      ...item,
+      response_json: fullResult,
+    } : item),
+    [fullResult, item],
+  );
+  const previewAntennas = useMemo(
+    () => historyPreviewAntennas(item, mode),
+    [item, mode],
+  );
+  const previewSolver = useMemo(() => historyPreviewSolver(item), [item]);
   const [selectedCell, setSelectedCell] = useState(null);
   const [coverageDisplayMode, setCoverageDisplayMode] = useState("quality");
 
@@ -192,7 +200,7 @@ function HistoryCoveragePreview({
       <>
         <div className="history-coverage-preview">
           <Scene3DPreview
-            antennas={historyPreviewAntennas(item, mode)}
+            antennas={previewAntennas}
             bounds={item.scene_bounds}
             className="history-scene-3d"
             coverageDisplayMode={coverageDisplayMode}
@@ -203,7 +211,7 @@ function HistoryCoveragePreview({
             sceneName={item.scene_name}
             selectedCoverageCell={selectedCell}
             showOverlay={false}
-            solver={historyPreviewSolver(item)}
+            solver={previewSolver}
             viewMode="top"
             wardBoundary={wardBoundary}
           />
@@ -445,13 +453,21 @@ function historySignalLinks(request) {
 }
 
 function HistoryLinkPreview({ item, onPreviewLoadingChange, wardBoundary }) {
-  const request = item.request_json || {};
-  const response = item.response_json || {};
-  const solver = (
-    response.solver
-    || request.solver
-    || item.solver
+  const request = useMemo(() => item.request_json || {}, [item]);
+  const response = useMemo(() => item.response_json || {}, [item]);
+  const solver = useMemo(
+    () => (
+      response.solver
+      || request.solver
+      || item.solver
+    ),
+    [response, request, item],
   );
+  const antennas = useMemo(
+    () => historyLinkAntennas(response, request),
+    [response, request],
+  );
+  const signalLinks = useMemo(() => historySignalLinks(request), [request]);
 
   if (!item.scene_bounds) {
     return (
@@ -464,13 +480,13 @@ function HistoryLinkPreview({ item, onPreviewLoadingChange, wardBoundary }) {
   return (
     <div className="history-coverage-preview">
       <Scene3DPreview
-        antennas={historyLinkAntennas(response, request)}
+        antennas={antennas}
         bounds={item.scene_bounds}
         className="history-scene-3d"
         onLoadingChange={onPreviewLoadingChange}
         sceneName={item.scene_name}
         showOverlay={false}
-        signalLinks={historySignalLinks(request)}
+        signalLinks={signalLinks}
         solver={solver}
         viewMode="top"
         wardBoundary={wardBoundary}
@@ -482,25 +498,32 @@ function HistoryLinkPreview({ item, onPreviewLoadingChange, wardBoundary }) {
 function RsrpHistory({ item, onPreviewLoadingChange, wardBoundary }) {
   const [selectedUser, setSelectedUser] = useState(null);
   const fullResult = useFullResultArtifact(item);
-  const savedResponse = item.response_json || {};
+  const savedResponse = useMemo(() => item.response_json || {}, [item]);
   const response = fullResult || savedResponse;
-  const request = item.request_json || {};
+  const request = useMemo(() => item.request_json || {}, [item]);
 
-  const antennas = (
-    Array.isArray(response.antennas)
-      ? response.antennas
-      : request.antennas || []
+  const antennas = useMemo(
+    () => (
+      Array.isArray(response.antennas)
+        ? response.antennas
+        : request.antennas || []
+    ),
+    [response, request],
   );
 
-  const users = Array.isArray(response.users)
-    ? response.users
-    : [];
+  const users = useMemo(
+    () => (Array.isArray(response.users) ? response.users : []),
+    [response],
+  );
 
-  const solver = (
-    response.solver
-    || savedResponse.solver
-    || request.solver
-    || item.solver
+  const solver = useMemo(
+    () => (
+      response.solver
+      || savedResponse.solver
+      || request.solver
+      || item.solver
+    ),
+    [response, savedResponse, request, item],
   );
 
   return (

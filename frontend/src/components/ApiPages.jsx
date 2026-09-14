@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   runCoverageMap,
   runRsrpSimulation,
@@ -63,15 +63,24 @@ export function CoverageApiPage({ activeScene, antennas = EMPTY_ARRAY, onProgres
     { sceneName: activeScene?.name },
   );
   const sceneStatus = useScenePreviewStatus(activeScene, onSceneLoadingChange);
-  const sceneSolver = solverForScene(activeScene, form.solver);
-  const baseTransmitter = coverageTransmitter(form, fixedAntennas);
-  const transmitter = {
-    ...baseTransmitter,
-    azimuth: form.azimuth,
-  };
-  const transmitterPosition = lngLatToScenePosition(
-    transmitter,
-    activeScene?.bounds,
+  const sceneSolver = useMemo(
+    () => solverForScene(activeScene, form.solver),
+    [activeScene, form.solver],
+  );
+  const baseTransmitter = useMemo(
+    () => coverageTransmitter(form, fixedAntennas),
+    [form, fixedAntennas],
+  );
+  const transmitter = useMemo(
+    () => ({
+      ...baseTransmitter,
+      azimuth: form.azimuth,
+    }),
+    [baseTransmitter, form.azimuth],
+  );
+  const transmitterPosition = useMemo(
+    () => lngLatToScenePosition(transmitter, activeScene?.bounds),
+    [transmitter, activeScene?.bounds],
   );
   const transmitterError = validateCoverageTransmitter(
     baseTransmitter,
@@ -88,16 +97,19 @@ export function CoverageApiPage({ activeScene, antennas = EMPTY_ARRAY, onProgres
         value: transmitterPosition,
       },
     ]);
-  const selectedTransmitterAntennas = transmitterPosition
-    ? [{
-      id: transmitter.id || "TX",
-      position: transmitterPosition,
-      longitude: transmitter.longitude,
-      latitude: transmitter.latitude,
-      height_m: transmitter.height_m,
-      azimuth: transmitter.azimuth ?? 0,
-    }]
-    : EMPTY_ARRAY;
+  const selectedTransmitterAntennas = useMemo(
+    () => (transmitterPosition
+      ? [{
+        id: transmitter.id || "TX",
+        position: transmitterPosition,
+        longitude: transmitter.longitude,
+        latitude: transmitter.latitude,
+        height_m: transmitter.height_m,
+        azimuth: transmitter.azimuth ?? 0,
+      }]
+      : EMPTY_ARRAY),
+    [transmitter, transmitterPosition],
+  );
 
   useEffect(() => {
     setForm((current) => {
@@ -271,9 +283,18 @@ export function SinrApiPage({
     { sceneName: activeScene?.name },
   );
   const sceneStatus = useScenePreviewStatus(activeScene, onSceneLoadingChange);
-  const sceneSolver = solverForScene(activeScene, form.solver);
-  const selectedRoles = sinrSelectedRoleAntennas(antennas, roleSelection);
-  const rolePositions = sinrRolePositions(selectedRoles, activeScene?.bounds);
+  const sceneSolver = useMemo(
+    () => solverForScene(activeScene, form.solver),
+    [activeScene, form.solver],
+  );
+  const selectedRoles = useMemo(
+    () => sinrSelectedRoleAntennas(antennas, roleSelection),
+    [antennas, roleSelection],
+  );
+  const rolePositions = useMemo(
+    () => sinrRolePositions(selectedRoles, activeScene?.bounds),
+    [selectedRoles, activeScene?.bounds],
+  );
   const roleValidation = validateSinrRoles(
     antennas,
     roleSelection,
@@ -362,7 +383,24 @@ export function SinrApiPage({
 
   const result = resultState.result;
   const isQueued = result?.status === "queued";
-  const resultRequest = result?.request || {};
+  const resultRequest = useMemo(() => result?.request || {}, [result]);
+  const resultAntennas = useMemo(
+    () => linkResultAntennas(result, resultRequest),
+    [result, resultRequest],
+  );
+  const resultSceneBadges = useMemo(() => sinrSceneBadges(result), [result]);
+  const resultSignalLinks = useMemo(
+    () => radioLinkVisuals(resultRequest),
+    [resultRequest],
+  );
+  const previewAntennas = useMemo(
+    () => sinrPreviewAntennas(selectedRoles),
+    [selectedRoles],
+  );
+  const previewLinks = useMemo(
+    () => sinrPreviewLinks(rolePositions),
+    [rolePositions],
+  );
 
   return (
     <main className="app-shell api-workspace-shell sinr-page">
@@ -391,20 +429,20 @@ export function SinrApiPage({
             {result && !isQueued ? (
               <ApiResultScene
                 activeScene={activeScene}
-                antennas={linkResultAntennas(result, resultRequest)}
+                antennas={resultAntennas}
                 result={result}
                 onSceneLoadingChange={sceneStatus.handleSceneLoadingChange}
-                sceneBadges={sinrSceneBadges(result)}
-                signalLinks={radioLinkVisuals(resultRequest)}
+sceneBadges={resultSceneBadges}
+                signalLinks={resultSignalLinks}
                 solver={result.solver || resultRequest.solver}
               />
             ) : (
               <ApiResultScene
                 activeScene={activeScene}
-                antennas={sinrPreviewAntennas(selectedRoles)}
+                antennas={previewAntennas}
                 result={{}}
                 onSceneLoadingChange={sceneStatus.handleSceneLoadingChange}
-                signalLinks={sinrPreviewLinks(rolePositions)}
+                signalLinks={previewLinks}
                 solver={sceneSolver}
               />
             )}
@@ -492,7 +530,10 @@ export function RsrpSimulationPage({
     { sceneName: activeScene?.name },
   );
   const sceneStatus = useScenePreviewStatus(activeScene, onSceneLoadingChange);
-  const sceneSolver = solverForScene(activeScene, form.solver);
+  const sceneSolver = useMemo(
+    () => solverForScene(activeScene, form.solver),
+    [activeScene, form.solver],
+  );
 
   async function submit(event) {
     event.preventDefault();
@@ -529,7 +570,10 @@ export function RsrpSimulationPage({
 
   const result = resultState.result;
   const isQueued = result?.status === "queued";
-  const solver = result?.solver || sceneSolver;
+  const solver = useMemo(
+    () => result?.solver || sceneSolver,
+    [result, sceneSolver],
+  );
   const rsrpUsers = result?.users || EMPTY_ARRAY;
   const displayAntennas = simulationAntennas;
 
@@ -721,9 +765,18 @@ export function ThroughputApiPage({
     { sceneName: activeScene?.name },
   );
   const sceneStatus = useScenePreviewStatus(activeScene, onSceneLoadingChange);
-  const sceneSolver = solverForScene(activeScene, form.solver);
-  const selectedRoles = sinrSelectedRoleAntennas(antennas, roleSelection);
-  const rolePositions = sinrRolePositions(selectedRoles, activeScene?.bounds);
+  const sceneSolver = useMemo(
+    () => solverForScene(activeScene, form.solver),
+    [activeScene, form.solver],
+  );
+  const selectedRoles = useMemo(
+    () => sinrSelectedRoleAntennas(antennas, roleSelection),
+    [antennas, roleSelection],
+  );
+  const rolePositions = useMemo(
+    () => sinrRolePositions(selectedRoles, activeScene?.bounds),
+    [selectedRoles, activeScene?.bounds],
+  );
   const roleValidation = validateSinrRoles(
     antennas,
     roleSelection,
@@ -838,7 +891,27 @@ export function ThroughputApiPage({
 
   const result = resultState.result;
   const isQueued = result?.status === "queued";
-  const resultRequest = result?.request || {};
+  const resultRequest = useMemo(() => result?.request || {}, [result]);
+  const resultAntennas = useMemo(
+    () => linkResultAntennas(result, resultRequest),
+    [result, resultRequest],
+  );
+  const resultSceneBadges = useMemo(
+    () => throughputSceneBadges(result),
+    [result],
+  );
+  const resultSignalLinks = useMemo(
+    () => radioLinkVisuals(resultRequest),
+    [resultRequest],
+  );
+  const previewAntennas = useMemo(
+    () => sinrPreviewAntennas(selectedRoles),
+    [selectedRoles],
+  );
+  const previewLinks = useMemo(
+    () => sinrPreviewLinks(rolePositions),
+    [rolePositions],
+  );
   const tiltHint = throughputTiltHint(selectedRoles.transmitter);
 
   return (
@@ -868,20 +941,20 @@ export function ThroughputApiPage({
             {result && !isQueued ? (
               <ApiResultScene
                 activeScene={activeScene}
-                antennas={linkResultAntennas(result, resultRequest)}
+                antennas={resultAntennas}
                 result={result}
                 onSceneLoadingChange={sceneStatus.handleSceneLoadingChange}
-                sceneBadges={throughputSceneBadges(result)}
-                signalLinks={radioLinkVisuals(resultRequest)}
+                sceneBadges={resultSceneBadges}
+                signalLinks={resultSignalLinks}
                 solver={result.solver || resultRequest.solver}
               />
             ) : (
               <ApiResultScene
                 activeScene={activeScene}
-                antennas={sinrPreviewAntennas(selectedRoles)}
+                antennas={previewAntennas}
                 result={{}}
                 onSceneLoadingChange={sceneStatus.handleSceneLoadingChange}
-                signalLinks={sinrPreviewLinks(rolePositions)}
+                signalLinks={previewLinks}
                 solver={sceneSolver}
               />
             )}
@@ -1903,21 +1976,21 @@ function sinrSceneBadges(result) {
   return [
     {
       label: "SINR",
-      value: `${formatMaybeNumber(result.sinr_db)} dB`,
+      value: `${formatMaybeNumber(result?.sinr_db)} dB`,
     },
     {
       label: "Signal",
-      value: `${formatMaybeNumber(result.signal_power)} dBm`,
+      value: `${formatMaybeNumber(result?.signal_power)} dBm`,
     },
     {
       label: "Noise + interference",
-      value: `${formatMaybeNumber(result.noise_power)} dBm`,
+      value: `${formatMaybeNumber(result?.noise_power)} dBm`,
     },
   ];
 }
 
 function throughputSceneBadges(result) {
-  const comparison = result.comparison || {};
+  const comparison = result?.comparison || {};
 
   return [
     {
@@ -2004,7 +2077,7 @@ function validateSimulationAntennas(antennas, activeScene, maxAntennas, label) {
 }
 
 function linkResultAntennas(result, request) {
-  if (Array.isArray(result.antennas) && result.antennas.length > 0) {
+  if (Array.isArray(result?.antennas) && result.antennas.length > 0) {
     return result.antennas;
   }
 

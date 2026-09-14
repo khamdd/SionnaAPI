@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import {
@@ -22,7 +22,7 @@ export function hasCachedSceneModel(bounds) {
   return sceneModelCache.get(sceneBoundsKey(bounds))?.status === "ready";
 }
 
-export default function Scene3DPreview({
+function Scene3DPreview({
   antennas = EMPTY_ARRAY,
   bounds,
   className = "",
@@ -191,6 +191,8 @@ export default function Scene3DPreview({
     </div>
   );
 }
+
+export default memo(Scene3DPreview);
 
 function sceneBoundsKey(bounds) {
   return bounds
@@ -453,6 +455,7 @@ function renderThreeScene(
   const height = host.clientHeight || 430;
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0xedf2f7);
+  let needsRender = true;
 
   const maxSide = Math.max(model.width, model.depth);
   const camera =
@@ -491,6 +494,9 @@ function renderThreeScene(
   controls.maxDistance = 1600;
   controls.minPolarAngle = 0.05;
   controls.maxPolarAngle = Math.PI / 2.02;
+  controls.addEventListener("change", () => {
+    needsRender = true;
+  });
 
   scene.add(new THREE.HemisphereLight(0xffffff, 0x94a3b8, 1.25));
   const sun = new THREE.DirectionalLight(0xffffff, 1.7);
@@ -516,7 +522,9 @@ function renderThreeScene(
   addRoadLines(scene, model);
   const coverageMesh =
     addCoverageGrid(scene, model, coverageGrid, solver, coverageDisplayMode) ||
-    addCoverageImage(scene, model, coverageImageUrl);
+    addCoverageImage(scene, model, coverageImageUrl, () => {
+      needsRender = true;
+    });
   addWardBoundary(scene, model, bounds, wardBoundary);
   const selectedCellGroup = new THREE.Group();
   const hoveredCellGroup = new THREE.Group();
@@ -545,6 +553,7 @@ function renderThreeScene(
     updateCameraForSize(camera, viewMode, nextWidth, nextHeight, maxSide);
     camera.updateProjectionMatrix();
     renderer.setSize(nextWidth, nextHeight);
+    needsRender = true;
   });
   observer.observe(host);
 
@@ -573,6 +582,7 @@ function renderThreeScene(
     );
     lastHoveredCell = cell;
     renderer.domElement.style.cursor = cell ? "pointer" : "";
+    needsRender = true;
   }
 
   function handlePointerMove(event) {
@@ -672,8 +682,9 @@ function renderThreeScene(
 
   let animationId = 0;
   function animate() {
+    animationId = window.requestAnimationFrame(animate);
     controls.update();
-    syncSelectedCellOutline(
+    if (syncSelectedCellOutline(
       selectedCellGroup,
       model,
       selectedCoverageCellRef,
@@ -682,8 +693,10 @@ function renderThreeScene(
       (cell) => {
         lastSelectedCell = cell;
       },
-    );
-    syncSelectedRsrpUserOutline(
+    )) {
+      needsRender = true;
+    }
+    if (syncSelectedRsrpUserOutline(
       selectedRsrpUserGroup,
       model,
       selectedRsrpUserRef,
@@ -692,9 +705,13 @@ function renderThreeScene(
       (user) => {
         lastSelectedRsrpUser = user;
       },
-    );
-    renderer.render(scene, camera);
-    animationId = window.requestAnimationFrame(animate);
+    )) {
+      needsRender = true;
+    }
+    if (needsRender) {
+      needsRender = false;
+      renderer.render(scene, camera);
+    }
   }
   animate();
 
@@ -734,11 +751,12 @@ function syncSelectedCellOutline(
   const cell = selectedCoverageCellRef?.current || null;
 
   if (cell === lastSelectedCell) {
-    return;
+    return false;
   }
 
   updateCellOutlineGroup(group, model, cell, solver, SELECTED_CELL_OUTLINE);
   setLastSelectedCell(cell);
+  return true;
 }
 
 function updateCellOutlineGroup(group, model, cell, solver, style) {
@@ -779,7 +797,7 @@ function addCoverageGrid(scene, model, grid, solver, coverageDisplayMode) {
   return mesh;
 }
 
-function addCoverageImage(scene, model, imageUrl) {
+function addCoverageImage(scene, model, imageUrl, requestRender) {
   if (!imageUrl) {
     return null;
   }
@@ -809,11 +827,13 @@ function addCoverageImage(scene, model, imageUrl) {
       texture.needsUpdate = true;
       material.map = texture;
       material.needsUpdate = true;
+      requestRender?.();
     },
     undefined,
     () => {
       material.color.set(0x60a5fa);
       material.opacity = 0.22;
+      requestRender?.();
     },
   );
 
@@ -1375,7 +1395,7 @@ function syncSelectedRsrpUserOutline(
   const user = selectedRsrpUserRef?.current || null;
 
   if (user === lastSelectedRsrpUser) {
-    return;
+    return false;
   }
 
   while (group.children.length) {
@@ -1405,6 +1425,7 @@ function syncSelectedRsrpUserOutline(
   }
 
   setLastSelectedRsrpUser(user);
+  return true;
 }
 
 function scenePointFromWorld(model, solver, position, yOffset = 0) {

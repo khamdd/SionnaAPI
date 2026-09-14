@@ -11,10 +11,68 @@ import {
   normalizeStoredAntennaSettings,
   normalizeStoredSinrRoles,
   normalizeStoredType2Antennas,
+  persistSceneMap,
   readStoredSceneMap,
   removeStoredSceneMapValue,
+  setSceneMapValue,
   updateStoredSceneMap,
 } from "../utils/sceneStorage";
+
+const SCENE_MAP_PERSIST_DEBOUNCE_MS = 300;
+const pendingSceneMapWrites = new Map();
+let pagehideFlushRegistered = false;
+
+function flushPendingSceneMapWrites() {
+  for (const [storageKey, pending] of pendingSceneMapWrites) {
+    if (pending.timer && typeof window !== "undefined") {
+      window.clearTimeout(pending.timer);
+    }
+    persistSceneMap(storageKey, pending.map);
+  }
+  pendingSceneMapWrites.clear();
+}
+
+function ensurePagehideFlush() {
+  if (pagehideFlushRegistered) {
+    return;
+  }
+  if (typeof window === "undefined" || typeof window.addEventListener !== "function") {
+    return;
+  }
+  pagehideFlushRegistered = true;
+  window.addEventListener("pagehide", () => flushPendingSceneMapWrites());
+}
+
+function scheduleSceneMapPersist(storageKey, sceneMap) {
+  ensurePagehideFlush();
+  let pending = pendingSceneMapWrites.get(storageKey);
+  if (!pending) {
+    pending = { map: null, timer: 0 };
+    pendingSceneMapWrites.set(storageKey, pending);
+  }
+  pending.map = sceneMap;
+  if (!pending.timer) {
+    pending.timer = window.setTimeout(() => {
+      pending.timer = 0;
+      const write = pendingSceneMapWrites.get(storageKey);
+      pendingSceneMapWrites.delete(storageKey);
+      if (write) {
+        persistSceneMap(storageKey, write.map);
+      }
+    }, SCENE_MAP_PERSIST_DEBOUNCE_MS);
+  }
+}
+
+function updateSceneMapDraft(storageKey, sceneMap, sceneId, valueOrUpdater, normalizeValue) {
+  const next = new Map(sceneMap);
+  const value = typeof valueOrUpdater === "function"
+    ? valueOrUpdater(next.get(sceneId))
+    : valueOrUpdater;
+
+  setSceneMapValue(next, sceneId, value, normalizeValue);
+  scheduleSceneMapPersist(storageKey, next);
+  return next;
+}
 
 export function validateType2AntennaAddition({
   activeAntennas,
@@ -144,7 +202,7 @@ export default function useSceneAntennaDraft({
       return;
     }
 
-    setAntennaSettingsByScene((current) => updateStoredSceneMap(
+    setAntennaSettingsByScene((current) => updateSceneMapDraft(
       settingsStorageKey,
       current,
       activeScene.id,
@@ -175,14 +233,14 @@ export default function useSceneAntennaDraft({
     }
 
     const { normalized } = validation;
-    setType2AntennasByScene((current) => updateStoredSceneMap(
+    setType2AntennasByScene((current) => updateSceneMapDraft(
       type2StorageKey,
       current,
       activeScene.id,
       (sceneAntennas) => [...(sceneAntennas || []), normalized],
       normalizeStoredType2Antennas,
     ));
-    setAntennaSettingsByScene((current) => updateStoredSceneMap(
+    setAntennaSettingsByScene((current) => updateSceneMapDraft(
       settingsStorageKey,
       current,
       activeScene.id,
@@ -231,7 +289,7 @@ export default function useSceneAntennaDraft({
       return;
     }
 
-    setRoleSelectionsByScene((current) => updateStoredSceneMap(
+    setRoleSelectionsByScene((current) => updateSceneMapDraft(
       rolesStorageKey,
       current,
       activeScene.id,

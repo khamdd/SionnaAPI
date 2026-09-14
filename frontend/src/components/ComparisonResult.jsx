@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { fetchArtifactJson } from "../api";
 import {
   firstArtifactUrl,
@@ -217,17 +217,25 @@ function ComparisonCoveragePreview({
   wardBoundary,
 }) {
   const fullResult = useFullResultArtifact(item);
-  const grid = comparisonPreviewGrid(fullResult ? {
-    ...item,
-    response_json: fullResult,
-  } : item);
+  const grid = useMemo(
+    () => comparisonPreviewGrid(fullResult ? {
+      ...item,
+      response_json: fullResult,
+    } : item),
+    [fullResult, item],
+  );
+  const previewAntennas = useMemo(
+    () => comparisonPreviewAntennas(item, mode),
+    [item, mode],
+  );
+  const previewSolver = useMemo(() => comparisonPreviewSolver(item), [item]);
   const [selectedCell, setSelectedCell] = useState(null);
 
   if (item.scene_bounds) {
     return (
       <div className="comparison-coverage-preview">
         <Scene3DPreview
-          antennas={comparisonPreviewAntennas(item, mode)}
+          antennas={previewAntennas}
           bounds={item.scene_bounds}
           className="comparison-scene-3d"
           coverageGrid={grid}
@@ -237,7 +245,7 @@ function ComparisonCoveragePreview({
           sceneName={item.scene_name}
           selectedCoverageCell={selectedCell}
           showOverlay={false}
-          solver={comparisonPreviewSolver(item)}
+          solver={previewSolver}
           viewMode="top"
           wardBoundary={wardBoundary}
         />

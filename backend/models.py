@@ -186,6 +186,9 @@ class SimulationProfile(Base):
 
 class SimulationRun(Base):
     __tablename__ = "simulation_runs"
+    __table_args__ = (
+        Index("ix_simulation_runs_scene_created", "scene_id", "created_at"),
+    )
 
     id: Mapped[str] = mapped_column(
         UUID(as_uuid=False), primary_key=True, server_default=func.gen_random_uuid()
@@ -233,6 +236,9 @@ class SimulationRun(Base):
 
 class SimulationRunAntenna(Base):
     __tablename__ = "simulation_run_antennas"
+    __table_args__ = (
+        Index("ix_simulation_run_antennas_run", "simulation_run_id"),
+    )
 
     id: Mapped[str] = mapped_column(
         UUID(as_uuid=False), primary_key=True, server_default=func.gen_random_uuid()
@@ -257,6 +263,9 @@ class SimulationRunAntenna(Base):
 
 class SimulationArtifact(Base):
     __tablename__ = "simulation_artifacts"
+    __table_args__ = (
+        Index("ix_simulation_artifacts_run", "simulation_run_id"),
+    )
 
     id: Mapped[str] = mapped_column(
         UUID(as_uuid=False), primary_key=True, server_default=func.gen_random_uuid()
@@ -455,6 +464,8 @@ class SimulationJob(Base):
             "priority",
         ),
         Index("ix_simulation_jobs_expired_lease", "status", "lease_expires_at"),
+        Index("ix_simulation_jobs_queued_at", "queued_at"),
+        Index("ix_simulation_jobs_result_run", "result_run_id"),
     )
 
     id: Mapped[str] = mapped_column(

@@ -454,12 +454,24 @@ export default function App() {
   }, [latestGrid, route]);
 
   useEffect(() => {
+    let frame = 0;
     function handleResize() {
-      drawHeatmap(canvasRef.current, mapStageRef.current, latestGrid);
+      if (frame) {
+        return;
+      }
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        drawHeatmap(canvasRef.current, mapStageRef.current, latestGrid);
+      });
     }
 
     window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      if (frame) {
+        window.cancelAnimationFrame(frame);
+      }
+    };
   }, [latestGrid]);
 
   useEffect(() => {
@@ -1166,30 +1178,60 @@ export default function App() {
     setHistoryPreviewLoadCount(0);
   }
 
-  function handleHover(event) {
-    if (!latestGrid) {
-      setHover(null);
+  const cellIndex = useMemo(() => {
+    const index = new Map();
+    if (latestGrid) {
+      for (const cell of latestGrid.cells) {
+        index.set(cell.row * latestGrid.cols + cell.col, cell);
+      }
+    }
+    return index;
+  }, [latestGrid]);
+
+  const hoverFrameRef = useRef(0);
+  const hoverPointRef = useRef(null);
+
+  const handleHover = useCallback((event) => {
+    hoverPointRef.current = { clientX: event.clientX, clientY: event.clientY };
+    if (hoverFrameRef.current) {
       return;
     }
+    hoverFrameRef.current = window.requestAnimationFrame(() => {
+      hoverFrameRef.current = 0;
+      const point = hoverPointRef.current;
+      const canvas = canvasRef.current;
+      if (!point || !canvas) {
+        return;
+      }
+      if (!latestGrid) {
+        setHover(null);
+        return;
+      }
+      const rect = canvas.getBoundingClientRect();
+      const x = point.clientX - rect.left;
+      const y = point.clientY - rect.top;
+      const col = Math.floor((x / rect.width) * latestGrid.cols);
+      const row = latestGrid.rows - 1 - Math.floor((y / rect.height) * latestGrid.rows);
+      const cell = cellIndex.get(row * latestGrid.cols + col) || null;
 
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-    const col = Math.floor((x / rect.width) * latestGrid.cols);
-    const row = latestGrid.rows - 1 - Math.floor((y / rect.height) * latestGrid.rows);
-    const cell = latestGrid.cells.find((item) => item.row === row && item.col === col);
+      if (!cell) {
+        setHover(null);
+        return;
+      }
 
-    if (!cell) {
-      setHover(null);
-      return;
-    }
-
-    setHover({
-      cell,
-      left: Math.min(x + 14, rect.width - 252),
-      top: Math.max(y - 80, 10),
+      setHover({
+        cell,
+        left: Math.min(x + 14, rect.width - 252),
+        top: Math.max(y - 80, 10),
+      });
     });
-  }
+  }, [cellIndex, latestGrid]);
+
+  useEffect(() => () => {
+    if (hoverFrameRef.current) {
+      window.cancelAnimationFrame(hoverFrameRef.current);
+    }
+  }, []);
 
   const modalProgressLabel = modalContent
     ? jobProgressLabel
