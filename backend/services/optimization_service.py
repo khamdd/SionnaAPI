@@ -207,60 +207,6 @@ def evaluate_network_coverage_objectives(result_or_grid, objectives):
     }
 
 
-def generate_network_coverage_parameter_candidates(req):
-    antennas = list(getattr(req.base_request, "antennas", []) or [])
-    variables = {variable.field for variable in getattr(req, "variables", [])}
-    baseline = {
-        antenna.id: antenna_settings(antenna)
-        for antenna in antennas
-    }
-    candidates = []
-    seen = set()
-
-    add_parameter_candidate(
-        candidates,
-        seen,
-        "baseline",
-        "Current setup",
-        baseline,
-        baseline,
-        req.max_candidates,
-    )
-
-    for field in ("tilt", "tx_power", "azimuth"):
-        if field not in variables:
-            continue
-        for antenna in antennas:
-            for value in candidate_values_for_field(antenna, field, req):
-                settings = copy_settings(baseline)
-                settings[antenna.id][field] = value
-                add_parameter_candidate(
-                    candidates,
-                    seen,
-                    f"{antenna.id}_{field}_{format_setting_value(value)}",
-                    f"{antenna.id} {field_label(field)} {format_setting_value(value)}",
-                    settings,
-                    baseline,
-                    req.max_candidates,
-                )
-                if len(candidates) >= req.max_candidates:
-                    break
-            if len(candidates) >= req.max_candidates:
-                break
-        if len(candidates) >= req.max_candidates:
-            break
-
-    return {
-        "tilt_step": req.tilt_step,
-        "power_step": req.power_step,
-        "azimuth_step": req.azimuth_step,
-        "max_candidates": req.max_candidates,
-        "generated_count": len(candidates),
-        "antenna_count": len(antennas),
-        "candidates": candidates,
-    }
-
-
 def optimization_dimensions(req):
     variables = {variable.field for variable in getattr(req, "variables", [])}
     dimensions = []
@@ -641,103 +587,6 @@ def build_network_coverage_candidate_request(base_request, candidate_settings):
     }
 
 
-def add_candidate(
-    candidates,
-    seen,
-    candidate_id,
-    label,
-    tilts,
-    baseline_tilts,
-    max_candidates,
-):
-    if len(candidates) >= max_candidates:
-        return
-
-    key = tuple(
-        (antenna_id, tilts[antenna_id])
-        for antenna_id in sorted(tilts)
-    )
-    if key in seen:
-        return
-
-    changes = [
-        {
-            "antenna_id": antenna_id,
-            "from": baseline_tilts[antenna_id],
-            "to": tilts[antenna_id],
-            "delta": round(tilts[antenna_id] - baseline_tilts[antenna_id], 6),
-        }
-        for antenna_id in sorted(tilts)
-        if not math.isclose(tilts[antenna_id], baseline_tilts[antenna_id])
-    ]
-
-    seen.add(key)
-    candidates.append(
-        {
-            "id": candidate_id,
-            "label": label,
-            "tilts": tilts,
-            "changes": changes,
-        }
-    )
-
-
-def add_parameter_candidate(
-    candidates,
-    seen,
-    candidate_id,
-    label,
-    settings,
-    baseline_settings,
-    max_candidates,
-):
-    if len(candidates) >= max_candidates:
-        return
-
-    key = tuple(
-        (
-            antenna_id,
-            settings[antenna_id]["tilt"],
-            settings[antenna_id]["tx_power"],
-            settings[antenna_id]["azimuth"],
-        )
-        for antenna_id in sorted(settings)
-    )
-    if key in seen:
-        return
-
-    changes = []
-    for antenna_id in sorted(settings):
-        for field in ("tilt", "tx_power", "azimuth"):
-            before = baseline_settings[antenna_id][field]
-            after = settings[antenna_id][field]
-            if math.isclose(before, after):
-                continue
-            changes.append(
-                {
-                    "antenna_id": antenna_id,
-                    "field": field,
-                    "from": before,
-                    "to": after,
-                    "delta": round(after - before, 6),
-                }
-            )
-
-    seen.add(key)
-    candidates.append(
-        {
-            "id": candidate_id,
-            "label": label,
-            "tilts": {
-                antenna_id: values["tilt"]
-                for antenna_id, values in settings.items()
-            },
-            "settings": copy_settings(settings),
-            "changes": changes,
-        }
-    )
-
-
 def antenna_settings(antenna):
     return {
         "tilt": float(antenna.tilt.current),
@@ -795,19 +644,6 @@ def field_label(field):
 
 def format_setting_value(value):
     return format_step(value).replace(".", "_")
-
-
-def clamp_tilt(value, tilt):
-    return round(
-        min(
-            max(
-                float(value),
-                float(tilt.min),
-            ),
-            float(tilt.max),
-        ),
-        6,
-    )
 
 
 def format_step(step):

@@ -363,25 +363,6 @@ def log_failed_business_event(
     )
 
 
-def json_safe(value):
-    if isinstance(value, float):
-        return value if math.isfinite(value) else None
-
-    if isinstance(value, list):
-        return [
-            json_safe(item)
-            for item in value
-        ]
-
-    if isinstance(value, dict):
-        return {
-            key: json_safe(item)
-            for key, item in value.items()
-        }
-
-    return value
-
-
 def get_engine_scene_info():
     get_active_scene_info = getattr(engine, "get_active_scene_info", None)
 

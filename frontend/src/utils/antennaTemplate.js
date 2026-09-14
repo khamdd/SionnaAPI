@@ -50,7 +50,7 @@ export function downloadAntennaTemplate(antennas = DEFAULT_ANTENNAS) {
   URL.revokeObjectURL(url);
 }
 
-export function buildAntennaTemplateWorkbook(antennas) {
+function buildAntennaTemplateWorkbook(antennas) {
   return createZip([
     ["[Content_Types].xml", contentTypesXml()],
     ["_rels/.rels", rootRelationshipsXml()],

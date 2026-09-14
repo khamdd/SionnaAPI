@@ -198,41 +198,6 @@ def ring_intersects_bounds(ring, bounds):
         or min(lons) > bounds.east
     )
 
-# def fetch_osm_building_elements(bounds):
-#     query = f"""
-#     [out:json][timeout:{OVERPASS_QUERY_TIMEOUT_SECONDS}][bbox:{bounds.south},{bounds.west},{bounds.north},{bounds.east}];
-#     way["building"];
-#     out tags geom;
-#     """
-#     body = urllib.parse.urlencode({"data": query}).encode("utf-8")
-
-#     last_error = None
-#     for url in (OVERPASS_URL, OVERPASS_FALLBACK_URL):
-#         request = urllib.request.Request(
-#             url,
-#             data=body,
-#             headers={
-#                 "Accept": "application/json",
-#                 "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-#                 "User-Agent": "SionnaSimulation/1.0 (local radio planning tool)",
-#             },
-#             method="POST",
-#         )
-
-#         try:
-#             with urllib.request.urlopen(request, timeout=OVERPASS_HTTP_TIMEOUT_SECONDS) as response:
-#                 payload = json.loads(response.read().decode("utf-8"))
-#                 return payload.get("elements", [])
-#         except HTTPError as exc:
-#             last_error = exc
-#             if exc.code not in {406, 429, 502, 503, 504}:
-#                 break
-#         except (TimeoutError, URLError, OSError) as exc:
-#             last_error = exc
-
-#     raise RuntimeError(f"OpenStreetMap building lookup failed: {last_error}")
-
-
 def parse_osm_buildings(elements):
     buildings = []
 

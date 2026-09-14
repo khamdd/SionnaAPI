@@ -8,7 +8,6 @@
     "preview": "vite preview --host 127.0.0.1 --port 4173"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "latest",
     "leaflet": "^1.9.4",
     "maplibre-gl": "^6.6.0",
     "pmtiles": "^4.5.0",

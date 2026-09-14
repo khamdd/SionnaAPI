@@ -4,7 +4,6 @@ import shutil
 import threading
 import uuid
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 from backend.constants import (
     LEGACY_MUNICH_SCENE_ID,
@@ -359,21 +358,6 @@ def serialize_scene(scene):
 
 def public_static_url(base_url, relative_path):
     return str(base_url).rstrip("/") + "/static/" + relative_path
-
-
-def copy_demo_scene(target_dir):
-    source_dir = get_demo_scene_source_dir()
-
-    if target_dir.exists():
-        shutil.rmtree(target_dir)
-
-    shutil.copytree(source_dir, target_dir)
-
-
-def get_demo_scene_source_dir():
-    import sionna
-
-    return Path(sionna.rt.scene.simple_street_canyon).resolve().parent
 
 
 def write_preview_svg(path, scene_name, req, metrics):
