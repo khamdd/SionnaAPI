@@ -19,6 +19,7 @@ import { importAntennasFromWorkbook } from "../utils/antennaImport";
 import { downloadAntennaTemplate } from "../utils/antennaTemplate";
 import { formatMaybeNumber } from "../utils/format";
 import { lngLatInsideBounds } from "../utils/scene";
+import { createSceneWardBoundary } from "../utils/wardBoundary";
 import {
   filterWards,
   indexWardFeatures,
@@ -585,9 +586,19 @@ export default function SceneChooserPage({
         return;
       }
 
+      const selectedWardCode = selectedWardCodeRef.current;
+      const wardBoundary = selectedWardCode
+        ? createSceneWardBoundary(await loadWardFeature(selectedWardCode))
+        : null;
+
+      if (selectedWardCode && !wardBoundary) {
+        throw new Error("The selected ward boundary could not be loaded.");
+      }
+
       const previewResult = await createScenePreview({
         name: trimmedSceneName,
         fixed_antennas: selectedAntennas,
+        ward_boundary: wardBoundary,
         south: selectedBounds.south,
         west: selectedBounds.west,
         north: selectedBounds.north,

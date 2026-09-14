@@ -60,8 +60,11 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   `hanoi-wards.csv`; choosing a ward flies the map to it, draws its simplified
   boundary from `hanoi-wards.geojson` with a red border, and takes the ward's
   bounding rectangle straight to the Preview stage as the scene area (scene
-  name auto-fills from the ward name when empty). Manual drawing, city change,
-  and select-new-area clear the ward overlay.
+  name auto-fills from the ward name when empty). Kept ward scenes persist the
+  selected GeoJSON boundary as validated scene metadata; the shared 3D preview
+  renders that outline across live simulations, queue results, history details,
+  and compatible comparisons. Manual drawing, city change, and select-new-area
+  clear the ward overlay.
 - The frontend flow is scene-first: after login and from `/`, users land on
   `/scenes`, choose an imported scene there, or use Create new scene to open
   `/choose-scene`. Activating or creating a scene moves users into Network

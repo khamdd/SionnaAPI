@@ -9,6 +9,7 @@ import {
 } from "../constants";
 import { getOfflineBuildings } from "../api";
 import { lngLatToScenePosition } from "../utils/scene";
+import { projectWardBoundaryRings } from "../utils/wardBoundary";
 
 const SCENE_MODEL_CACHE_LIMIT = 3;
 const sceneModelCache = new Map();
@@ -39,6 +40,7 @@ export default function Scene3DPreview({
   signalLinks = EMPTY_ARRAY,
   solver = null,
   viewMode = "oblique",
+  wardBoundary = null,
 }) {
   const canvasHostRef = useRef(null);
   const selectedCoverageCellRef = useRef(selectedCoverageCell);
@@ -140,6 +142,7 @@ export default function Scene3DPreview({
       host,
       model,
       bounds,
+      wardBoundary,
       viewMode,
       antennas,
       solver,
@@ -166,6 +169,7 @@ export default function Scene3DPreview({
     signalLinks,
     solver,
     viewMode,
+    wardBoundary,
   ]);
 
   return (
@@ -429,6 +433,7 @@ function renderThreeScene(
   host,
   model,
   bounds,
+  wardBoundary,
   viewMode,
   antennas,
   solver,
@@ -512,6 +517,7 @@ function renderThreeScene(
   const coverageMesh =
     addCoverageGrid(scene, model, coverageGrid, solver, coverageDisplayMode) ||
     addCoverageImage(scene, model, coverageImageUrl);
+  addWardBoundary(scene, model, bounds, wardBoundary);
   const selectedCellGroup = new THREE.Group();
   const hoveredCellGroup = new THREE.Group();
   scene.add(selectedCellGroup);
@@ -1011,6 +1017,75 @@ function addAntennas(scene, model, antennas, solver, bounds) {
   });
 
   scene.add(group);
+}
+
+function addWardBoundary(scene, model, bounds, wardBoundary) {
+  const rings = projectWardBoundaryRings(wardBoundary, bounds, model);
+
+  rings.forEach((ring) => {
+    const points = ring.map(({ x, z }) => new THREE.Vector3(x, 2.5, z));
+    const casing = createBoundaryRibbon(points, 3.2, 0xffffff, 20);
+    const outline = createBoundaryRibbon(points, 1.8, 0xdc2626, 21);
+
+    if (casing) {
+      scene.add(casing);
+    }
+    if (outline) {
+      scene.add(outline);
+    }
+  });
+}
+
+function createBoundaryRibbon(points, width, color, renderOrder) {
+  const vertices = [];
+  const halfWidth = width / 2;
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const start = points[index];
+    const end = points[index + 1];
+    const dx = end.x - start.x;
+    const dz = end.z - start.z;
+    const length = Math.hypot(dx, dz);
+
+    if (length <= 0.0001) {
+      continue;
+    }
+
+    const offsetX = (-dz / length) * halfWidth;
+    const offsetZ = (dx / length) * halfWidth;
+    const leftStart = [start.x + offsetX, start.y, start.z + offsetZ];
+    const rightStart = [start.x - offsetX, start.y, start.z - offsetZ];
+    const leftEnd = [end.x + offsetX, end.y, end.z + offsetZ];
+    const rightEnd = [end.x - offsetX, end.y, end.z - offsetZ];
+
+    vertices.push(
+      ...leftStart,
+      ...rightStart,
+      ...leftEnd,
+      ...rightStart,
+      ...rightEnd,
+      ...leftEnd,
+    );
+  }
+
+  if (!vertices.length) {
+    return null;
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(vertices, 3),
+  );
+  const material = new THREE.MeshBasicMaterial({
+    color,
+    depthTest: false,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.renderOrder = renderOrder;
+  return mesh;
 }
 
 function resolveSceneAntennaPosition(antenna, bounds) {

@@ -811,6 +811,7 @@ export default function App() {
             items={items}
             onPreviewLoadingChange={handleHistoryPreviewLoadingChange}
             type={comparisonType}
+            wardBoundary={activeScene?.ward_boundary}
           />
         </HistoryModalBody>,
       );
@@ -855,6 +856,11 @@ export default function App() {
         <HistoryDetail
           item={result.item}
           onPreviewLoadingChange={handleHistoryPreviewLoadingChange}
+          wardBoundary={
+            result.item.scene_id === activeScene?.id
+              ? activeScene?.ward_boundary
+              : null
+          }
         />,
       );
     } catch (error) {
@@ -1009,6 +1015,11 @@ export default function App() {
             onOpenHistory={job.result_run_id ? () => openHistoryDetail(job.result_run_id) : null}
             onPreviewLoadingChange={handleHistoryPreviewLoadingChange}
             onSave={() => saveSimulationJob(job)}
+            wardBoundary={
+              job.scene_id === activeScene?.id
+                ? activeScene?.ward_boundary
+                : null
+            }
           />
         </HistoryModalBody>,
       );

@@ -18,36 +18,41 @@ import {
 } from "./CoverageMapPresentation";
 import Scene3DPreview from "./Scene3DPreview";
 
-export default function HistoryDetail({ item, onPreviewLoadingChange }) {
+export default function HistoryDetail({ item, onPreviewLoadingChange, wardBoundary = null }) {
   const renderer = {
     coverage_map: (
       <CoverageMapHistory
         item={item}
         onPreviewLoadingChange={onPreviewLoadingChange}
+        wardBoundary={wardBoundary}
       />
     ),
     network_coverage: (
       <NetworkCoverageHistory
         item={item}
         onPreviewLoadingChange={onPreviewLoadingChange}
+        wardBoundary={wardBoundary}
       />
     ),
     sinr: (
       <SinrHistory 
         item={item} 
         onPreviewLoadingChange={onPreviewLoadingChange}
+        wardBoundary={wardBoundary}
       />
     ),
     throughput_comparison: (
       <ThroughputHistory 
         item={item} 
         onPreviewLoadingChange={onPreviewLoadingChange}
+        wardBoundary={wardBoundary}
       />
     ),
     rsrp_simulation: (
       <RsrpHistory
         item={item}
         onPreviewLoadingChange={onPreviewLoadingChange}
+        wardBoundary={wardBoundary}
       />
     ),
   }[item.simulation_type];
@@ -78,7 +83,7 @@ function HistoryHeader({ item }) {
   );
 }
 
-function CoverageMapHistory({ item, onPreviewLoadingChange }) {
+function CoverageMapHistory({ item, onPreviewLoadingChange, wardBoundary }) {
   const request = item.request_json || {};
   const response = item.response_json || {};
   const imageUrl = item.coverage_map_image_url || firstArtifactUrl(item.artifacts);
@@ -104,12 +109,13 @@ function CoverageMapHistory({ item, onPreviewLoadingChange }) {
         item={item}
         mode="coverage_map"
         onPreviewLoadingChange={onPreviewLoadingChange}
+        wardBoundary={wardBoundary}
       />
     </>
   );
 }
 
-function NetworkCoverageHistory({ item, onPreviewLoadingChange }) {
+function NetworkCoverageHistory({ item, onPreviewLoadingChange, wardBoundary }) {
   const request = item.request_json || {};
   const response = item.response_json || {};
   const grid = response.grid || {};
@@ -137,6 +143,7 @@ function NetworkCoverageHistory({ item, onPreviewLoadingChange }) {
         item={item}
         mode="network_coverage"
         onPreviewLoadingChange={onPreviewLoadingChange}
+        wardBoundary={wardBoundary}
       />
       <h3>Antenna snapshot</h3>
       {(item.antennas || []).length ? (
@@ -165,6 +172,7 @@ function HistoryCoveragePreview({
   item,
   mode,
   onPreviewLoadingChange,
+  wardBoundary,
 }) {
   const fullResult = useFullResultArtifact(item);
   const grid = historyPreviewGrid(fullResult ? {
@@ -197,6 +205,7 @@ function HistoryCoveragePreview({
             showOverlay={false}
             solver={historyPreviewSolver(item)}
             viewMode="top"
+            wardBoundary={wardBoundary}
           />
           {selectedCell && (
             <HistoryCoverageCellDialog
@@ -435,7 +444,7 @@ function historySignalLinks(request) {
   return links;
 }
 
-function HistoryLinkPreview({ item, onPreviewLoadingChange }) {
+function HistoryLinkPreview({ item, onPreviewLoadingChange, wardBoundary }) {
   const request = item.request_json || {};
   const response = item.response_json || {};
   const solver = (
@@ -464,12 +473,13 @@ function HistoryLinkPreview({ item, onPreviewLoadingChange }) {
         signalLinks={historySignalLinks(request)}
         solver={solver}
         viewMode="top"
+        wardBoundary={wardBoundary}
       />
     </div>
   );
 }
 
-function RsrpHistory({ item, onPreviewLoadingChange }) {
+function RsrpHistory({ item, onPreviewLoadingChange, wardBoundary }) {
   const [selectedUser, setSelectedUser] = useState(null);
   const fullResult = useFullResultArtifact(item);
   const savedResponse = item.response_json || {};
@@ -511,6 +521,7 @@ function RsrpHistory({ item, onPreviewLoadingChange }) {
             showOverlay={false}
             solver={solver}
             viewMode="top"
+            wardBoundary={wardBoundary}
           />
           {selectedUser && (
             <RsrpUserDialog
@@ -553,7 +564,7 @@ function RsrpHistory({ item, onPreviewLoadingChange }) {
   );
 }
 
-function SinrHistory({ item, onPreviewLoadingChange }) {
+function SinrHistory({ item, onPreviewLoadingChange, wardBoundary }) {
   const request = item.request_json || {};
   const response = item.response_json || {};
 
@@ -563,6 +574,7 @@ function SinrHistory({ item, onPreviewLoadingChange }) {
       <HistoryLinkPreview
         item={item}
         onPreviewLoadingChange={onPreviewLoadingChange}
+        wardBoundary={wardBoundary}
       />
       <h3>Transmitter antenna</h3>
       <dl className="detail-grid">
@@ -586,7 +598,7 @@ function SinrHistory({ item, onPreviewLoadingChange }) {
   );
 }
 
-function ThroughputHistory({ item, onPreviewLoadingChange }) {
+function ThroughputHistory({ item, onPreviewLoadingChange, wardBoundary }) {
   const request = item.request_json || {};
   const response = item.response_json || {};
   const comparison = response.comparison || {};
@@ -597,6 +609,7 @@ function ThroughputHistory({ item, onPreviewLoadingChange }) {
       <HistoryLinkPreview
         item={item}
         onPreviewLoadingChange={onPreviewLoadingChange}
+        wardBoundary={wardBoundary}
       />
       <h3>Transmitter and receiver</h3>
       <dl className="detail-grid">

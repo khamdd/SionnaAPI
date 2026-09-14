@@ -10,12 +10,13 @@ import {
 } from "../utils/format";
 import Scene3DPreview from "./Scene3DPreview";
 
-export default function ComparisonResult({ type, items, onPreviewLoadingChange }) {
+export default function ComparisonResult({ type, items, onPreviewLoadingChange, wardBoundary = null }) {
   if (type === "coverage_map") {
     return (
       <CoverageMapComparison
         items={items}
         onPreviewLoadingChange={onPreviewLoadingChange}
+        wardBoundary={wardBoundary}
       />
     );
   }
@@ -25,6 +26,7 @@ export default function ComparisonResult({ type, items, onPreviewLoadingChange }
       <NetworkCoverageComparison
         items={items}
         onPreviewLoadingChange={onPreviewLoadingChange}
+        wardBoundary={wardBoundary}
       />
     );
   }
@@ -40,7 +42,7 @@ export default function ComparisonResult({ type, items, onPreviewLoadingChange }
   return <p className="history-status">No comparison view is available for this simulation type.</p>;
 }
 
-function CoverageMapComparison({ items, onPreviewLoadingChange }) {
+function CoverageMapComparison({ items, onPreviewLoadingChange, wardBoundary }) {
   return (
     <div className="comparison-grid">
       {items.map((item, index) => {
@@ -64,6 +66,7 @@ function CoverageMapComparison({ items, onPreviewLoadingChange }) {
               item={item}
               mode="coverage_map"
               onPreviewLoadingChange={onPreviewLoadingChange}
+              wardBoundary={wardBoundary}
             />
           </article>
         );
@@ -72,7 +75,7 @@ function CoverageMapComparison({ items, onPreviewLoadingChange }) {
   );
 }
 
-function NetworkCoverageComparison({ items, onPreviewLoadingChange }) {
+function NetworkCoverageComparison({ items, onPreviewLoadingChange, wardBoundary }) {
   return (
     <div className="comparison-grid">
       {items.map((item, index) => {
@@ -104,6 +107,7 @@ function NetworkCoverageComparison({ items, onPreviewLoadingChange }) {
               item={item}
               mode="network_coverage"
               onPreviewLoadingChange={onPreviewLoadingChange}
+              wardBoundary={wardBoundary}
             />
           </article>
         );
@@ -210,6 +214,7 @@ function ComparisonCoveragePreview({
   item,
   mode,
   onPreviewLoadingChange,
+  wardBoundary,
 }) {
   const fullResult = useFullResultArtifact(item);
   const grid = comparisonPreviewGrid(fullResult ? {
@@ -234,6 +239,7 @@ function ComparisonCoveragePreview({
           showOverlay={false}
           solver={comparisonPreviewSolver(item)}
           viewMode="top"
+          wardBoundary={wardBoundary}
         />
         {selectedCell && (
           <ComparisonCoverageCellDialog

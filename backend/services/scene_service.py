@@ -113,7 +113,15 @@ def create_scene_preview(req: SceneBoundsRequest, base_url):
             "name": scene_name,
             "status": "preview",
             "is_default": False,
-            "bounds": req.model_dump(mode="json", exclude={"fixed_antennas"}),
+            "bounds": req.model_dump(
+                mode="json",
+                exclude={"fixed_antennas", "ward_boundary"},
+            ),
+            "ward_boundary": (
+                req.ward_boundary.model_dump(mode="json")
+                if req.ward_boundary
+                else None
+            ),
             "fixed_antennas": [
                 antenna.model_dump(mode="json")
                 for antenna in req.fixed_antennas

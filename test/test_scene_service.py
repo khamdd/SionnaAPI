@@ -7,10 +7,11 @@ from backend.services import scene_service
 from backend.services.osm_scene_builder import SceneBuildResult
 
 
-def make_request(fixed_antennas=None):
+def make_request(fixed_antennas=None, ward_boundary=None):
     return SceneBoundsRequest(
         name="Hanoi test scene",
         fixed_antennas=fixed_antennas or [],
+        ward_boundary=ward_boundary,
         south=21.0000,
         west=105.8000,
         north=21.0010,
@@ -81,7 +82,23 @@ def test_create_scene_preview_registers_generated_osm_scene(tmp_path, monkeypatc
                     "max": 40.0,
                 },
             }
-        ]),
+        ], ward_boundary={
+            "type": "Feature",
+            "properties": {
+                "ward_code": "00166",
+                "ward_name": "Cầu Giấy",
+                "ward_full_name": "Phường Cầu Giấy",
+            },
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [[
+                    [105.8000, 21.0000],
+                    [105.8010, 21.0000],
+                    [105.8010, 21.0010],
+                    [105.8000, 21.0000],
+                ]],
+            },
+        }),
         "http://127.0.0.1:8000/",
     )
 
@@ -94,6 +111,8 @@ def test_create_scene_preview_registers_generated_osm_scene(tmp_path, monkeypatc
     assert scene["mesh_count"] == 2
     assert scene["fixed_antennas"][0]["id"] == "HN-1"
     assert "fixed_antennas" not in scene["bounds"]
+    assert "ward_boundary" not in scene["bounds"]
+    assert scene["ward_boundary"]["properties"]["ward_code"] == "00166"
     assert scene["scene_path"].endswith("runtime_scene\\osm_scene.xml") or scene["scene_path"].endswith("runtime_scene/osm_scene.xml")
     assert (scene_root / scene["id"] / "preview.svg").exists()
 
@@ -101,10 +120,12 @@ def test_create_scene_preview_registers_generated_osm_scene(tmp_path, monkeypatc
     assert activate_result["status"] == "success"
     assert activate_result["scene"]["status"] == "ready"
     assert activate_result["scene"]["fixed_antennas"][0]["id"] == "HN-1"
+    assert activate_result["scene"]["ward_boundary"]["properties"]["ward_name"] == "Cầu Giấy"
 
     list_result = scene_service.list_scenes()
     assert list_result["active_scene_id"] == scene["id"]
     assert list_result["active_scene"]["fixed_antennas"][0]["id"] == "HN-1"
+    assert list_result["active_scene"]["ward_boundary"]["geometry"]["type"] == "Polygon"
     assert list_result["imported_scene_count"] == 1
 
 

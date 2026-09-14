@@ -89,6 +89,7 @@ export default function MapPanel({
             showOverlay={false}
             solver={latestSolver}
             viewMode="top"
+            wardBoundary={activeScene.ward_boundary}
           />
         ) : coverageImageUrl ? (
           <img id="coverage-image" src={coverageImageUrl} alt="Top-down coverage map" />

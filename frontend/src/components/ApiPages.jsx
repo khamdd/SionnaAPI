@@ -572,6 +572,7 @@ export function RsrpSimulationPage({
                     showOverlay={false}
                     solver={solver}
                     viewMode="top"
+                    wardBoundary={activeScene.ward_boundary}
                   />
                   <RsrpMapLegend />
                   {selectedUser && !isQueued && (
@@ -1350,6 +1351,7 @@ function ApiScenePreview({
             signalLinks={signalLinks}
             solver={solver || solverForScene(activeScene)}
             viewMode="top"
+            wardBoundary={activeScene.ward_boundary}
           />
         ) : (
           <p className="history-status">No 3D scene is available for the active scene.</p>
@@ -1838,6 +1840,7 @@ function ApiResultScene({
           signalLinks={signalLinks}
           solver={solver}
           viewMode="top"
+          wardBoundary={activeScene.ward_boundary}
         />
         {sceneBadges.length > 0 && (
           <div className="api-result-scene-badges">

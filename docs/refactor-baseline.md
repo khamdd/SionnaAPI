@@ -40,11 +40,15 @@ The normalized FastAPI OpenAPI document contains:
 
 - 46 paths
 - 53 operations
-- SHA-256 `a2ed3a1f2524129da668553520cdab2d8621f1fe832aff9f7b84f4b63289a6b6`
+- SHA-256 `6871a4aab080ee03693c86b01560a0066c17fee6fce813fedaed2bc51cc6f1bd`
 
 `test/test_refactor_contracts.py` checks the digest, counts, and authentication
 boundary. It also validates all canonical request fixtures against the current
 Pydantic schemas.
+
+The digest was refreshed on 2026-09-14 when scene preview requests gained the
+optional validated `ward_boundary` metadata used by simulation visualizations;
+path, operation, and authentication boundaries did not change.
 
 ## Frontend dependency and build baseline
 

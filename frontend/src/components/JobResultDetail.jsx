@@ -9,6 +9,7 @@ export default function JobResultDetail({
   onPreviewLoadingChange,
   onSave,
   result,
+  wardBoundary = null,
 }) {
   const status = String(job.status || "").toLowerCase();
   const isSucceeded = status === "succeeded";
@@ -51,6 +52,7 @@ export default function JobResultDetail({
         <HistoryDetail
           item={detailItem}
           onPreviewLoadingChange={onPreviewLoadingChange}
+          wardBoundary={wardBoundary}
         />
       ) : (
         <>

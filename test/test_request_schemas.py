@@ -132,6 +132,61 @@ def test_scene_bounds_request_accepts_more_than_ten_fixed_antennas():
     assert len(request.fixed_antennas) == 12
 
 
+def test_scene_bounds_request_accepts_a_ward_boundary_inside_scene_bounds():
+    request = SceneBoundsRequest(
+        name="Ward scene",
+        south=21.0,
+        west=105.8,
+        north=21.01,
+        east=105.81,
+        ward_boundary={
+            "type": "Feature",
+            "properties": {
+                "ward_code": "00166",
+                "ward_name": "Cầu Giấy",
+                "ward_full_name": "Phường Cầu Giấy",
+            },
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [[
+                    [105.8, 21.0],
+                    [105.81, 21.0],
+                    [105.81, 21.01],
+                    [105.8, 21.0],
+                ]],
+            },
+        },
+    )
+
+    assert request.ward_boundary.properties.ward_code == "00166"
+
+
+def test_scene_bounds_request_rejects_ward_boundary_outside_scene_bounds():
+    with pytest.raises(ValidationError, match="ward boundary must stay inside"):
+        SceneBoundsRequest(
+            south=21.0,
+            west=105.8,
+            north=21.01,
+            east=105.81,
+            ward_boundary={
+                "type": "Feature",
+                "properties": {
+                    "ward_code": "00166",
+                    "ward_name": "Cầu Giấy",
+                },
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[
+                        [105.8, 21.0],
+                        [105.82, 21.0],
+                        [105.81, 21.01],
+                        [105.8, 21.0],
+                    ]],
+                },
+            },
+        )
+
+
 def test_network_coverage_request_rejects_invalid_azimuth():
     with pytest.raises(ValidationError):
         NetworkCoverageRequest(

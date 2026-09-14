@@ -1,3 +1,4 @@
+import math
 from typing import List, Literal, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -316,6 +317,79 @@ class ThroughputRequest(BaseModel):
     )
 
 
+class WardBoundaryProperties(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ward_code: str = Field(min_length=1, max_length=16)
+    ward_name: str = Field(min_length=1, max_length=120)
+    ward_full_name: str | None = Field(default=None, max_length=160)
+
+
+class WardBoundaryGeometry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["Polygon", "MultiPolygon"]
+    coordinates: list
+
+    @model_validator(mode="after")
+    def validate_coordinates(self):
+        polygons = [self.coordinates] if self.type == "Polygon" else self.coordinates
+
+        if not polygons:
+            raise ValueError("ward boundary must contain at least one polygon")
+
+        point_count = 0
+        for polygon in polygons:
+            if not isinstance(polygon, list) or not polygon:
+                raise ValueError("ward boundary polygons must contain rings")
+
+            for ring in polygon:
+                if not isinstance(ring, list) or len(ring) < 4:
+                    raise ValueError("ward boundary rings must contain at least four points")
+
+                normalized_ring = []
+                for point in ring:
+                    if not isinstance(point, list) or len(point) < 2:
+                        raise ValueError("ward boundary points must be longitude/latitude pairs")
+
+                    longitude = float(point[0])
+                    latitude = float(point[1])
+                    if (
+                        not math.isfinite(longitude)
+                        or not math.isfinite(latitude)
+                        or longitude < -180.0
+                        or longitude > 180.0
+                        or latitude < -90.0
+                        or latitude > 90.0
+                    ):
+                        raise ValueError("ward boundary coordinates are invalid")
+
+                    normalized_ring.append((longitude, latitude))
+                    point_count += 1
+                    if point_count > 100_000:
+                        raise ValueError("ward boundary contains too many points")
+
+                if normalized_ring[0] != normalized_ring[-1]:
+                    raise ValueError("ward boundary rings must be closed")
+
+        return self
+
+    def points(self):
+        polygons = [self.coordinates] if self.type == "Polygon" else self.coordinates
+        for polygon in polygons:
+            for ring in polygon:
+                for point in ring:
+                    yield float(point[0]), float(point[1])
+
+
+class WardBoundaryFeature(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["Feature"] = "Feature"
+    properties: WardBoundaryProperties
+    geometry: WardBoundaryGeometry
+
+
 class SceneBoundsRequest(BaseModel):
     name: str | None = Field(
         default=None,
@@ -325,6 +399,8 @@ class SceneBoundsRequest(BaseModel):
     fixed_antennas: List[AntennaConfig] = Field(
         default_factory=list,
     )
+
+    ward_boundary: WardBoundaryFeature | None = None
 
     south: float = Field(
         ge=-90.0,
@@ -353,5 +429,14 @@ class SceneBoundsRequest(BaseModel):
 
         if self.west >= self.east:
             raise ValueError("west must be less than east")
+
+        if self.ward_boundary:
+            tolerance = 1e-6
+            for longitude, latitude in self.ward_boundary.geometry.points():
+                if not (
+                    self.west - tolerance <= longitude <= self.east + tolerance
+                    and self.south - tolerance <= latitude <= self.north + tolerance
+                ):
+                    raise ValueError("ward boundary must stay inside the selected scene bounds")
 
         return self
