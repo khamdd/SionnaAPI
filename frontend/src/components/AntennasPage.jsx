@@ -130,20 +130,20 @@ export default function AntennasPage({ onInventoryChange }) {
 
   return (
     <main className="route-page antenna-inventory-page">
-      <header className="page-title with-action antenna-inventory-title">
+      <header className="page-title">
         <div><h1>Antenna inventory</h1><p>Manage the shared antennas available to configurations and simulations.</p></div>
-        <div className="page-title-actions">
-          <button className="ghost-button" type="button" onClick={() => downloadAntennaTemplate(antennas)}>Download template</button>
-          <button className="ghost-button" type="button" disabled={busy} onClick={() => fileRef.current?.click()}>Import XLSX</button>
-          <button className="primary-button" type="button" disabled={busy} onClick={() => setEditor({ databaseId: null, values: structuredClone(EMPTY_FORM) })}>Add antenna</button>
-          <input ref={fileRef} className="hidden" type="file" accept=".xlsx" onChange={chooseWorkbook} />
-        </div>
       </header>
       {notice && <p className="configuration-notice error" role="alert">{notice}</p>}
       <section className="antenna-inventory-toolbar">
         <input type="search" placeholder="Search antenna ID" value={query} onChange={(event) => setQuery(event.target.value)} />
         <select value={status} onChange={(event) => setStatus(event.target.value)}><option value="">All statuses</option><option value="active">Active</option><option value="archived">Archived</option></select>
-        <span>{visible.length} shown</span>
+        <div className="antenna-toolbar-actions">
+          <button className="ghost-button" type="button" onClick={() => downloadAntennaTemplate(antennas)}>Download template</button>
+          <button className="ghost-button" type="button" disabled={busy} onClick={() => fileRef.current?.click()}>Import XLSX</button>
+          <button className="primary-button" type="button" disabled={busy} onClick={() => setEditor({ databaseId: null, values: structuredClone(EMPTY_FORM) })}>Add antenna</button>
+          <input ref={fileRef} className="hidden" type="file" accept=".xlsx" onChange={chooseWorkbook} />
+          <span>{visible.length} shown</span>
+        </div>
       </section>
       <div className="antenna-inventory-table-wrap">
         <table className="antenna-inventory-table">

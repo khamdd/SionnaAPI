@@ -17,12 +17,9 @@
   gap: 18px;
 }
 
-.antenna-inventory-title {
-  align-items: end;
-}
-
 .antenna-inventory-toolbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: 10px;
   border: 1px solid var(--line);
@@ -32,11 +29,23 @@
 }
 
 .antenna-inventory-toolbar input {
-  min-width: min(420px, 55vw);
+  min-width: 0;
+  width: 50%;
 }
 
-.antenna-inventory-toolbar span {
-  margin-left: auto;
+.antenna-inventory-toolbar select {
+  justify-self: center;
+}
+
+.antenna-toolbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  justify-self: end;
+}
+
+.antenna-toolbar-actions span {
   color: var(--muted);
   font-size: 13px;
 }
@@ -207,10 +216,16 @@
 
   .antenna-inventory-toolbar input {
     min-width: 0;
+    width: 100%;
   }
 
-  .antenna-inventory-toolbar span {
-    margin-left: 0;
+  .antenna-inventory-toolbar select {
+    justify-self: start;
+  }
+
+  .antenna-toolbar-actions {
+    justify-self: start;
+    flex-wrap: wrap;
   }
 
   .antenna-picker-list label {
