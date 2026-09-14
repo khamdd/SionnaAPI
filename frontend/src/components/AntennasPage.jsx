@@ -20,10 +20,13 @@ const EMPTY_FORM = {
   tx_power: { min: 20, current: 30, max: 40 },
 };
 
+const ANTENNAS_PAGE_SIZE = 20;
+
 export default function AntennasPage({ onInventoryChange }) {
   const [antennas, setAntennas] = useState([]);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("active");
+  const [page, setPage] = useState(1);
   const [editor, setEditor] = useState(null);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -50,6 +53,19 @@ export default function AntennasPage({ onInventoryChange }) {
     (!status || antenna.status === status)
     && antenna.id.toLowerCase().includes(query.trim().toLowerCase())
   )), [antennas, query, status]);
+
+  const pageCount = Math.max(1, Math.ceil(visible.length / ANTENNAS_PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const paged = useMemo(() => visible.slice(
+    (currentPage - 1) * ANTENNAS_PAGE_SIZE,
+    currentPage * ANTENNAS_PAGE_SIZE,
+  ), [visible, currentPage]);
+  const rangeStart = (currentPage - 1) * ANTENNAS_PAGE_SIZE + 1;
+  const rangeEnd = Math.min(currentPage * ANTENNAS_PAGE_SIZE, visible.length);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, status]);
 
   async function save(event) {
     event.preventDefault();
@@ -133,7 +149,7 @@ export default function AntennasPage({ onInventoryChange }) {
         <table className="antenna-inventory-table">
           <thead><tr><th>ID</th><th>Longitude</th><th>Latitude</th><th>Height</th><th>Azimuth</th><th>Tilt</th><th>Power</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody>
-            {visible.map((antenna) => (
+            {paged.map((antenna) => (
               <tr key={antenna.database_id}>
                 <td><strong>{antenna.id}</strong></td><td>{formatAntennaCoordinate(antenna.longitude)}</td><td>{formatAntennaCoordinate(antenna.latitude)}</td><td>{formatMaybeNumber(antenna.height_m)} m</td><td>{formatMaybeNumber(antenna.azimuth)}°</td><td>{rangeLabel(antenna.tilt)}°</td><td>{rangeLabel(antenna.tx_power)} dBm</td><td><span className={`antenna-status ${antenna.status}`}>{antenna.status}</span></td>
                 <td><div className="table-actions"><button className="ghost-button" type="button" disabled={busy} onClick={() => setEditor({ databaseId: antenna.database_id, values: structuredClone(antenna) })}>Edit</button>{antenna.status === "active" ? <button className="ghost-button danger-button" type="button" disabled={busy} onClick={() => setArchived(antenna, true)}>Archive</button> : <button className="ghost-button" type="button" disabled={busy} onClick={() => setArchived(antenna, false)}>Restore</button>}</div></td>
@@ -143,6 +159,27 @@ export default function AntennasPage({ onInventoryChange }) {
           </tbody>
         </table>
       </div>
+      {visible.length > 0 && (
+        <div className="antenna-pagination">
+          <button
+            className="ghost-button"
+            type="button"
+            disabled={busy || currentPage <= 1}
+            onClick={() => setPage(currentPage - 1)}
+          >
+            Previous
+          </button>
+          <span>Page {currentPage} of {pageCount} · {rangeStart}–{rangeEnd} of {visible.length} antennas</span>
+          <button
+            className="ghost-button"
+            type="button"
+            disabled={busy || currentPage >= pageCount}
+            onClick={() => setPage(currentPage + 1)}
+          >
+            Next
+          </button>
+        </div>
+      )}
       {editor && <AntennaEditor editor={editor} busy={busy} onCancel={() => setEditor(null)} onChange={setEditor} onSave={save} />}
       {importPreview && <ImportPreview preview={importPreview} busy={busy} onCancel={() => setImportPreview(null)} onConfirm={confirmImport} />}
     </main>

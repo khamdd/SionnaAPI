@@ -80,6 +80,17 @@
   padding: 36px !important;
 }
 
+.antenna-pagination {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.antenna-pagination span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .antenna-status {
   display: inline-flex;
   border-radius: 999px;
