@@ -14,14 +14,15 @@ separate task.
 | `/` | Yes | No | None | Normalizes to `/scenes` |
 | `/scenes` | Yes | No | Username menu/change-scene flow | Scene selection and management |
 | `/choose-scene` | Yes | No | Create new scene action | Full-page scene chooser |
-| `/network` | Yes | Yes | Planning tools | Network Coverage |
+| `/network` | Yes | Yes | Simulations | Network Coverage |
 | `/network/optimization` | Yes | Yes | Opened from Network Coverage | Optimization; Network nav remains active |
-| `/configurations` | Yes | Yes | Planning tools | Network Configurations |
-| `/profiles` | Yes | Yes | Planning tools | Simulation Profiles |
-| `/coverage` | Yes | Yes | Planning tools | Coverage Map |
-| `/rsrp` | Yes | Yes | Planning tools | RSRP Simulation |
-| `/sinr` | Yes | Yes | Planning tools | SINR |
-| `/throughput` | Yes | Yes | Planning tools | Throughput Comparison |
+| `/antennas` | Yes | Yes | Configuration | Antenna inventory |
+| `/configurations` | Yes | Yes | Configuration | Network Configurations |
+| `/profiles` | Yes | Yes | Configuration | Simulation Profiles |
+| `/coverage` | Yes | Yes | Simulations | Coverage Map |
+| `/rsrp` | Yes | Yes | Simulations | RSRP Simulation |
+| `/sinr` | Yes | Yes | Simulations | SINR |
+| `/throughput` | Yes | Yes | Simulations | Throughput Comparison |
 | `/queue` | Yes | Yes | Results | Simulation Queue |
 | `/history` | Yes | Yes | Results | Saved Results scoped to the work scene |
 | Any unknown path | Yes | No | None | Normalizes to `/scenes` |
@@ -49,7 +50,8 @@ separate task.
 - With no work scene, planning/result route buttons are not shown.
 - With a work scene, `/scenes` is omitted from the normal route buttons.
 - Queue and History are grouped as result routes.
-- Other visible routes are grouped as planning tools.
+- Antennas, Configurations, and Simulation Profiles are grouped as a
+  Configuration section; other visible routes are grouped as Simulations.
 - Busy state disables navbar navigation.
 - Change scene is available through the username menu and requires confirmation.
 

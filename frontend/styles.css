@@ -324,10 +324,9 @@ button.hidden,
   gap: 6px;
 }
 
-.records-nav {
-  border-left: 1px solid var(--line);
+.records-nav,
+.configuration-nav {
   margin-left: 4px;
-  padding-left: 12px;
 }
 
 .records-nav > div {
@@ -2965,7 +2964,8 @@ textarea:disabled {
     justify-content: flex-start;
   }
 
-  .records-nav {
+  .records-nav,
+  .configuration-nav {
     border-left: 0;
     margin-left: 0;
     padding-left: 0;
@@ -3023,7 +3023,8 @@ textarea:disabled {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .records-nav > div {
+  .records-nav > div,
+  .configuration-nav > div {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -3407,7 +3408,8 @@ table,
   padding: 0;
 }
 
-.records-section {
+.records-section,
+.configuration-section {
   margin-top: 3px;
   border-top: 1px solid rgba(219, 230, 237, 0.16);
   padding-top: 15px;
@@ -4128,7 +4130,8 @@ textarea:hover:not(:disabled) {
     margin: 0;
   }
 
-  .records-section {
+  .records-section,
+  .configuration-section {
     border-top: 0;
     padding-top: 0;
   }
@@ -4141,7 +4144,8 @@ textarea:hover:not(:disabled) {
 
   .nav-group > div,
   .simulation-nav > div,
-  .records-nav > div {
+  .records-nav > div,
+  .configuration-nav > div {
     display: flex;
     gap: 2px;
   }
@@ -4258,7 +4262,8 @@ textarea:hover:not(:disabled) {
   .nav-group,
   .nav-group > div,
   .simulation-nav > div,
-  .records-nav > div {
+  .records-nav > div,
+  .configuration-nav > div {
     display: flex;
     width: auto;
   }

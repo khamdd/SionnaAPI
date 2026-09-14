@@ -39,8 +39,14 @@ export default function Navbar({
   const visibleRoutes = ROUTES.filter((item) => (
     hasWorkScene && item.path !== SCENE_SELECTION_ROUTE
   ));
+  const configurationPaths = ["/antennas", "/configurations", "/profiles"];
   const simulationRoutes = visibleRoutes.filter((item) => (
-    item.path !== "/queue" && item.path !== "/history"
+    item.path !== "/queue"
+    && item.path !== "/history"
+    && !configurationPaths.includes(item.path)
+  ));
+  const configurationRoutes = visibleRoutes.filter((item) => (
+    configurationPaths.includes(item.path)
   ));
   const resultRoutes = visibleRoutes.filter((item) => (
     item.path === "/queue" || item.path === "/history"
@@ -60,12 +66,33 @@ export default function Navbar({
       <nav aria-label="Primary navigation">
         {simulationRoutes.length > 0 && (
           <div className="nav-group simulation-nav" aria-label="Simulation tools">
-            <span>Planning tools</span>
+            <span>Simulations</span>
             <div>
               {simulationRoutes.map((item) => (
                 <button
                   key={item.path}
                   className={route === item.path || (item.path === SIMULATION_ENTRY_ROUTE && route === NETWORK_OPTIMIZATION_ROUTE) ? "active" : ""}
+                  type="button"
+                  disabled={isBusy}
+                  aria-current={route === item.path ? "page" : undefined}
+                  title={item.label}
+                  onClick={() => onNavigate(item.path)}
+                >
+                  <NavIcon path={item.path} />
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {configurationRoutes.length > 0 && (
+          <div className="nav-group configuration-nav configuration-section" aria-label="Configuration">
+            <span>Configuration</span>
+            <div>
+              {configurationRoutes.map((item) => (
+                <button
+                  key={item.path}
+                  className={route === item.path ? "active" : ""}
                   type="button"
                   disabled={isBusy}
                   aria-current={route === item.path ? "page" : undefined}
