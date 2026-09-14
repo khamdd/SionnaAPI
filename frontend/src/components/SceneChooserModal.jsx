@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  Map,
+  Map as MapLibreMap,
   Marker,
   NavigationControl,
   addProtocol,
@@ -19,7 +19,11 @@ import { importAntennasFromWorkbook } from "../utils/antennaImport";
 import { downloadAntennaTemplate } from "../utils/antennaTemplate";
 import { formatMaybeNumber } from "../utils/format";
 import { lngLatInsideBounds } from "../utils/scene";
-import { filterWards, parseWardCsv } from "../utils/wardSearch";
+import {
+  filterWards,
+  indexWardFeatures,
+  parseWardCsv,
+} from "../utils/wardSearch";
 
 export default function SceneChooserPage({
   onCancel,
@@ -82,6 +86,11 @@ export default function SceneChooserPage({
         }
       });
 
+    // Warm the ward-boundary cache so the red outline shows immediately on
+    // the first ward selection; a failure here is reported when a ward is
+    // picked instead of failing silently.
+    wardGeometryCollection().catch(() => {});
+
     return () => {
       cancelled = true;
     };
@@ -107,7 +116,7 @@ export default function SceneChooserPage({
       SCENE_CHOOSER_DEFAULT_CENTER[0],
     ];
     const dataBaseUrl = offlineMapDataBaseUrl();
-    const map = new Map({
+    const map = new MapLibreMap({
       container: node,
       center: savedView?.center || defaultCenter,
       zoom: savedView?.zoom || SCENE_CHOOSER_DEFAULT_ZOOM,
@@ -1193,9 +1202,14 @@ function ensureWardLayers(map) {
     });
   }
 
-  const beforeLayerId = map.getLayer("scene-selection-fill")
+  // The fill stays on the ground below the 3D building extrusions, but the
+  // red outline must render above them or buildings hide it at close zoom.
+  const fillBeforeId = map.getLayer("scene-selection-fill")
     ? "scene-selection-fill"
     : undefined;
+  const lineBeforeId = map.getLayer("scene-selection-line")
+    ? "scene-selection-line"
+    : fillBeforeId;
 
   if (!map.getLayer("ward-boundary-fill")) {
     map.addLayer(
@@ -1208,7 +1222,33 @@ function ensureWardLayers(map) {
           "fill-opacity": 0.07,
         },
       },
-      beforeLayerId,
+      fillBeforeId,
+    );
+  }
+
+  if (!map.getLayer("ward-boundary-casing")) {
+    map.addLayer(
+      {
+        id: "ward-boundary-casing",
+        type: "line",
+        source: "ward-boundary",
+        paint: {
+          "line-color": "#ffffff",
+          "line-width": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            12,
+            4.5,
+            15,
+            7,
+            17,
+            9,
+          ],
+          "line-opacity": 0.85,
+        },
+      },
+      lineBeforeId,
     );
   }
 
@@ -1220,33 +1260,54 @@ function ensureWardLayers(map) {
         source: "ward-boundary",
         paint: {
           "line-color": "#dc2626",
-          "line-width": 2.5,
+          "line-width": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            12,
+            2.5,
+            15,
+            4,
+            17,
+            5.5,
+          ],
+          "line-opacity": 0.98,
         },
       },
-      beforeLayerId,
+      lineBeforeId,
     );
   }
 }
 
-let wardGeometryCache = null;
+let wardGeometryPromise = null;
 
-async function loadWardFeature(wardCode) {
-  if (!wardGeometryCache) {
-    const response = await fetch(`${offlineMapDataBaseUrl()}hanoi-wards.geojson`);
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    const collection = await response.json();
-    wardGeometryCache = new Map(
-      (Array.isArray(collection?.features) ? collection.features : [])
-        .map((feature) => [feature?.properties?.ward_code, feature])
-        .filter(([code]) => typeof code === "string"),
-    );
+function wardGeometryCollection() {
+  if (!wardGeometryPromise) {
+    wardGeometryPromise = fetch(
+      `${offlineMapDataBaseUrl()}hanoi-wards.geojson`,
+    )
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return response.json();
+      })
+      .then((collection) => {
+        return indexWardFeatures(collection);
+      })
+      .catch((caught) => {
+        wardGeometryPromise = null;
+        throw caught;
+      });
   }
 
-  return wardGeometryCache.get(wardCode) || null;
+  return wardGeometryPromise;
+}
+
+async function loadWardFeature(wardCode) {
+  const cache = await wardGeometryCollection();
+
+  return cache.get(wardCode) || null;
 }
 
 function updateSelectionBounds(map, bounds) {

@@ -92,6 +92,18 @@ export function parseWardCsv(text) {
   });
 }
 
+export function indexWardFeatures(collection) {
+  const features = Array.isArray(collection?.features)
+    ? collection.features
+    : [];
+
+  return new Map(
+    features
+      .map((feature) => [feature?.properties?.ward_code, feature])
+      .filter(([code]) => typeof code === "string"),
+  );
+}
+
 export function filterWards(wards, query, limit = 12) {
   const normalizedQuery = normalizeSearchText(query);
 

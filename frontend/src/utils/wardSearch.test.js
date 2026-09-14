@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { filterWards, normalizeSearchText, parseWardCsv } from "./wardSearch";
+import {
+  filterWards,
+  indexWardFeatures,
+  normalizeSearchText,
+  parseWardCsv,
+} from "./wardSearch";
 
 const SAMPLE_CSV = [
   "ward_code,ward_name,ward_name_en,ward_full_name,ward_type,province_code,center_lat,center_lng,bbox_south,bbox_north,bbox_west,bbox_east,area_km2",
@@ -45,6 +50,33 @@ describe("parseWardCsv", () => {
 
   it("returns an empty array for empty input", () => {
     expect(parseWardCsv("")).toEqual([]);
+  });
+});
+
+describe("indexWardFeatures", () => {
+  it("indexes ward GeoJSON features by their string ward code", () => {
+    const feature = {
+      type: "Feature",
+      properties: { ward_code: "00166" },
+      geometry: { type: "Polygon", coordinates: [] },
+    };
+
+    const index = indexWardFeatures({
+      type: "FeatureCollection",
+      features: [
+        feature,
+        { ...feature, properties: { ward_code: 166 } },
+        null,
+      ],
+    });
+
+    expect(index).toBeInstanceOf(Map);
+    expect(index.size).toBe(1);
+    expect(index.get("00166")).toBe(feature);
+  });
+
+  it("returns an empty map for malformed input", () => {
+    expect(indexWardFeatures(null)).toEqual(new Map());
   });
 });
 
