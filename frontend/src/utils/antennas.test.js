@@ -354,20 +354,18 @@ describe("applySimulationSettings", () => {
 
 describe("networkCoverageAntennasForScene", () => {
   const fixed = [baseAntenna(), baseAntenna({ id: "A2", longitude: 10.6 })];
-  const type2 = new Map([
-    ["scene-1", [baseAntenna({ id: "T2-1" })]],
-  ]);
+  const selection = new Map([["scene-1", ["A1", "A2"]]]);
 
   it("returns an empty list without a scene id", () => {
-    expect(networkCoverageAntennasForScene(null, [], type2, new Map())).toEqual([]);
-    expect(networkCoverageAntennasForScene({}, [], type2, new Map())).toEqual([]);
+    expect(networkCoverageAntennasForScene(null, [], selection, new Map())).toEqual([]);
+    expect(networkCoverageAntennasForScene({}, [], selection, new Map())).toEqual([]);
   });
 
-  it("lists type1 antennas before type2 antennas", () => {
-    const antennas = networkCoverageAntennasForScene(ACTIVE_SCENE, fixed, type2, new Map());
+  it("supports selecting multiple inventory antennas", () => {
+    const antennas = networkCoverageAntennasForScene(ACTIVE_SCENE, fixed, selection, new Map());
 
-    expect(antennas.map((antenna) => antenna.id)).toEqual(["A1", "A2", "T2-1"]);
-    expect(antennas.map((antenna) => antenna._type)).toEqual(["type1", "type1", "type2"]);
+    expect(antennas.map((antenna) => antenna.id)).toEqual(["A1", "A2"]);
+    expect(antennas.map((antenna) => antenna._type)).toEqual(["inventory", "inventory"]);
   });
 
   it("applies scene settings per antenna id and defaults the rest", () => {
@@ -375,7 +373,7 @@ describe("networkCoverageAntennasForScene", () => {
       ["scene-1", { A2: { azimuth: 10, tilt_current: 8, tx_power_current: 12, enabled: false } }],
     ]);
 
-    const antennas = networkCoverageAntennasForScene(ACTIVE_SCENE, fixed, type2, settings);
+    const antennas = networkCoverageAntennasForScene(ACTIVE_SCENE, fixed, selection, settings);
 
     expect(antennas[0].enabled).toBe(true);
     expect(antennas[0].azimuth).toBe(90);
@@ -386,14 +384,14 @@ describe("networkCoverageAntennasForScene", () => {
   });
 
   it("drops antennas with incomplete base data", () => {
-    const brokenFixed = [baseAntenna(), { id: "broken", longitude: 10.5 }];
+    const brokenFixed = [baseAntenna(), { id: "A2", longitude: 10.5 }];
 
-    const antennas = networkCoverageAntennasForScene(ACTIVE_SCENE, brokenFixed, type2, new Map());
+    const antennas = networkCoverageAntennasForScene(ACTIVE_SCENE, brokenFixed, selection, new Map());
 
-    expect(antennas.map((antenna) => antenna.id)).toEqual(["A1", "T2-1"]);
+    expect(antennas.map((antenna) => antenna.id)).toEqual(["A1"]);
   });
 
-  it("handles missing type2 entries and settings for the scene", () => {
+  it("returns no inventory antennas until users select them", () => {
     const antennas = networkCoverageAntennasForScene(
       ACTIVE_SCENE,
       fixed,
@@ -401,8 +399,26 @@ describe("networkCoverageAntennasForScene", () => {
       new Map(),
     );
 
-    expect(antennas.map((antenna) => antenna.id)).toEqual(["A1", "A2"]);
-    expect(antennas.every((antenna) => antenna.enabled)).toBe(true);
+    expect(antennas).toEqual([]);
+  });
+
+  it("resolves selected inventory IDs against the latest antenna values", () => {
+    const selection = new Map([["scene-1", ["A2"]]]);
+    const updatedInventory = [
+      baseAntenna(),
+      baseAntenna({ id: "A2", longitude: 10.7, azimuth: 180 }),
+    ];
+
+    const antennas = networkCoverageAntennasForScene(
+      ACTIVE_SCENE,
+      updatedInventory,
+      selection,
+      new Map(),
+    );
+
+    expect(antennas.map((antenna) => antenna.id)).toEqual(["A2"]);
+    expect(antennas[0].longitude).toBe(10.7);
+    expect(antennas[0].azimuth).toBe(180);
   });
 });
 

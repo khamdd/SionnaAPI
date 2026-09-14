@@ -8,27 +8,22 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from backend.database import db_session, is_database_configured
-from backend.models import NetworkConfiguration, Scene
+from backend.models import NetworkConfiguration, NetworkConfigurationAntenna, Scene
 from backend.schemas.network_configurations import NetworkConfigurationCreateRequest
+from backend.services.antenna_service import resolve_antenna_ids, serialize_antenna
 from backend.services.configuration_diff_service import compare_configuration_snapshots
 from backend.services.scene_service import list_scenes
 from backend.services.simulation_store import ensure_scene_reference
 
 logger = logging.getLogger(__name__)
 
-def normalize_antennas(antennas: Iterable[Any]) -> list[dict]:
-    """Return one deterministic JSON-compatible representation for hashing/storage."""
-    normalized = []
-    for antenna in antennas:
-        if hasattr(antenna, "model_dump"):
-            antenna = antenna.model_dump(mode="json")
-        normalized.append(_normalize_json_value(dict(antenna)))
 
-    return sorted(normalized, key=lambda antenna: antenna["id"])
+def normalize_antenna_ids(antenna_ids: Iterable[Any]) -> list[str]:
+    return sorted(str(value) for value in antenna_ids)
 
 
-def calculate_content_hash(antennas: Iterable[Any]) -> tuple[list[dict], str]:
-    normalized = normalize_antennas(antennas)
+def calculate_content_hash(antenna_ids: Iterable[Any]) -> tuple[list[str], str]:
+    normalized = normalize_antenna_ids(antenna_ids)
     canonical_json = json.dumps(
         normalized,
         ensure_ascii=False,
@@ -85,20 +80,41 @@ def create_network_configuration(
             elif active is not None:
                 parent = active
 
-            if request.antennas is None:
+            if request.antenna_ids is None:
                 if parent is None:
                     return _failure(
                         400,
                         "Antennas are required when no parent configuration exists.",
                     )
-                antennas = parent.antennas_json
+                antenna_ids = [link.antenna_id for link in parent.antenna_links]
             else:
-                antennas = request.antennas
+                antenna_ids = [str(value) for value in request.antenna_ids]
+
+            resolved_antennas = resolve_antenna_ids(session, antenna_ids)
+            if resolved_antennas is None:
+                return _failure(
+                    422,
+                    "Every configuration antenna must exist and be active.",
+                    error_code="configuration_antenna_unavailable",
+                )
+            bounds = scene_info.get("bounds")
+            if bounds and any(
+                not (
+                    bounds["west"] <= antenna.longitude <= bounds["east"]
+                    and bounds["south"] <= antenna.latitude <= bounds["north"]
+                )
+                for antenna in resolved_antennas
+            ):
+                return _failure(
+                    422,
+                    "Every configuration antenna must be inside the scene.",
+                    error_code="configuration_antenna_outside_scene",
+                )
 
             configuration = add_network_configuration_draft(
                 session,
                 scene_id=request.scene_id,
-                antennas=antennas,
+                antenna_ids=antenna_ids,
                 created_by=created_by,
                 parent_configuration_id=parent.id if parent is not None else None,
                 source=request.source,
@@ -122,14 +138,14 @@ def add_network_configuration_draft(
     session,
     *,
     scene_id: str,
-    antennas: Iterable[Any],
+    antenna_ids: Iterable[Any],
     created_by: str,
     parent_configuration_id: str | None,
     source: str = "manual",
     source_reference: str | None = None,
 ) -> NetworkConfiguration:
     """Add a draft inside a caller-owned, scene-locked transaction."""
-    normalized_antennas, content_hash = calculate_content_hash(antennas)
+    normalized_ids, content_hash = calculate_content_hash(antenna_ids)
     version = session.scalar(
         select(
             func.coalesce(func.max(NetworkConfiguration.version), 0) + 1
@@ -142,12 +158,19 @@ def add_network_configuration_draft(
         parent_configuration_id=parent_configuration_id,
         source=source,
         source_reference=source_reference,
-        antennas_json=normalized_antennas,
+        antennas_json=[],
         content_hash=content_hash,
         created_by=created_by,
     )
     session.add(configuration)
     session.flush()
+    configuration.antenna_links = [
+        NetworkConfigurationAntenna(
+            antenna_id=antenna_id,
+            position=position,
+        )
+        for position, antenna_id in enumerate(normalized_ids)
+    ]
     return configuration
 
 
@@ -230,6 +253,12 @@ def publish_network_configuration(configuration_id: str, user_id: str) -> dict:
                 return apply_publish_transition(None, None, user_id)
             if configuration.created_by != user_id or configuration.status != "draft":
                 return apply_publish_transition(configuration, None, user_id)
+            if configuration_antennas(configuration) is None:
+                return _failure(
+                    409,
+                    "Configuration contains an archived or unavailable antenna.",
+                    error_code="configuration_antenna_unavailable",
+                )
 
             current = session.execute(
                 select(NetworkConfiguration)
@@ -305,10 +334,11 @@ def compare_network_configurations(
             if baseline.scene_id != candidate.scene_id:
                 return _failure(400, "Configurations belong to different scenes.")
 
-            difference = compare_configuration_snapshots(
-                baseline.antennas_json,
-                candidate.antennas_json,
-            )
+            baseline_antennas = configuration_antennas(baseline)
+            candidate_antennas = configuration_antennas(candidate)
+            if baseline_antennas is None or candidate_antennas is None:
+                return _failure(409, "A configuration contains an archived or unavailable antenna.")
+            difference = compare_configuration_snapshots(baseline_antennas, candidate_antennas)
             return {
                 "status": "success",
                 "scene_id": baseline.scene_id,
@@ -362,6 +392,15 @@ def apply_publish_transition(
 
 
 def serialize_configuration(configuration: NetworkConfiguration) -> dict:
+    antennas = configuration_antennas(configuration)
+    links = list(getattr(configuration, "antenna_links", []) or [])
+    displayed_antennas = antennas
+    if antennas is None:
+        displayed_antennas = [
+            serialize_antenna(link.antenna) | {"enabled": True}
+            for link in links
+            if link.antenna is not None
+        ]
     return {
         "id": str(configuration.id),
         "scene_id": configuration.scene_id,
@@ -374,12 +413,44 @@ def serialize_configuration(configuration: NetworkConfiguration) -> dict:
         ),
         "source": configuration.source,
         "source_reference": configuration.source_reference,
-        "antennas": configuration.antennas_json,
+        "antenna_ids": [
+            str(link.antenna_id)
+            for link in links
+        ],
+        "antennas": displayed_antennas or [],
+        "is_available": antennas is not None,
         "content_hash": configuration.content_hash,
         "created_by": str(configuration.created_by),
         "created_at": _serialize_datetime(configuration.created_at),
         "published_at": _serialize_datetime(configuration.published_at),
     }
+
+
+def configuration_antennas(configuration: NetworkConfiguration) -> list[dict] | None:
+    links = list(getattr(configuration, "antenna_links", []) or [])
+    legacy_antennas = getattr(configuration, "antennas_json", []) or []
+    if not links and legacy_antennas:
+        # Compatibility for in-memory tests and pre-migration objects only.
+        if isinstance(legacy_antennas[0], dict):
+            return legacy_antennas
+    antennas = [link.antenna for link in links]
+    if any(antenna is None or antenna.status != "active" for antenna in antennas):
+        return None
+    scene_id = getattr(configuration, "scene_id", None)
+    scene = next(
+        (item for item in list_scenes().get("scenes", []) if item.get("id") == scene_id),
+        None,
+    ) if scene_id else None
+    bounds = scene.get("bounds") if scene else None
+    if bounds and any(
+        not (
+            bounds["west"] <= antenna.longitude <= bounds["east"]
+            and bounds["south"] <= antenna.latitude <= bounds["north"]
+        )
+        for antenna in antennas
+    ):
+        return None
+    return [serialize_antenna(antenna) | {"enabled": True} for antenna in antennas]
 
 
 def _configuration_identity(configuration: NetworkConfiguration) -> dict:
@@ -444,11 +515,12 @@ def _database_unavailable() -> dict | None:
     )
 
 
-def _failure(status_code: int, error: str) -> dict:
+def _failure(status_code: int, error: str, **extra) -> dict:
     return {
         "status": "failure",
         "status_code": status_code,
         "error": error,
+        **extra,
     }
 
 

@@ -225,7 +225,7 @@ def test_apply_suggestion_changes_only_optimization_fields():
     assert result[0]["azimuth"] == 90
 
 
-def test_suggested_configuration_is_draft_child_of_exact_candidate(monkeypatch):
+def test_suggested_configuration_requires_live_inventory_update(monkeypatch):
     study = SimpleNamespace(
         id=STUDY_ID,
         scene_id="scene-1",
@@ -245,9 +245,6 @@ def test_suggested_configuration_is_draft_child_of_exact_candidate(monkeypatch):
         antennas_json=candidate_request()["antennas"],
         content_hash="candidate-hash",
     )
-    created = SimpleNamespace(id="new-draft", status="draft")
-    captured = {}
-
     class Result:
         def scalar_one(self):
             return SimpleNamespace(id="scene-1")
@@ -292,33 +289,12 @@ def test_suggested_configuration_is_draft_child_of_exact_candidate(monkeypatch):
         },
     )
 
-    def fake_add(session, **kwargs):
-        captured.update(kwargs)
-        return created
-
-    monkeypatch.setattr(
-        impact_study_service,
-        "add_network_configuration_draft",
-        fake_add,
-    )
-    monkeypatch.setattr(
-        impact_study_service,
-        "serialize_configuration",
-        lambda configuration: {
-            "id": configuration.id,
-            "status": configuration.status,
-            "parent_configuration_id": captured["parent_configuration_id"],
-        },
-    )
-
     result = impact_study_service.create_suggested_configuration(
         STUDY_ID,
         PROFILE_ID,
         USER_ID,
     )
 
-    assert result["status"] == "success"
-    assert result["configuration"]["status"] == "draft"
-    assert captured["parent_configuration_id"] == CANDIDATE_ID
-    assert captured["antennas"][0]["tilt"]["current"] == 2
-    assert result["based_on_candidate_configuration_id"] == CANDIDATE_ID
+    assert result["status"] == "failure"
+    assert result["status_code"] == 409
+    assert result["error_code"] == "live_antenna_update_required"

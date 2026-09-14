@@ -185,8 +185,8 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   `scenario_role=optimization`. Results expose the exact candidate ID/hash,
   suggested settings, and baseline/candidate/optimized objective outcomes.
   `POST /api/v1/impact-studies/{id}/profiles/{profile_id}/suggested-configuration`
-  creates an idempotent draft child of that exact candidate and never publishes
-  it automatically.
+  now returns a conflict explaining that optimized radio settings must be applied
+  to the live antenna inventory; it does not create snapshot configuration data.
 - Terminal Impact Studies expose an authenticated, idempotent HTML download at
   `GET /api/v1/impact-studies/{id}/report`. Reports are atomically stored under
   `static/impact-reports/`, survive Docker API restarts through shared artifact
@@ -242,87 +242,29 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   removed with them.
 - RSRP work includes no-coverage rows for served/measured output and a legend UI
   update.
-- Antenna import work has started with a frontend download button that creates
-  `antenna-template.xlsx` from the current antenna schema. The Choose Scene page
-  can import that workbook, validate antenna rows, and immediately render valid
-  antennas on the map before or after a scene area is selected. Imported
-  antennas are allowed to sit outside the selected scene area. When a chosen
-  scene is kept and loaded, only imported antennas inside that selected area are
-  saved as `fixed_antennas` on the scene registry metadata and carried into
-  Network Coverage, preserving their map positions in the new scene coordinate
-  system. Fixed antennas are not stored as database antenna rows, but they do
-  persist with the static scene metadata and reload when the scene is selected.
-  The frontend also keeps a localStorage backup keyed by scene ID so fixed
-  antennas can be restored if a stale backend ignores the scene metadata field.
-  Network Coverage now treats those imported antennas as type 1 fixed antennas:
-  their base real-world data is immutable, but tilt, power, and azimuth can be
-  overridden for the current simulation draft. Users can add type 2
-  simulation-only antennas from a form with the same fields as the XLSX template;
-  type 2 base data is set from that add form, can be deleted per antenna, and is
-  stored separately from per-simulation antenna settings in scene-scoped
-  localStorage so accidental reloads preserve the draft. Resetting
-  antennas or changing the work scene clears that Network Coverage draft. Scene
-  import does not cap the number of type 1 antennas, but Network Coverage still
-  enforces a maximum of 10 active checked antennas per simulation request.
-  Network Coverage antenna cards include an enabled checkbox; unchecked antennas
-  remain in the sidebar draft but are hidden from the 3D scene and excluded from
-  the simulation payload. Antenna-card longitude/latitude values are displayed
-  with four decimal places across the shared antenna-management pages. The
-  Network Coverage page exposes editable solver settings (max depth, samples
-  per TX, cell size) in a form below the map, matching the RSRP page layout;
-  the run payload derives solver center/size from the active scene and enforces
-  the 50,000-grid-cell cell-size floor, matching the backend alignment.
-- Coverage API uses exactly one transmitter. If the selected scene has no fixed
-  antennas, users enter one type 2 transmitter with antenna ID, longitude,
-  latitude, and height. If fixed antennas exist, users can choose one fixed
-  antenna or choose the type 2 transmitter option; one fixed antenna is selected
-  automatically only as the default. If multiple fixed antennas exist, users must
-  choose a fixed antenna or type 2 transmitter before running. The backend still
-  receives the converted scene `transmitter_position`; fixed antenna real-world
-  coordinates remain read-only in the UI. Coverage API exposes azimuth as a
-  simulation field: fixed antennas initialize it from base data, custom
-  transmitters default to 0 degrees, and the backend applies it to transmitter
-  orientation. All antenna azimuth values are compass convention (0 = north,
-  clockwise); `backend/simulations/antenna_factory.py:sionna_azimuth_rad`
-  converts them to Sionna's math-convention Euler angle (0 = +x/east,
-  counterclockwise) before transmitter orientation is set.
-- SINR API uses exactly three role antennas: one transmitter, one receiver, and
-  one interferer. The page builds candidates from fixed type 1 scene antennas and
-  SINR-only type 2 antennas. Users can add SINR-only type 2 candidates even when
-  three or more fixed antennas already exist. The run button stays disabled until
-  exactly one transmitter, one receiver, and one interferer are assigned to three
-  different antennas. SINR does not cap candidate antenna count because only the
-  three selected role antennas are sent to the backend. SINR type 2 antennas,
-  per-antenna simulation settings, and role selections are persisted in separate
-  scene-scoped localStorage keys and cleared when resetting SINR antennas or
-  changing the work scene. The SINR page uses a workspace layout with the 3D
-  scene/result on the left, candidate antenna management on the right, and
-  role/solver setup below the 3D scene.
-- Throughput API uses the same three-role antenna workflow as SINR, but stores
-  Throughput-only type 2 antennas, per-antenna simulation settings, and role
-  selections in separate scene-scoped localStorage keys. Base tilt and target
-  tilt are constrained to the selected transmitter antenna's configured tilt
-  min/max range. Throughput does not cap candidate antenna count because only the
-  selected transmitter, receiver, and interferer are sent to the backend. The
-  Throughput page uses the same workspace layout pattern as SINR, with candidate
-  antenna management on the right and role/tilt/solver setup below the 3D
-  scene/result on the left.
+- Coverage API uses exactly one selected inventory antenna. SINR and Throughput
+  still require distinct transmitter, receiver, and interferer roles. Network
+  Coverage and RSRP keep their maximum of 10 enabled antennas per request.
+  All antenna azimuth values use compass convention (0 = north, clockwise);
+  `backend/simulations/antenna_factory.py:sionna_azimuth_rad` converts them to
+  Sionna's math-convention Euler angle.
 - SINR and Throughput now let users select Sionna, UMa, Ericsson, or Friis as
   independent propagation models. Sionna keeps the existing scene-based
   ray-tracing flow. UMa, Ericsson, and Friis bypass 3D scene loading and use the
   selected transmitter, receiver, and interferer with carrier frequency,
   bandwidth, and receiver noise figure. Those three formulas do not use antenna
   tilt, so Throughput base and target tilt results are intentionally unchanged.
-- RSRP Simulation uses all configured transmit antennas for the run, with the
-  same type 1/type 2 split as Network Coverage. Fixed type 1 antenna base data
-  remains immutable, users can add/delete type 2 antennas from the XLSX-shaped
-  form, simulation tilt/power/azimuth settings are editable per antenna, and the
-  RSRP draft is stored in its own scene-scoped localStorage keys. RSRP antenna
-  cards include an enabled checkbox; unchecked antennas remain in the sidebar
-  draft but are hidden from the 3D scene and excluded from the simulation payload.
-  RSRP enforces the backend limit of 10 active checked antennas per simulation
-  request. The RSRP page keeps antenna management on the right and places
-  user/solver setup below the 3D scene/result on the left.
+- Global antenna inventory is implemented at `/antennas` as a PostgreSQL-backed,
+  searchable table with add/edit/archive/restore and XLSX preview/import. Antenna
+  IDs are globally unique. Create Scene no longer imports antennas. Simulation
+  pages select one or more active in-scene inventory antennas through a single
+  Add picker; identity, location, and height stay linked while enabled, tilt,
+  power, azimuth, and roles remain scene-scoped simulation overrides. Network
+  Configuration versions persist ordered antenna references and resolve current
+  inventory values; archived or out-of-scene references make them unavailable.
+  Migration `0009_global_antenna_inventory` intentionally clears incompatible
+  Network Configurations and dependent Impact Studies. Queue jobs and History
+  continue to preserve immutable request snapshots.
 - Network Coverage optimization now has a deterministic global-plus-local search at
   `/network/optimization`: set up to two coverage/overlap targets, choose tilt
   step, power step, azimuth step, and maximum simulations (1–5000, including

@@ -17,9 +17,9 @@ from backend.schemas.requests import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_ROOT = PROJECT_ROOT / "test" / "fixtures" / "refactor"
-EXPECTED_OPENAPI_SHA256 = "9e9270e74564652b0a58759056430bc73e4994c35c6ac56f69abea3d781c2237"
-EXPECTED_OPENAPI_PATH_COUNT = 49
-EXPECTED_OPENAPI_OPERATION_COUNT = 56
+EXPECTED_OPENAPI_SHA256 = "aad3057c3185ab98f2d0e727ec0ead11306af4800a30bf2bac5562003631c518"
+EXPECTED_OPENAPI_PATH_COUNT = 55
+EXPECTED_OPENAPI_OPERATION_COUNT = 63
 PUBLIC_OPERATIONS = {
     ("post", "/api/v1/auth/login"),
     ("post", "/api/v1/auth/register"),

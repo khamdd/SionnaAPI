@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Map as MapLibreMap,
-  Marker,
   NavigationControl,
   addProtocol,
   removeProtocol,
@@ -22,10 +21,7 @@ import {
   SCENE_CHOOSER_DEFAULT_CENTER,
   SCENE_CHOOSER_DEFAULT_ZOOM,
 } from "../constants";
-import { importAntennasFromWorkbook } from "../utils/antennaImport";
-import { downloadAntennaTemplate } from "../utils/antennaTemplate";
 import { formatMaybeNumber } from "../utils/format";
-import { lngLatInsideBounds } from "../utils/scene";
 import { createSceneWardBoundary } from "../utils/wardBoundary";
 
 const WARD_SEARCH_DEBOUNCE_MS = 250;
@@ -41,17 +37,11 @@ export default function SceneChooserPage({
   const mapRef = useRef(null);
   const buildingRegionManagerRef = useRef(null);
   const drawStartRef = useRef(null);
-  const fileInputRef = useRef(null);
   const mapViewRef = useRef(null);
-  const antennaMarkersRef = useRef([]);
   const [isSelectingArea, setIsSelectingArea] = useState(false);
   const [isMapReady, setIsMapReady] = useState(false);
   const [selectedProvinceCode, setSelectedProvinceCode] = useState("");
   const [sceneName, setSceneName] = useState("");
-  const [importedAntennas, setImportedAntennas] = useState([]);
-  const [antennaImportStatus, setAntennaImportStatus] = useState("");
-  const [antennaImportError, setAntennaImportError] = useState(false);
-  const [antennaPlacementBounds, setAntennaPlacementBounds] = useState(null);
   const [bounds, setBounds] = useState(null);
   const [previewBounds, setPreviewBounds] = useState(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
@@ -72,7 +62,6 @@ export default function SceneChooserPage({
   const wardSearchSequenceRef = useRef(0);
 
   const metrics = bounds ? calculateMetrics(bounds) : null;
-  const antennaDisplayBounds = antennaPlacementBounds;
   const selectedProvince =
     provinces.find((province) => province.code === selectedProvinceCode) ||
     null;
@@ -235,7 +224,6 @@ export default function SceneChooserPage({
         bearing: map.getBearing(),
       };
       observer.disconnect();
-      clearAntennaMarkers();
       buildingRegionManagerRef.current?.dispose();
       buildingRegionManagerRef.current = null;
       map.remove();
@@ -248,43 +236,6 @@ export default function SceneChooserPage({
       }
     };
   }, []);
-
-  useEffect(() => {
-    const map = mapRef.current;
-
-    clearAntennaMarkers();
-
-    if (!map || !isMapReady || importedAntennas.length === 0) {
-      return undefined;
-    }
-
-    if (!antennaDisplayBounds) {
-      setAntennaImportStatus(
-        `Imported ${importedAntennas.length} fixed scene antenna(s), but the map is not ready to place them yet.`,
-      );
-      setAntennaImportError(true);
-      return undefined;
-    }
-
-    setAntennaImportStatus(
-      `Imported ${importedAntennas.length} fixed scene antenna(s).`,
-    );
-    setAntennaImportError(false);
-
-    antennaMarkersRef.current = importedAntennas.map((antenna) => {
-      const element = createAntennaMarkerElement(antenna);
-      const marker = new Marker({
-        element,
-        anchor: "bottom",
-      })
-        .setLngLat([antenna.longitude, antenna.latitude])
-        .addTo(map);
-
-      return marker;
-    });
-
-    return clearAntennaMarkers;
-  }, [antennaDisplayBounds, importedAntennas, isMapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -465,11 +416,6 @@ export default function SceneChooserPage({
     focusMapOnBounds(wardBounds);
   }
 
-  function clearAntennaMarkers() {
-    antennaMarkersRef.current.forEach((marker) => marker.remove());
-    antennaMarkersRef.current = [];
-  }
-
   function resetAutoSceneName() {
     if (autoSceneNameRef.current !== null) {
       if (sceneName === autoSceneNameRef.current) {
@@ -519,48 +465,6 @@ export default function SceneChooserPage({
     setIsSelectingArea(false);
     setError(false);
     setStatus(`Moved map to ${province.name}.`);
-  }
-
-  async function importAntennaFile(event) {
-    const file = event.target.files?.[0];
-
-    event.target.value = "";
-
-    if (!file || isBusy) {
-      return;
-    }
-
-    setIsBusy(true);
-    setAntennaImportStatus(`Importing ${file.name}...`);
-    setAntennaImportError(false);
-
-    try {
-      const antennas = await importAntennasFromWorkbook(file);
-      const nextAntennaPlacementBounds =
-        previewBounds ||
-        bounds ||
-        createAntennaImportBounds(antennas);
-
-      if (nextAntennaPlacementBounds) {
-        setAntennaPlacementBounds(nextAntennaPlacementBounds);
-
-        if (!previewBounds && !bounds) {
-          focusMapOnBounds(nextAntennaPlacementBounds);
-        }
-      }
-
-      setImportedAntennas(antennas);
-      setAntennaImportStatus(
-        `Imported ${antennas.length} fixed scene antenna(s) and displayed them on the map.`,
-      );
-      setAntennaImportError(false);
-    } catch (caught) {
-      setImportedAntennas([]);
-      setAntennaImportStatus(`Import failed: ${caught.message}`);
-      setAntennaImportError(true);
-    } finally {
-      setIsBusy(false);
-    }
   }
 
   function moveMapToProvince(province) {
@@ -640,19 +544,6 @@ export default function SceneChooserPage({
     let createdScene = null;
 
     try {
-      const selectedAntennas = antennasForSelectedBounds(
-        importedAntennas,
-        antennaPlacementBounds,
-        selectedBounds,
-      );
-
-      if (importedAntennas.length > 0 && selectedAntennas.length === 0) {
-        setStatus("Selected area does not include any imported antennas.");
-        setError(true);
-        setIsBusy(false);
-        return;
-      }
-
       const selectedWardCode = selectedWardCodeRef.current;
       const wardBoundary = selectedWardCode
         ? createSceneWardBoundary(await loadWardFeature(selectedWardCode))
@@ -664,7 +555,6 @@ export default function SceneChooserPage({
 
       const previewResult = await createScenePreview({
         name: trimmedSceneName,
-        fixed_antennas: selectedAntennas,
         ward_boundary: wardBoundary,
         south: selectedBounds.south,
         west: selectedBounds.west,
@@ -675,10 +565,7 @@ export default function SceneChooserPage({
 
       setStatus("Loading scene...");
       const activationResult = await activateScene(createdScene.id);
-      onSceneActivated(
-        activationResult.scene,
-        selectedAntennas.length > 0 ? selectedAntennas : null,
-      );
+      onSceneActivated(activationResult.scene);
     } catch (caught) {
       if (caught.message.includes("Only 3")) {
         onLimitReached(caught.message);
@@ -776,49 +663,6 @@ export default function SceneChooserPage({
               </button>
             </div>
           </div>
-          <div className="scene-template-actions">
-            <button
-              className="ghost-button"
-              type="button"
-              disabled={isBusy}
-              onClick={() => downloadAntennaTemplate()}
-            >
-              Download template
-            </button>
-            <button
-              className="ghost-button"
-              type="button"
-              disabled={isBusy || !isMapReady}
-              title={
-                isMapReady
-                  ? "Import fixed scene antennas that mimic real-world antenna locations"
-                  : "Wait for the map to finish loading"
-              }
-              onClick={() => fileInputRef.current?.click()}
-            >
-              Import fixed antennas
-            </button>
-            <input
-              ref={fileInputRef}
-              className="hidden"
-              type="file"
-              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-              onChange={importAntennaFile}
-            />
-          </div>
-          <p className="scene-antenna-help">
-            Fixed antennas mimic real-world antenna locations and stay attached
-            to this scene map. Simulation pages can copy them later, but
-            importing here does not run or configure a simulation.
-          </p>
-          {antennaImportStatus && (
-            <p
-              className={`scene-import-status ${antennaImportError ? "error-text" : ""}`}
-            >
-              {antennaImportStatus}
-            </p>
-          )}
-
           {!isPreviewing && (
             <div className="scene-page-form">
               <label className="scene-city-field">
@@ -1428,53 +1272,6 @@ function updateSelectionBounds(map, bounds) {
       },
     ],
   });
-}
-
-function antennasForSelectedBounds(antennas, _placementBounds, selectedBounds) {
-  if (!Array.isArray(antennas) || antennas.length === 0 || !selectedBounds) {
-    return [];
-  }
-
-  return antennas.filter((antenna) =>
-    lngLatInsideBounds(antenna, selectedBounds),
-  );
-}
-
-function createAntennaMarkerElement(antenna) {
-  const element = document.createElement("div");
-  const label = document.createElement("span");
-  const dot = document.createElement("i");
-
-  element.className = "scene-antenna-marker";
-  element.title = `${antenna.id}: ${antenna.longitude}, ${antenna.latitude}, ${antenna.height_m} m`;
-  element.style.setProperty("--azimuth", `${antenna.azimuth || 0}deg`);
-  label.textContent = antenna.id;
-  element.append(dot, label);
-
-  return element;
-}
-
-function createAntennaImportBounds(antennas) {
-  if (!Array.isArray(antennas) || antennas.length === 0) {
-    return null;
-  }
-
-  const longitudes = antennas.map((antenna) => antenna.longitude);
-  const latitudes = antennas.map((antenna) => antenna.latitude);
-
-  const west = Math.min(...longitudes);
-  const east = Math.max(...longitudes);
-  const south = Math.min(...latitudes);
-  const north = Math.max(...latitudes);
-
-  const padding = 0.002;
-
-  return {
-    south: south - padding,
-    west: west - padding,
-    north: north + padding,
-    east: east + padding,
-  };
 }
 
 function emptyFeatureCollection() {

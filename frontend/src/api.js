@@ -6,3 +6,4 @@ export * from "./api/jobs";
 export * from "./api/scenes";
 export * from "./api/automation";
 export * from "./api/vietnamAdmin";
+export * from "./api/antennas";

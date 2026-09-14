@@ -7,12 +7,8 @@ import {
 } from "../api";
 import {
   formatAntennaCoordinate,
-  isAntennaEnabled,
-  toConfigurationAntenna,
-  validateRange,
 } from "../utils/antennas";
 import { formatDateTime, formatMaybeNumber } from "../utils/format";
-import AntennaPanel from "./AntennaPanel";
 
 
 export default function NetworkConfigurationsPage({
@@ -100,17 +96,10 @@ export default function NetworkConfigurationsPage({
   function startProposal(source = published) {
     const sourceAntennas = source?.antennas?.length
       ? source.antennas
-      : fixedAntennas;
-    const baselineIds = new Set(
-      (published?.antennas?.length ? published.antennas : fixedAntennas)
-        .map((antenna) => String(antenna.id)),
-    );
+      : [];
     setEditor({
       parent: source || null,
-      antennas: sourceAntennas.map((antenna) => toEditorAntenna(
-        antenna,
-        baselineIds.has(String(antenna.id)) ? "type1" : "type2",
-      )),
+      antennas: sourceAntennas.map(toEditorAntenna),
     });
     setNotice({
       kind: "info",
@@ -120,57 +109,20 @@ export default function NetworkConfigurationsPage({
     });
   }
 
-  function updateEditorAntenna(antennaId, field, value) {
-    if (value === "") {
-      return;
-    }
+  function addProposedAntenna(antennaIds) {
+    const selectedIds = new Set(editor.antennas.map((item) => item.database_id));
+    const additions = fixedAntennas.filter((item) => (
+      antennaIds.includes(item.database_id) && !selectedIds.has(item.database_id)
+    ));
     setEditor((current) => ({
       ...current,
-      antennas: current.antennas.map((antenna) => {
-        if (antenna.id !== antennaId) {
-          return antenna;
-        }
-        if (field === "tilt") {
-          return {
-            ...antenna,
-            tilt: { ...antenna.tilt, current: value },
-          };
-        }
-        if (field === "tx_power") {
-          return {
-            ...antenna,
-            tx_power: { ...antenna.tx_power, current: value },
-          };
-        }
-        if (field === "azimuth") {
-          return { ...antenna, azimuth: value };
-        }
-        if (field === "enabled") {
-          return { ...antenna, enabled: Boolean(value) };
-        }
-        return antenna;
-      }),
-    }));
-  }
-
-  function addProposedAntenna(antenna) {
-    if (editor.antennas.some((item) => (
-      item.id.toLowerCase() === antenna.id.toLowerCase()
-    ))) {
-      return { error: `antenna_id "${antenna.id}" is already used.` };
-    }
-    setEditor((current) => ({
-      ...current,
-      antennas: [
-        ...current.antennas,
-        { ...antenna, enabled: true, _type: "type2" },
-      ],
+      antennas: [...current.antennas, ...additions],
     }));
     return { ok: true };
   }
 
   function removeProposedAntenna(antennaId) {
-    if (!window.confirm(`Delete proposed antenna "${antennaId}" from this working proposal?`)) {
+    if (!window.confirm(`Remove antenna "${antennaId}" from this working proposal?`)) {
       return;
     }
     setEditor((current) => ({
@@ -196,15 +148,14 @@ export default function NetworkConfigurationsPage({
       return;
     }
 
-    const antennas = editor.antennas.map(toConfigurationAntenna);
-    const validationError = validateConfigurationAntennas(antennas);
-    if (validationError) {
-      setNotice({ kind: "error", message: validationError });
+    const antennaIds = editor.antennas.map((antenna) => antenna.database_id).filter(Boolean);
+    if (antennaIds.length !== editor.antennas.length) {
+      setNotice({ kind: "error", message: "Every configuration antenna must come from the inventory." });
       return;
     }
 
     setAction("saving");
-    setNotice({ kind: "info", message: "Saving immutable draft..." });
+    setNotice({ kind: "info", message: "Saving configuration draft..." });
     try {
       const result = await createNetworkConfiguration({
         scene_id: activeScene.id,
@@ -213,12 +164,12 @@ export default function NetworkConfigurationsPage({
         source_reference: editor.parent
           ? `Configuration workspace proposal from version ${editor.parent.version}`
           : "Configuration workspace proposal from scene inventory",
-        antennas,
+        antenna_ids: antennaIds,
       });
       setEditor(null);
       setNotice({
         kind: "success",
-        message: `Version ${result.configuration.version} saved as an immutable draft.`,
+        message: `Version ${result.configuration.version} saved as a draft.`,
       });
       await loadConfigurations(result.configuration.id);
     } catch (error) {
@@ -239,7 +190,7 @@ export default function NetworkConfigurationsPage({
       ? ` and supersede published version ${published.version}`
       : " as the first published configuration";
     if (!window.confirm(
-      `Publish configuration version ${selected.version}${currentLabel}? Published snapshots cannot be edited.`,
+      `Publish configuration version ${selected.version}${currentLabel}? Its antenna membership cannot be edited after publishing.`,
     )) {
       return;
     }
@@ -271,8 +222,8 @@ export default function NetworkConfigurationsPage({
         <div>
           <h1>Network configurations</h1>
           <p>
-            Build proposals against the published antenna snapshot for {activeScene.name}.
-            Every saved version is immutable and remains available for audit.
+            Build versioned antenna lists for {activeScene.name}. Antenna values always
+            resolve from the live inventory.
           </p>
         </div>
         <div className="page-title-actions">
@@ -314,7 +265,6 @@ export default function NetworkConfigurationsPage({
         />
         <ConfigurationWorkbench
           action={action}
-          activeScene={activeScene}
           editor={editor}
           onAddAntenna={addProposedAntenna}
           onDiscard={discardProposal}
@@ -322,7 +272,7 @@ export default function NetworkConfigurationsPage({
           onRemoveAntenna={removeProposedAntenna}
           onSave={saveProposal}
           onStartProposal={startProposal}
-          onUpdateAntenna={updateEditorAntenna}
+          antennaPool={fixedAntennas}
           published={published}
           selected={selected}
         />
@@ -390,7 +340,7 @@ function VersionRail({ configurations, disabled, isLoading, onSelect, selectedId
 
 function ConfigurationWorkbench({
   action,
-  activeScene,
+  antennaPool,
   editor,
   onAddAntenna,
   onDiscard,
@@ -398,7 +348,6 @@ function ConfigurationWorkbench({
   onRemoveAntenna,
   onSave,
   onStartProposal,
-  onUpdateAntenna,
   published,
   selected,
 }) {
@@ -410,25 +359,21 @@ function ConfigurationWorkbench({
             <h2>Working proposal</h2>
             <span>
               {editor.parent
-                ? `Based on immutable version ${editor.parent.version}`
+                ? `Based on version ${editor.parent.version}`
                 : "Based on the scene antenna inventory"}
             </span>
           </div>
           <span className="working-mark">Unsaved</span>
         </div>
         <div className="configuration-editor-note">
-          Existing antenna locations and limits stay fixed. Change their enabled state,
-          tilt, power, or azimuth, or add a proposed antenna.
+          This version stores antenna membership. Antenna values always come from the live inventory.
         </div>
-        <AntennaPanel
-          activeScene={activeScene}
+        <ConfigurationAntennaMembership
+          antennaPool={antennaPool}
           antennas={editor.antennas}
           disabled={Boolean(action)}
-          onAddType2={onAddAntenna}
-          onChange={onUpdateAntenna}
-          onRemoveType2={onRemoveAntenna}
-          showEnabledToggle
-          simulationLabel="Network configuration"
+          onAdd={onAddAntenna}
+          onRemove={onRemoveAntenna}
         />
         <div className="configuration-action-bar">
           <span>Saving creates a new version; it does not alter its parent.</span>
@@ -447,7 +392,7 @@ function ConfigurationWorkbench({
               disabled={Boolean(action)}
               onClick={onSave}
             >
-              {action === "saving" ? "Saving..." : "Save immutable draft"}
+              {action === "saving" ? "Saving..." : "Save draft"}
             </button>
           </div>
         </div>
@@ -461,8 +406,8 @@ function ConfigurationWorkbench({
         <div>
           <h2>Establish the first version</h2>
           <p>
-            Start from antennas attached to this scene, review their settings, and save
-            the first immutable draft before publishing a baseline.
+            Select antennas from this scene and save the first draft before publishing
+            a baseline.
           </p>
           <button className="primary-button" type="button" onClick={() => onStartProposal(null)}>
             Create first proposal
@@ -488,9 +433,14 @@ function ConfigurationWorkbench({
         <div><dt>Parent</dt><dd>{shortId(selected.parent_configuration_id)}</dd></div>
         <div><dt>Content hash</dt><dd title={selected.content_hash}>{shortHash(selected.content_hash)}</dd></div>
       </dl>
+      {selected.is_available === false && (
+        <p className="configuration-notice error">
+          This configuration is unavailable because an antenna is archived or outside this scene.
+        </p>
+      )}
       <AntennaSnapshotList antennas={selected.antennas} baselineIds={baselineIds} />
       <div className="configuration-action-bar">
-        <span>Snapshots are read-only. Continue from this version to propose changes.</span>
+        <span>Membership is versioned; displayed antenna values remain live.</span>
         <div>
           <button
             className="ghost-button"
@@ -504,7 +454,7 @@ function ConfigurationWorkbench({
             <button
               className="primary-button"
               type="button"
-              disabled={Boolean(action)}
+              disabled={Boolean(action) || selected.is_available === false}
               onClick={onPublish}
             >
               {action === "publishing" ? "Publishing..." : "Publish version"}
@@ -517,13 +467,31 @@ function ConfigurationWorkbench({
 }
 
 
+function ConfigurationAntennaMembership({ antennaPool, antennas, disabled, onAdd, onRemove }) {
+  const [selected, setSelected] = useState([]);
+  const used = new Set(antennas.map((antenna) => antenna.database_id));
+  const available = antennaPool.filter((antenna) => !used.has(antenna.database_id));
+  return (
+    <div className="configuration-membership">
+      <div className="configuration-membership-add">
+        <select multiple value={selected} disabled={disabled || available.length === 0} onChange={(event) => setSelected([...event.target.selectedOptions].map((option) => option.value))}>
+          {available.map((antenna) => <option key={antenna.database_id} value={antenna.database_id}>{antenna.id}</option>)}
+        </select>
+        <button className="primary-button" type="button" disabled={disabled || selected.length === 0} onClick={() => { onAdd(selected); setSelected([]); }}>Add selected ({selected.length})</button>
+      </div>
+      <div className="configuration-antenna-table"><table><thead><tr><th>Antenna</th><th>Position</th><th>Height</th><th>Action</th></tr></thead><tbody>{antennas.map((antenna) => <tr key={antenna.database_id || antenna.id}><td><strong>{antenna.id}</strong></td><td>{formatAntennaCoordinate(antenna.longitude)}, {formatAntennaCoordinate(antenna.latitude)}</td><td>{formatMaybeNumber(antenna.height_m)} m</td><td><button className="ghost-button danger-button" type="button" disabled={disabled} onClick={() => onRemove(antenna.id)}>Remove</button></td></tr>)}</tbody></table></div>
+    </div>
+  );
+}
+
+
 function AntennaSnapshotList({ antennas, baselineIds }) {
   if (!antennas.length) {
-    return <p className="configuration-empty">This snapshot contains no antennas.</p>;
+    return <p className="configuration-empty">This configuration contains no antennas.</p>;
   }
 
   return (
-    <div className="configuration-antenna-table" role="region" aria-label="Antenna snapshot" tabIndex="0">
+    <div className="configuration-antenna-table" role="region" aria-label="Configuration antennas" tabIndex="0">
       <table>
         <thead>
           <tr>
@@ -621,7 +589,7 @@ function DiffResult({ comparison }) {
         <div><dt>Fields</dt><dd>{summary.fields_changed || 0}</dd></div>
       </dl>
       {!comparison.changed ? (
-        <p className="configuration-empty">The snapshots contain no material changes.</p>
+        <p className="configuration-empty">The configurations contain no material changes.</p>
       ) : (
         <div className="configuration-change-list">
           {comparison.changes.map((change, index) => (
@@ -659,45 +627,8 @@ function chooseSelectedConfiguration(items, preferredId) {
 }
 
 
-function toEditorAntenna(antenna, type) {
-  return {
-    ...structuredClone(antenna),
-    enabled: isAntennaEnabled(antenna),
-    _type: type,
-  };
-}
-
-
-function validateConfigurationAntennas(antennas) {
-  const ids = new Set();
-  for (const antenna of antennas) {
-    if (!antenna.id) {
-      return "Every antenna must have an ID.";
-    }
-    const id = antenna.id.toLowerCase();
-    if (ids.has(id)) {
-      return `Antenna ID "${antenna.id}" is duplicated.`;
-    }
-    ids.add(id);
-    if (!Number.isFinite(antenna.longitude) || !Number.isFinite(antenna.latitude)) {
-      return `Antenna ${antenna.id} has invalid coordinates.`;
-    }
-    if (!Number.isFinite(antenna.height_m) || antenna.height_m <= 0) {
-      return `Antenna ${antenna.id} must have a height greater than 0.`;
-    }
-    if (!Number.isFinite(antenna.azimuth) || antenna.azimuth < 0 || antenna.azimuth > 360) {
-      return `Antenna ${antenna.id} azimuth must be between 0 and 360 degrees.`;
-    }
-    for (const [label, range] of [["tilt", antenna.tilt], ["power", antenna.tx_power]]) {
-      if (![range.min, range.current, range.max].every(Number.isFinite)) {
-        return `Antenna ${antenna.id} has an invalid ${label} range.`;
-      }
-      if (validateRange(range, label)) {
-        return `Antenna ${antenna.id} ${label} current value must stay inside its range.`;
-      }
-    }
-  }
-  return "";
+function toEditorAntenna(antenna) {
+  return structuredClone(antenna);
 }
 
 

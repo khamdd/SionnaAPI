@@ -31,10 +31,9 @@ import {
   solverForScene,
   validatePositionInsideSolver,
 } from "../utils/scene";
-import AntennaPanel from "./AntennaPanel";
+import SimulationAntennaPanel from "./SimulationAntennaPanel";
 import Scene3DPreview, { hasCachedSceneModel } from "./Scene3DPreview";
 
-const COVERAGE_TYPE2_TRANSMITTER_ID = "__coverage_type2_transmitter__";
 const SINR_ROLES = [
   { key: "transmitter", label: "Transmitter" },
   { key: "receiver", label: "Receiver" },
@@ -43,16 +42,10 @@ const SINR_ROLES = [
 
 export function CoverageApiPage({ activeScene, antennas = EMPTY_ARRAY, onProgressChange, onQueueOpen, onSceneLoadingChange, onSimulationQueued }) {
   const fixedAntennas = Array.isArray(antennas) ? antennas : EMPTY_ARRAY;
-  const [form, setForm] = useState(() => ({
+  const [form, setForm] = useState(() => loadCoverageDraft(activeScene?.id, {
     tilt: 8,
     azimuth: 0,
     tx_power: 30,
-    transmitter: {
-      id: "TX",
-      longitude: "",
-      latitude: "",
-      height_m: 30,
-    },
     selected_antenna_id: "",
     solver: DEFAULT_SOLVER,
   }));
@@ -98,50 +91,22 @@ export function CoverageApiPage({ activeScene, antennas = EMPTY_ARRAY, onProgres
       },
     ]);
   const selectedTransmitterAntennas = useMemo(
-    () => (transmitterPosition
+    () => (transmitterPosition && transmitter.id
       ? [{
+        ...transmitter,
         id: transmitter.id || "TX",
         position: transmitterPosition,
-        longitude: transmitter.longitude,
-        latitude: transmitter.latitude,
-        height_m: transmitter.height_m,
         azimuth: transmitter.azimuth ?? 0,
+        tilt: { ...transmitter.tilt, current: form.tilt },
+        tx_power: { ...transmitter.tx_power, current: form.tx_power },
       }]
       : EMPTY_ARRAY),
-    [transmitter, transmitterPosition],
+    [form.tilt, form.tx_power, transmitter, transmitterPosition],
   );
 
   useEffect(() => {
     setForm((current) => {
-      if (
-        fixedAntennas.length === 1
-        && current.selected_antenna_id !== fixedAntennas[0].id
-        && current.selected_antenna_id !== COVERAGE_TYPE2_TRANSMITTER_ID
-      ) {
-        const antenna = fixedAntennas[0];
-
-        return {
-          ...current,
-          selected_antenna_id: antenna.id,
-          azimuth: antenna.azimuth ?? current.azimuth,
-          tilt: antenna.tilt?.current ?? current.tilt,
-          tx_power: antenna.tx_power?.current ?? current.tx_power,
-        };
-      }
-
-      if (
-        fixedAntennas.length > 1
-        && current.selected_antenna_id
-        && current.selected_antenna_id !== COVERAGE_TYPE2_TRANSMITTER_ID
-        && !fixedAntennas.some((antenna) => antenna.id === current.selected_antenna_id)
-      ) {
-        return {
-          ...current,
-          selected_antenna_id: "",
-        };
-      }
-
-      if (fixedAntennas.length === 0 && current.selected_antenna_id) {
+      if (current.selected_antenna_id && !fixedAntennas.some((antenna) => (antenna.database_id || antenna.id) === current.selected_antenna_id)) {
         return {
           ...current,
           selected_antenna_id: "",
@@ -151,6 +116,12 @@ export function CoverageApiPage({ activeScene, antennas = EMPTY_ARRAY, onProgres
       return current;
     });
   }, [activeScene?.id, fixedAntennas]);
+
+  useEffect(() => {
+    if (activeScene?.id) {
+      window.localStorage.setItem(coverageDraftStorageKey(activeScene.id), JSON.stringify(form));
+    }
+  }, [activeScene?.id, form]);
 
   async function submit(event) {
     event.preventDefault();
@@ -212,41 +183,17 @@ export function CoverageApiPage({ activeScene, antennas = EMPTY_ARRAY, onProgres
       <form id="coverage-api-form" className="api-form" onSubmit={submit}>
         <fieldset className="api-form-lock" disabled={resultState.loading}>
           <FormSection title="Transmitter">
-            <CoverageTransmitterFields
-              activeScene={activeScene}
-              antennas={fixedAntennas}
-              error={positionValidation.errors.transmitter_position}
-              form={form}
-              onChange={setForm}
+            <SimulationAntennaPanel
+              antennaPool={fixedAntennas}
+              antennas={selectedTransmitterAntennas}
+              maxAntennas={1}
+              onAdd={(antennaIds) => selectCoverageInventoryAntenna(setForm, form, fixedAntennas, antennaIds)}
+              onChange={(_antennaId, field, value) => updateForm(setForm, field, value)}
+              onRemove={() => updateForm(setForm, "selected_antenna_id", "")}
+              simulationLabel="Coverage API"
             />
-            <NumberField
-              hint="0 to 360 degrees."
-              label="Azimuth"
-              max={360}
-              min={0}
-              unit="deg"
-              value={form.azimuth}
-              onChange={(value) => updateForm(setForm, "azimuth", value)}
-            />
+            {positionValidation.errors.transmitter_position && <small className="field-error">{positionValidation.errors.transmitter_position}</small>}
             {azimuthError && <small className="field-error">{azimuthError}</small>}
-            <NumberField
-              hint={rangeHint(transmitter.tilt, "degrees")}
-              label="Tilt"
-              max={transmitter.tilt?.max}
-              min={transmitter.tilt?.min}
-              unit="deg"
-              value={form.tilt}
-              onChange={(value) => updateForm(setForm, "tilt", value)}
-            />
-            <NumberField
-              hint={rangeHint(transmitter.tx_power, "dBm")}
-              label="Power"
-              max={transmitter.tx_power?.max}
-              min={transmitter.tx_power?.min}
-              unit="dBm"
-              value={form.tx_power}
-              onChange={(value) => updateForm(setForm, "tx_power", value)}
-            />
           </FormSection>
           <SolverFields solver={sceneSolver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
         </fieldset>
@@ -257,6 +204,7 @@ export function CoverageApiPage({ activeScene, antennas = EMPTY_ARRAY, onProgres
 
 export function SinrApiPage({
   activeScene,
+  antennaPool = EMPTY_ARRAY,
   antennas = EMPTY_ARRAY,
   onAddType2Antenna,
   onProgressChange,
@@ -485,13 +433,14 @@ sceneBadges={resultSceneBadges}
         <div className="api-workspace-form">
           <div className="api-form">
             <FormSection title="Candidate antennas">
-              <AntennaPanel
+              <SimulationAntennaPanel
                 activeScene={activeScene}
+                antennaPool={antennaPool}
                 antennas={antennas}
                 disabled={resultState.loading}
-                onAddType2={onAddType2Antenna}
+                onAdd={onAddType2Antenna}
                 onChange={onUpdateAntenna}
-                onRemoveType2={onRemoveType2Antenna}
+                onRemove={onRemoveType2Antenna}
                 simulationLabel="SINR API"
               />
             </FormSection>
@@ -504,6 +453,7 @@ sceneBadges={resultSceneBadges}
 
 export function RsrpSimulationPage({
   activeScene,
+  antennaPool = EMPTY_ARRAY,
   antennas,
   maxAntennas = 10,
   onAddType2Antenna,
@@ -697,14 +647,15 @@ export function RsrpSimulationPage({
           <div className="api-form">
             <FormSection title="Antennas">
               <div className="embedded-antenna-panel">
-                <AntennaPanel
+                <SimulationAntennaPanel
                   activeScene={activeScene}
+                  antennaPool={antennaPool}
                   antennas={antennas}
                   disabled={resultState.loading}
                   maxAntennas={maxAntennas}
-                  onAddType2={onAddType2Antenna}
+                  onAdd={onAddType2Antenna}
                   onChange={onUpdateAntenna}
-                  onRemoveType2={onRemoveType2Antenna}
+                  onRemove={onRemoveType2Antenna}
                   showEnabledToggle
                   simulationLabel="RSRP Simulation"
                 />
@@ -736,6 +687,7 @@ function RsrpMapLegend() {
 
 export function ThroughputApiPage({
   activeScene,
+  antennaPool = EMPTY_ARRAY,
   antennas = EMPTY_ARRAY,
   onAddType2Antenna,
   onProgressChange,
@@ -1047,13 +999,14 @@ export function ThroughputApiPage({
         <div className="api-workspace-form">
           <div className="api-form">
             <FormSection title="Candidate antennas">
-              <AntennaPanel
+              <SimulationAntennaPanel
                 activeScene={activeScene}
+                antennaPool={antennaPool}
                 antennas={antennas}
                 disabled={resultState.loading}
-                onAddType2={onAddType2Antenna}
+                onAdd={onAddType2Antenna}
                 onChange={onUpdateAntenna}
-                onRemoveType2={onRemoveType2Antenna}
+                onRemove={onRemoveType2Antenna}
                 simulationLabel="Throughput API"
               />
             </FormSection>
@@ -1255,116 +1208,6 @@ function ApiPageShell({
         </div>
       </div>
     </section>
-  );
-}
-
-function CoverageTransmitterFields({
-  activeScene,
-  antennas,
-  error,
-  form,
-  onChange,
-}) {
-  if (antennas.length === 0) {
-    return (
-      <>
-        <p className="form-help">No fixed antennas are inside this scene. Add one added antenna transmitter for this Coverage API run.</p>
-        <TextField
-          label="Antenna ID"
-          value={form.transmitter.id}
-          onChange={(value) => updateManualTransmitter(onChange, form, "id", value)}
-        />
-        <NumberField
-          hint={coordinateHint("longitude", activeScene?.bounds)}
-          label="Longitude"
-          max={activeScene?.bounds?.east}
-          min={activeScene?.bounds?.west}
-          value={form.transmitter.longitude}
-          onChange={(value) => updateManualTransmitter(onChange, form, "longitude", value)}
-        />
-        <NumberField
-          hint={coordinateHint("latitude", activeScene?.bounds)}
-          label="Latitude"
-          max={activeScene?.bounds?.north}
-          min={activeScene?.bounds?.south}
-          value={form.transmitter.latitude}
-          onChange={(value) => updateManualTransmitter(onChange, form, "latitude", value)}
-        />
-        <NumberField
-          hint="Must be greater than 0."
-          label="Height"
-          min={0.1}
-          unit="m"
-          value={form.transmitter.height_m}
-          onChange={(value) => updateManualTransmitter(onChange, form, "height_m", value)}
-        />
-        {error && <small className="field-error">{error}</small>}
-      </>
-    );
-  }
-
-  const selected = antennas.find((antenna) => antenna.id === form.selected_antenna_id);
-  const isType2Selected = form.selected_antenna_id === COVERAGE_TYPE2_TRANSMITTER_ID;
-
-  return (
-    <>
-      <label className="form-field">
-        <span>Transmitter</span>
-        <select
-          aria-invalid={Boolean(error)}
-          required
-          value={form.selected_antenna_id}
-          onChange={(event) => selectCoverageTransmitter(onChange, form, antennas, event.target.value)}
-        >
-          {antennas.length > 1 && <option value="">Select transmitter</option>}
-          {antennas.map((antenna) => (
-            <option key={antenna.id} value={antenna.id}>
-              {antenna.id}
-            </option>
-          ))}
-          <option value={COVERAGE_TYPE2_TRANSMITTER_ID}>Add custom transmitter</option>
-        </select>
-      </label>
-      {isType2Selected && (
-        <>
-          <TextField
-            label="Antenna ID"
-            value={form.transmitter.id}
-            onChange={(value) => updateManualTransmitter(onChange, form, "id", value)}
-          />
-          <NumberField
-            hint={coordinateHint("longitude", activeScene?.bounds)}
-            label="Longitude"
-            max={activeScene?.bounds?.east}
-            min={activeScene?.bounds?.west}
-            value={form.transmitter.longitude}
-            onChange={(value) => updateManualTransmitter(onChange, form, "longitude", value)}
-          />
-          <NumberField
-            hint={coordinateHint("latitude", activeScene?.bounds)}
-            label="Latitude"
-            max={activeScene?.bounds?.north}
-            min={activeScene?.bounds?.south}
-            value={form.transmitter.latitude}
-            onChange={(value) => updateManualTransmitter(onChange, form, "latitude", value)}
-          />
-          <NumberField
-            hint="Must be greater than 0."
-            label="Height"
-            min={0.1}
-            unit="m"
-            value={form.transmitter.height_m}
-            onChange={(value) => updateManualTransmitter(onChange, form, "height_m", value)}
-          />
-        </>
-      )}
-      {selected && (
-        <p className="form-help">
-          {selected.id}: {formatAntennaCoordinate(selected.longitude)}, {formatAntennaCoordinate(selected.latitude)}, {formatMaybeNumber(selected.height_m)} m.
-        </p>
-      )}
-      {error && <small className="field-error">{error}</small>}
-    </>
   );
 }
 
@@ -2111,23 +1954,12 @@ function linkResultAntennas(result, request) {
 }
 
 function coverageTransmitter(form, antennas) {
-  if (
-    antennas.length === 0
-    || form.selected_antenna_id === COVERAGE_TYPE2_TRANSMITTER_ID
-  ) {
-    return form.transmitter;
-  }
-
-  return antennas.find((antenna) => antenna.id === form.selected_antenna_id) || {};
+  return antennas.find((antenna) => (antenna.database_id || antenna.id) === form.selected_antenna_id) || {};
 }
 
-function validateCoverageTransmitter(transmitter, antennas, activeScene) {
-  if (antennas.length > 0 && !transmitter.id) {
-    return "Select one fixed antenna or add an added antenna transmitter.";
-  }
-
+function validateCoverageTransmitter(transmitter, _antennas, activeScene) {
   if (!transmitter || Object.keys(transmitter).length === 0) {
-    return "Add one transmitter before running Coverage API.";
+    return "Add one antenna before running Coverage API.";
   }
 
   const id = String(transmitter.id || "").trim();
@@ -2137,15 +1969,6 @@ function validateCoverageTransmitter(transmitter, antennas, activeScene) {
 
   if (!id) {
     return "Antenna ID is required.";
-  }
-
-  const isSelectedFixedAntenna = antennas.includes(transmitter);
-
-  if (
-    !isSelectedFixedAntenna
-    && antennas.some((antenna) => antenna.id.toLowerCase() === id.toLowerCase())
-  ) {
-    return `Antenna ID ${id} is already used by a fixed antenna.`;
   }
 
   if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
@@ -2181,46 +2004,36 @@ function validateCoverageAzimuth(azimuth) {
   return "";
 }
 
-function updateManualTransmitter(onChange, form, field, value) {
-  onChange({
-    ...form,
-    transmitter: {
-      ...form.transmitter,
-      [field]: value,
-    },
-  });
-}
-
-function selectCoverageTransmitter(onChange, form, antennas, antennaId) {
-  const antenna = antennas.find((item) => item.id === antennaId);
-
-  if (antennaId === COVERAGE_TYPE2_TRANSMITTER_ID) {
-    onChange({
-      ...form,
-      selected_antenna_id: antennaId,
-    });
-    return;
+function selectCoverageInventoryAntenna(onChange, form, antennas, antennaIds) {
+  if (antennaIds.length !== 1) {
+    return { error: "Coverage API uses exactly one antenna." };
   }
-
+  const antenna = antennas.find((item) => (item.database_id || item.id) === antennaIds[0]);
   onChange({
     ...form,
-    selected_antenna_id: antennaId,
+    selected_antenna_id: antenna.database_id || antenna.id,
     azimuth: antenna?.azimuth ?? form.azimuth,
     tilt: antenna?.tilt?.current ?? form.tilt,
     tx_power: antenna?.tx_power?.current ?? form.tx_power,
   });
+  return {};
 }
 
-function coordinateHint(axis, bounds) {
-  if (!bounds) {
-    return axis === "longitude"
-      ? "-180.0000 to 180.0000."
-      : "-90.0000 to 90.0000.";
-  }
+function coverageDraftStorageKey(sceneId) {
+  return `sionna_coverage_antenna_draft:${sceneId}`;
+}
 
-  return axis === "longitude"
-    ? `${formatAntennaCoordinate(bounds.west)} to ${formatAntennaCoordinate(bounds.east)} for the selected scene.`
-    : `${formatAntennaCoordinate(bounds.south)} to ${formatAntennaCoordinate(bounds.north)} for the selected scene.`;
+function loadCoverageDraft(sceneId, fallback) {
+  if (!sceneId) return fallback;
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(coverageDraftStorageKey(sceneId)) || "null");
+    if (stored && typeof stored === "object") {
+      return { ...fallback, ...stored, solver: { ...fallback.solver, ...stored.solver } };
+    }
+  } catch {
+    // Ignore malformed drafts and start from defaults.
+  }
+  return fallback;
 }
 
 function rangeHint(range, unit) {

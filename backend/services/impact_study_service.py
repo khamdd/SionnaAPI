@@ -10,17 +10,13 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from backend.database import db_session, is_database_configured
-from backend.models import ImpactStudy, NetworkConfiguration, Scene, SimulationJob
+from backend.models import ImpactStudy, NetworkConfiguration, SimulationJob
 from backend.schemas.impact_studies import ImpactStudyCreateRequest
 from backend.schemas.network_configurations import NetworkConfigurationAntenna
 from backend.schemas.requests import NetworkCoverageOptimizationRequest
 from backend.services import impact_planner, notification_service
 from backend.services.impact_comparison_service import build_impact_comparison
-from backend.services.network_configuration_service import (
-    add_network_configuration_draft,
-    calculate_content_hash,
-    serialize_configuration,
-)
+from backend.services.network_configuration_service import serialize_configuration
 from backend.services.scene_service import list_scenes
 from backend.services.simulation_job_store import (
     add_simulation_job,
@@ -427,42 +423,11 @@ def create_suggested_configuration(
                     "configuration": serialize_configuration(existing),
                 }
 
-            try:
-                antennas = _apply_suggested_antenna_settings(
-                    candidate.antennas_json,
-                    best_request.get("antennas"),
-                )
-            except (TypeError, ValueError) as exc:
-                return _failure(409, str(exc))
-            _, suggested_hash = calculate_content_hash(antennas)
-            if suggested_hash == candidate.content_hash:
-                return _failure(
-                    409,
-                    "Optimization did not produce settings different from the candidate.",
-                )
-
-            session.execute(
-                select(Scene)
-                .where(Scene.id == study.scene_id)
-                .with_for_update()
-            ).scalar_one()
-            configuration = add_network_configuration_draft(
-                session,
-                scene_id=study.scene_id,
-                antennas=antennas,
-                created_by=user_id,
-                parent_configuration_id=candidate_id,
-                source="manual",
-                source_reference=source_reference,
+            return _failure(
+                409,
+                "Suggested radio settings must be applied to the live antenna inventory before creating a configuration.",
+                error_code="live_antenna_update_required",
             )
-            session.refresh(configuration)
-            return {
-                "status": "success",
-                "already_created": False,
-                "based_on_candidate_configuration_id": candidate_id,
-                "optimization_job_id": str(optimization_job.id),
-                "configuration": serialize_configuration(configuration),
-            }
     except IntegrityError:
         logger.exception("Suggested configuration creation violated a constraint.")
         return _failure(409, "Suggested configuration could not be created.")
@@ -775,9 +740,10 @@ def _is_failure(result: dict) -> bool:
     return str(result.get("status", "")).lower().startswith("failure")
 
 
-def _failure(status_code: int, error: str) -> dict:
+def _failure(status_code: int, error: str, **extra) -> dict:
     return {
         "status": "failure",
         "status_code": status_code,
         "error": error,
+        **extra,
     }

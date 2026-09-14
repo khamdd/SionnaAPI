@@ -11,6 +11,7 @@ from backend.database import db_session, is_database_configured
 from backend.models import NetworkConfiguration, SimulationProfile
 from backend.schemas.requests import OptimizationObjective
 from backend.services.configuration_diff_service import compare_configuration_snapshots
+from backend.services.network_configuration_service import configuration_antennas
 from backend.services.profile_diff_service import compare_profile_templates
 from backend.services.scene_service import list_scenes
 from backend.services.simulation_profile_service import validate_profile_definition
@@ -101,9 +102,17 @@ def _preview_configuration_impact(
             if scene_info is None:
                 return _failure(404, "The configuration scene was not found or ready.")
 
+            baseline_antennas = configuration_antennas(baseline)
+            candidate_antennas = configuration_antennas(candidate)
+            if baseline_antennas is None or candidate_antennas is None:
+                return _failure(
+                    409,
+                    "A configuration contains an archived or unavailable antenna.",
+                    error_code="configuration_antenna_unavailable",
+                )
             difference = compare_configuration_snapshots(
-                baseline.antennas_json,
-                candidate.antennas_json,
+                baseline_antennas,
+                candidate_antennas,
             )
             if not difference.get("changed"):
                 return _failure(

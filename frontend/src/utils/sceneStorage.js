@@ -123,6 +123,18 @@ export function normalizeStoredType2Antennas(antennas) {
   return normalized.length ? normalized : null;
 }
 
+export function normalizeStoredAntennaSelections(antennas) {
+  if (!Array.isArray(antennas)) {
+    return null;
+  }
+  const normalized = antennas
+    .filter((antenna) => typeof antenna === "string")
+    .map((antenna) => antenna.trim())
+    .filter(Boolean)
+    .filter((antennaId, index, items) => items.indexOf(antennaId) === index);
+  return normalized.length ? normalized : null;
+}
+
 export function normalizeStoredAntennaSettings(settings) {
   if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
     return null;

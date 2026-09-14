@@ -79,6 +79,43 @@ class Scene(Base):
     )
 
 
+class Antenna(Base):
+    __tablename__ = "antennas"
+    __table_args__ = (
+        CheckConstraint("status IN ('active', 'archived')", name="ck_antennas_status"),
+        Index("ix_antennas_status_code", "status", "code"),
+        Index("uq_antennas_code_lower", func.lower(text("code")), unique=True),
+    )
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    code: Mapped[str] = mapped_column(Text)
+    longitude: Mapped[float] = mapped_column(Float)
+    latitude: Mapped[float] = mapped_column(Float)
+    height_m: Mapped[float] = mapped_column(Float)
+    azimuth_deg: Mapped[float] = mapped_column(Float)
+    tilt_min_deg: Mapped[float] = mapped_column(Float)
+    tilt_current_deg: Mapped[float] = mapped_column(Float)
+    tilt_max_deg: Mapped[float] = mapped_column(Float)
+    tx_power_min_dbm: Mapped[float] = mapped_column(Float)
+    tx_power_current_dbm: Mapped[float] = mapped_column(Float)
+    tx_power_max_dbm: Mapped[float] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(Text, default="active")
+    created_by: Mapped[str] = mapped_column(
+        ForeignKey("app_users.id", ondelete="RESTRICT")
+    )
+    updated_by: Mapped[str] = mapped_column(
+        ForeignKey("app_users.id", ondelete="RESTRICT")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class NetworkConfiguration(Base):
     __tablename__ = "network_configurations"
     __table_args__ = (
@@ -137,6 +174,38 @@ class NetworkConfiguration(Base):
     published_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+    antenna_links: Mapped[list["NetworkConfigurationAntenna"]] = relationship(
+        back_populates="configuration",
+        cascade="all, delete-orphan",
+        order_by="NetworkConfigurationAntenna.position",
+    )
+
+
+class NetworkConfigurationAntenna(Base):
+    __tablename__ = "network_configuration_antennas"
+    __table_args__ = (
+        UniqueConstraint(
+            "configuration_id",
+            "antenna_id",
+            name="uq_network_configuration_antennas_pair",
+        ),
+    )
+
+    configuration_id: Mapped[str] = mapped_column(
+        ForeignKey("network_configurations.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    antenna_id: Mapped[str] = mapped_column(
+        ForeignKey("antennas.id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    position: Mapped[int] = mapped_column(Integer)
+
+    configuration: Mapped[NetworkConfiguration] = relationship(
+        back_populates="antenna_links"
+    )
+    antenna: Mapped[Antenna] = relationship()
 
 
 class SimulationProfile(Base):

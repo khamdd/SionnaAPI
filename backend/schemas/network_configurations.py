@@ -48,7 +48,7 @@ class NetworkConfigurationCreateRequest(BaseModel):
     parent_configuration_id: UUID | None = None
     source: Literal["manual", "file", "external_api"] = "manual"
     source_reference: str | None = Field(default=None, max_length=1000)
-    antennas: list[NetworkConfigurationAntenna] | None = Field(
+    antenna_ids: list[UUID] | None = Field(
         default=None,
         min_length=1,
     )
@@ -70,11 +70,10 @@ class NetworkConfigurationCreateRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_unique_antenna_ids(self):
-        if self.antennas is None:
+        if self.antenna_ids is None:
             return self
 
-        antenna_ids = [antenna.id for antenna in self.antennas]
-        if len(set(antenna_ids)) != len(antenna_ids):
+        if len(set(self.antenna_ids)) != len(self.antenna_ids):
             raise ValueError("antenna IDs must be unique")
         return self
 

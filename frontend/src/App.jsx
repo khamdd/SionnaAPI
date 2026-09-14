@@ -11,6 +11,7 @@ import {
   runNetworkCoverage,
   getCurrentUser,
   saveSimulationJobResult,
+  listAntennas,
 } from "./api";
 import {
   DEFAULT_SOLVER,
@@ -30,7 +31,6 @@ import {
 } from "./constants";
 import {
   MAX_NETWORK_COVERAGE_ANTENNAS,
-  antennasForActiveScene,
   validateNetworkCoverageSimulationAntennas,
 } from "./utils/antennas";
 import {
@@ -50,10 +50,6 @@ import {
   isWorkSceneRequiredRoute,
   normalizeRoute,
 } from "./utils/routes";
-import {
-  enrichScene,
-  saveSceneFixedAntennas,
-} from "./utils/sceneStorage";
 import useSceneAntennaDraft from "./hooks/useSceneAntennaDraft";
 import {
   CoverageApiPage,
@@ -77,6 +73,7 @@ import QueueSubmissionPrompt from "./components/QueueSubmissionPrompt";
 import SimulationProfilesPage from "./components/SimulationProfilesPage";
 import SceneChooserPage from "./components/SceneChooserModal";
 import ScenesPage from "./components/ScenesPage";
+import AntennasPage from "./components/AntennasPage";
 import { formatDateTime, formatSimulationType } from "./utils/format";
 import {
   isSuccessfulHistoryItem,
@@ -87,7 +84,7 @@ import {
   drawHeatmap,
   summarizeGrid,
 } from "./utils/map";
-import { solverForScene } from "./utils/scene";
+import { lngLatInsideBounds, solverForScene } from "./utils/scene";
 
 const HISTORY_PAGE_LIMIT = 200;
 const JOB_PAGE_LIMIT = 200;
@@ -131,15 +128,17 @@ export default function App() {
   const [sceneNotice, setSceneNoticeState] = useState(null);
   const [hover, setHover] = useState(null);
   const [authStatus, setAuthStatus] = useState("checking");
-  const [sceneAntennaOverrides, setSceneAntennaOverrides] = useState(() => new Map());
+  const [antennaInventory, setAntennaInventory] = useState([]);
   const [hasWorkScene, setHasWorkScene] = useState(false);
 
   const canvasRef = useRef(null);
   const mapStageRef = useRef(null);
   const summary = useMemo(() => summarizeGrid(latestGrid), [latestGrid]);
   const fixedSceneAntennas = useMemo(
-    () => antennasForActiveScene(activeScene, sceneAntennaOverrides),
-    [activeScene, sceneAntennaOverrides],
+    () => antennaInventory.filter((antenna) => (
+      antenna.status === "active" && lngLatInsideBounds(antenna, activeScene?.bounds)
+    )),
+    [activeScene?.bounds, antennaInventory],
   );
   const networkDraft = useSceneAntennaDraft({
     activeScene,
@@ -212,6 +211,18 @@ export default function App() {
       setAuthStatus("unauthenticated");
     });
   }, []);
+
+  useEffect(() => {
+    if (!currentUser) {
+      setAntennaInventory([]);
+      return;
+    }
+    listAntennas().then((result) => {
+      setAntennaInventory(result.antennas || []);
+    }).catch(() => {
+      setAntennaInventory([]);
+    });
+  }, [currentUser]);
 
   function logout() {
     localStorage.removeItem(USER_STORAGE_KEY);
@@ -334,8 +345,8 @@ export default function App() {
 
     try {
       const result = await listScenes();
-      const nextScenes = (result.scenes || []).map(enrichScene);
-      const nextActiveScene = result.active_scene ? enrichScene(result.active_scene) : null;
+      const nextScenes = result.scenes || [];
+      const nextActiveScene = result.active_scene || null;
 
       setScenes(nextScenes);
       if (syncActiveScene) {
@@ -425,7 +436,7 @@ export default function App() {
     setHover(null);
     setRunStatus("Ready");
     setRunError(false);
-  }, [activeScene?.id, sceneAntennaOverrides]);
+  }, [activeScene?.id]);
 
   useEffect(() => {
     setLatestHistory([]);
@@ -560,7 +571,7 @@ export default function App() {
   }
 
   function addType2Antenna(antenna) {
-    const result = networkDraft.addType2Antenna(antenna);
+    const result = networkDraft.addAntennas(antenna);
     if (result.ok) {
       clearLatestNetworkResult();
     }
@@ -572,13 +583,7 @@ export default function App() {
       return;
     }
 
-    const confirmed = window.confirm(`Delete type 2 antenna "${antennaId}"?`);
-
-    if (!confirmed) {
-      return;
-    }
-
-    networkDraft.removeType2Antenna(antennaId);
+    networkDraft.removeAntenna(antennaId);
     clearLatestNetworkResult();
   }
 
@@ -587,7 +592,7 @@ export default function App() {
   }
 
   function addRsrpType2Antenna(antenna) {
-    return rsrpDraft.addType2Antenna(antenna);
+    return rsrpDraft.addAntennas(antenna);
   }
 
   function removeRsrpType2Antenna(antennaId) {
@@ -595,13 +600,7 @@ export default function App() {
       return;
     }
 
-    const confirmed = window.confirm(`Delete type 2 antenna "${antennaId}"?`);
-
-    if (!confirmed) {
-      return;
-    }
-
-    rsrpDraft.removeType2Antenna(antennaId);
+    rsrpDraft.removeAntenna(antennaId);
   }
 
   function updateSinrAntenna(antennaId, field, value) {
@@ -609,7 +608,7 @@ export default function App() {
   }
 
   function addSinrType2Antenna(antenna) {
-    return sinrDraft.addType2Antenna(antenna);
+    return sinrDraft.addAntennas(antenna);
   }
 
   function removeSinrType2Antenna(antennaId) {
@@ -617,13 +616,7 @@ export default function App() {
       return;
     }
 
-    const confirmed = window.confirm(`Delete type 2 antenna "${antennaId}"?`);
-
-    if (!confirmed) {
-      return;
-    }
-
-    sinrDraft.removeType2Antenna(antennaId);
+    sinrDraft.removeAntenna(antennaId);
   }
 
   function updateSinrRoleSelection(nextRoles) {
@@ -635,7 +628,7 @@ export default function App() {
   }
 
   function addThroughputType2Antenna(antenna) {
-    return throughputDraft.addType2Antenna(antenna);
+    return throughputDraft.addAntennas(antenna);
   }
 
   function removeThroughputType2Antenna(antennaId) {
@@ -643,13 +636,7 @@ export default function App() {
       return;
     }
 
-    const confirmed = window.confirm(`Delete type 2 antenna "${antennaId}"?`);
-
-    if (!confirmed) {
-      return;
-    }
-
-    throughputDraft.removeType2Antenna(antennaId);
+    throughputDraft.removeAntenna(antennaId);
   }
 
   function updateThroughputRoleSelection(nextRoles) {
@@ -759,21 +746,8 @@ export default function App() {
     navigate(SCENE_SELECTION_ROUTE, { allowWithoutWorkScene: true });
   }
 
-  function handleSceneActivated(scene, sceneAntennas = null) {
-    const fixedAntennas = Array.isArray(sceneAntennas)
-      ? sceneAntennas
-      : scene?.fixed_antennas;
-
-    if (Array.isArray(fixedAntennas)) {
-      saveSceneFixedAntennas(scene.id, fixedAntennas);
-      setSceneAntennaOverrides((current) => {
-        const next = new Map(current);
-        next.set(scene.id, clone(fixedAntennas));
-        return next;
-      });
-    }
-
-    setActiveScene(enrichScene(scene));
+  function handleSceneActivated(scene) {
+    setActiveScene(scene);
     setHasWorkScene(true);
     setSceneNotice(`${scene.name} is now active.`);
     loadScenes({ syncActiveScene: true }).catch(() => {});
@@ -1286,6 +1260,7 @@ export default function App() {
       {visibleRoute === "/network" && (
         <NetworkCoveragePage
           activeScene={activeScene}
+          antennaPool={fixedSceneAntennas}
           antennas={antennas}
           displayAntennas={activeNetworkAntennas}
           canvasRef={canvasRef}
@@ -1352,6 +1327,7 @@ export default function App() {
       )}
       {visibleRoute === "/coverage" && (
         <CoverageApiPage
+          key={activeScene?.id}
           activeScene={activeScene}
           antennas={fixedSceneAntennas}
           onQueueOpen={() => navigate("/queue")}
@@ -1363,6 +1339,7 @@ export default function App() {
       {visibleRoute === "/rsrp" && (
         <RsrpSimulationPage
           activeScene={activeScene}
+          antennaPool={fixedSceneAntennas}
           antennas={rsrpAntennas}
           simulationAntennas={activeRsrpAntennas}
           maxAntennas={MAX_RSRP_SIMULATION_ANTENNAS}
@@ -1379,6 +1356,7 @@ export default function App() {
       {visibleRoute === "/sinr" && (
         <SinrApiPage
           activeScene={activeScene}
+          antennaPool={fixedSceneAntennas}
           antennas={sinrAntennas}
           onAddType2Antenna={addSinrType2Antenna}
           onQueueOpen={() => navigate("/queue")}
@@ -1395,6 +1373,7 @@ export default function App() {
       {visibleRoute === "/throughput" && (
         <ThroughputApiPage
           activeScene={activeScene}
+          antennaPool={fixedSceneAntennas}
           antennas={throughputAntennas}
           onAddType2Antenna={addThroughputType2Antenna}
           onQueueOpen={() => navigate("/queue")}
@@ -1461,6 +1440,9 @@ export default function App() {
           onSetNotice={setSceneNotice}
           scenes={scenes}
         />
+      )}
+      {visibleRoute === "/antennas" && (
+        <AntennasPage onInventoryChange={setAntennaInventory} />
       )}
       {visibleRoute === SCENE_CREATION_ROUTE && (
         <SceneChooserPage

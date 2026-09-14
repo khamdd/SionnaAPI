@@ -13,6 +13,8 @@ from backend.services import network_configuration_service as service
 client = TestClient(app)
 USER_ID = "11111111-1111-1111-1111-111111111111"
 OTHER_USER_ID = "22222222-2222-2222-2222-222222222222"
+ANTENNA_A_ID = "aaaaaaaa-0000-0000-0000-000000000001"
+ANTENNA_B_ID = "bbbbbbbb-0000-0000-0000-000000000002"
 
 
 def antenna(antenna_id="A1", tilt_current=4, power_current=30):
@@ -38,32 +40,29 @@ def authenticated_user():
     app.dependency_overrides.pop(require_current_user, None)
 
 
-def test_normalized_hash_ignores_antenna_order_and_number_spelling():
+def test_membership_hash_ignores_antenna_order():
     first = NetworkConfigurationCreateRequest(
         scene_id="scene-1",
-        antennas=[antenna("B2"), antenna("A1")],
+        antenna_ids=[ANTENNA_B_ID, ANTENNA_A_ID],
     )
     second = NetworkConfigurationCreateRequest(
         scene_id="scene-1",
-        antennas=[
-            antenna("A1", tilt_current=4.0, power_current=30.0),
-            antenna("B2", tilt_current=4.0, power_current=30.0),
-        ],
+        antenna_ids=[ANTENNA_A_ID, ANTENNA_B_ID],
     )
 
-    first_snapshot, first_hash = service.calculate_content_hash(first.antennas)
-    second_snapshot, second_hash = service.calculate_content_hash(second.antennas)
+    first_snapshot, first_hash = service.calculate_content_hash(first.antenna_ids)
+    second_snapshot, second_hash = service.calculate_content_hash(second.antenna_ids)
 
-    assert [item["id"] for item in first_snapshot] == ["A1", "B2"]
+    assert first_snapshot == [ANTENNA_A_ID, ANTENNA_B_ID]
     assert first_snapshot == second_snapshot
     assert first_hash == second_hash
 
 
-def test_configuration_schema_rejects_duplicate_antenna_ids():
+def test_configuration_schema_rejects_duplicate_inventory_ids():
     with pytest.raises(ValidationError, match="antenna IDs must be unique"):
         NetworkConfigurationCreateRequest(
             scene_id="scene-1",
-            antennas=[antenna("A1"), antenna(" A1 ")],
+            antenna_ids=[ANTENNA_A_ID, ANTENNA_A_ID],
         )
 
 
@@ -161,7 +160,7 @@ def test_create_api_accepts_a_parent_as_a_new_draft(monkeypatch, authenticated_u
         json={
             "scene_id": "scene-1",
             "parent_configuration_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-            "antennas": [antenna(tilt_current=6)],
+            "antenna_ids": [ANTENNA_A_ID],
         },
     )
 

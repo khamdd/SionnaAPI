@@ -20,6 +20,7 @@ from backend.schemas.simulation_profiles import (
     SimulationProfileUpdateRequest,
 )
 from backend.services.coordinate_service import lng_lat_to_scene_position
+from backend.services.network_configuration_service import configuration_antennas
 from backend.services.scene_service import list_scenes
 from backend.services.simulation_store import ensure_scene_reference
 
@@ -502,11 +503,23 @@ def serialize_profile(profile: SimulationProfile) -> dict:
 
 def _enabled_request_antennas(configuration: NetworkConfiguration) -> list[dict]:
     antennas = []
-    for antenna in configuration.antennas_json:
+    resolved = configuration_antennas(configuration)
+    if resolved is None:
+        raise ValueError("Configuration contains an archived or unavailable antenna.")
+    for antenna in resolved:
         if antenna.get("enabled", True) is False:
             continue
         request_antenna = dict(antenna)
-        request_antenna.pop("enabled", None)
+        for metadata_field in (
+            "enabled",
+            "database_id",
+            "status",
+            "created_by",
+            "updated_by",
+            "created_at",
+            "updated_at",
+        ):
+            request_antenna.pop(metadata_field, None)
         antennas.append(request_antenna)
     return antennas
 
@@ -548,9 +561,16 @@ def _resolve_roles(
     if any(not role_id for role_id in role_ids) or len(set(role_ids)) != len(role_ids):
         return _role_failure(label, required_roles)
 
+    resolved = configuration_antennas(configuration)
+    if resolved is None:
+        return _failure(
+            422,
+            f"{label} skipped: one or more configuration antennas are archived or unavailable.",
+            error_code="configuration_antenna_unavailable",
+        )
     antennas_by_id = {
         antenna["id"]: antenna
-        for antenna in configuration.antennas_json
+        for antenna in resolved
         if antenna.get("enabled", True) is not False
     }
     if any(role_id not in antennas_by_id for role_id in role_ids):

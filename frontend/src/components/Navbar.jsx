@@ -8,6 +8,7 @@ import {
 function NavIcon({ path }) {
   const paths = {
     "/network": "M4 16v4m5-8v8m5-13v13m5-17v17M2 20h20",
+    "/antennas": "M12 3v7m0 0a4 4 0 0 0-4 4m4-4a4 4 0 0 1 4 4M8 18h8M6 21h12",
     "/configurations": "M4 5h16M4 12h16M4 19h16M8 3v4m8 3v4M11 17v4",
     "/profiles": "M5 4h14v5H5V4Zm0 11h14v5H5v-5Zm3-3h8M12 9v6",
     "/coverage": "M3 6.5 12 2l9 4.5-9 4.5-9-4.5Zm0 5L12 16l9-4.5M3 16.5 12 21l9-4.5",
@@ -35,9 +36,10 @@ export default function Navbar({
   onNavigate,
   route,
 }) {
-  const visibleRoutes = hasWorkScene
-    ? ROUTES.filter((item) => item.path !== SCENE_SELECTION_ROUTE)
-    : [];
+  const visibleRoutes = ROUTES.filter((item) => (
+    item.path === "/antennas"
+    || (hasWorkScene && item.path !== SCENE_SELECTION_ROUTE)
+  ));
   const simulationRoutes = visibleRoutes.filter((item) => (
     item.path !== "/queue" && item.path !== "/history"
   ));

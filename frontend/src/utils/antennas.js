@@ -19,8 +19,8 @@ export function antennasForActiveScene(scene, sceneAntennaOverrides) {
 
 export function networkCoverageAntennasForScene(
   scene,
-  fixedAntennas,
-  type2AntennasByScene,
+  inventoryAntennas,
+  selectedAntennasByScene,
   settingsByScene,
 ) {
   if (!scene?.id) {
@@ -28,17 +28,18 @@ export function networkCoverageAntennasForScene(
   }
 
   const settings = settingsByScene.get(scene.id) || {};
-  const type1Antennas = fixedAntennas
-    .map((antenna) => applySimulationSettings(antenna, settings[antenna.id], "type1"))
-    .filter(Boolean);
-  const type2Antennas = (type2AntennasByScene.get(scene.id) || [])
-    .map((antenna) => applySimulationSettings(antenna, settings[antenna.id], "type2"))
+  const storedSelection = selectedAntennasByScene.get(scene.id) || [];
+  const selectedIds = new Set(storedSelection);
+  const selectedAntennas = inventoryAntennas
+    .filter((antenna) => selectedIds.has(antenna.database_id || antenna.id))
+    .map((antenna) => applySimulationSettings(
+      antenna,
+      settings[antenna.database_id || antenna.id],
+      "inventory",
+    ))
     .filter(Boolean);
 
-  return [
-    ...type1Antennas,
-    ...type2Antennas,
-  ];
+  return selectedAntennas;
 }
 
 export function applySimulationSettings(antenna, settings = {}, type) {
@@ -50,6 +51,7 @@ export function applySimulationSettings(antenna, settings = {}, type) {
 
   return {
     ...base,
+    ...(antenna.database_id ? { database_id: antenna.database_id } : {}),
     _type: type,
     azimuth: settings.azimuth ?? base.azimuth,
     enabled: settings.enabled ?? true,

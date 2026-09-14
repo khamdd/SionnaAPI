@@ -6,6 +6,11 @@ const ZIP_CENTRAL_DIRECTORY_HEADER = 0x02014b50;
 const ZIP_END_OF_CENTRAL_DIRECTORY = 0x06054b50;
 
 export async function importAntennasFromWorkbook(file) {
+  const rows = await readAntennaWorkbookRows(file);
+  return validateAntennaRows(rows);
+}
+
+async function readAntennaWorkbookRows(file) {
   if (!file) {
     throw new Error("Choose an antenna workbook first.");
   }
@@ -32,16 +37,21 @@ export async function importAntennasFromWorkbook(file) {
   const sharedStrings = entries.has("xl/sharedStrings.xml")
     ? parseSharedStrings(entries.get("xl/sharedStrings.xml"))
     : [];
-  const rows = parseWorksheetRows(
+  return parseWorksheetRows(
     requiredEntry(entries, sheetPath),
     sharedStrings,
   );
-  const antennas = validateAntennaRows(rows);
-
-  return antennas;
 }
 
-function validateAntennaRows(rows) {
+export async function inspectAntennaWorkbook(file) {
+  try {
+    return validateAntennaRows(await readAntennaWorkbookRows(file), true);
+  } catch (error) {
+    return { antennas: [], invalid: [{ error: error.message }] };
+  }
+}
+
+function validateAntennaRows(rows, collectInvalid = false) {
   const headerRow = rows.find((row) => row.some((value) => value !== ""));
 
   if (!headerRow) {
@@ -74,7 +84,20 @@ function validateAntennaRows(rows) {
   }
 
   const seenIds = new Set();
-  const antennas = dataRows.map(({ row, rowNumber }) => {
+  const antennas = [];
+  const invalid = [];
+  for (const { row, rowNumber } of dataRows) {
+    try {
+      antennas.push(validateAntennaRow(row, rowNumber, headerIndexes, seenIds));
+    } catch (error) {
+      if (!collectInvalid) throw error;
+      invalid.push({ row: rowNumber, error: error.message });
+    }
+  }
+  return collectInvalid ? { antennas, invalid } : antennas;
+}
+
+function validateAntennaRow(row, rowNumber, headerIndexes, seenIds) {
     const value = (column) => row[headerIndexes.get(column)] ?? "";
     const id = String(value("antenna_id")).trim();
 
@@ -157,9 +180,6 @@ function validateAntennaRows(rows) {
       tilt,
       tx_power: txPower,
     };
-  });
-
-  return antennas;
 }
 
 function validateRange(range, rowNumber, label) {

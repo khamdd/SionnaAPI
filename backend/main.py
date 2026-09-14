@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from backend.api.antennas import router as antennas_router
 from backend.api.auth import router as auth_router
 from backend.api.configuration_impact import router as configuration_impact_router
 from backend.api.impact_studies import router as impact_studies_router
@@ -72,6 +73,11 @@ app.include_router(
 app.include_router(
     sinr_router,
     prefix="/api/v1"
+)
+
+app.include_router(
+    antennas_router,
+    prefix="/api/v1",
 )
 
 app.include_router(

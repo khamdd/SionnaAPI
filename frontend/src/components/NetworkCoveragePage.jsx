@@ -1,8 +1,9 @@
-import AntennaPanel from "./AntennaPanel";
+import SimulationAntennaPanel from "./SimulationAntennaPanel";
 import MapPanel from "./MapPanel";
 
 export default function NetworkCoveragePage({
   activeScene,
+  antennaPool,
   antennas,
   canvasRef,
   coverageImageUrl,
@@ -62,14 +63,15 @@ export default function NetworkCoveragePage({
             </button>
           </div>
         </div>
-        <AntennaPanel
+        <SimulationAntennaPanel
           activeScene={activeScene}
+          antennaPool={antennaPool}
           antennas={antennas}
           disabled={isRunning || isSceneLoading}
           maxAntennas={maxAntennas}
-          onAddType2={onAddType2Antenna}
+          onAdd={onAddType2Antenna}
           onChange={onUpdateAntenna}
-          onRemoveType2={onRemoveType2Antenna}
+          onRemove={onRemoveType2Antenna}
           showEnabledToggle
         />
       </aside>

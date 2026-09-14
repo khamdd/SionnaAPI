@@ -5,6 +5,7 @@ import localStorageContract from "../../../test/fixtures/refactor/local_storage_
 import {
   enrichScene,
   normalizeStoredAntennaSettings,
+  normalizeStoredAntennaSelections,
   normalizeStoredFixedAntennas,
   normalizeStoredSinrRoles,
   normalizeStoredType2Antennas,
@@ -232,6 +233,13 @@ describe("normalizeStoredType2Antennas", () => {
     expect(
       normalizeStoredType2Antennas([{ id: "bad" }, baseAntenna({ id: "A2" })]),
     ).toEqual([baseAntenna({ id: "A2" })]);
+  });
+});
+
+describe("normalizeStoredAntennaSelections", () => {
+  it("keeps new inventory IDs without migrating legacy antenna objects", () => {
+    expect(normalizeStoredAntennaSelections(["A1", "A1", " A2 "])).toEqual(["A1", "A2"]);
+    expect(normalizeStoredAntennaSelections([baseAntenna()])).toBeNull();
   });
 });
 

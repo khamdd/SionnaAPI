@@ -9,8 +9,8 @@ import {
 import { lngLatBoundsError } from "../utils/scene";
 import {
   normalizeStoredAntennaSettings,
+  normalizeStoredAntennaSelections,
   normalizeStoredSinrRoles,
-  normalizeStoredType2Antennas,
   persistSceneMap,
   readStoredSceneMap,
   removeStoredSceneMapValue,
@@ -154,7 +154,7 @@ export function removeAntennaRoles(storedRoles, antennaId) {
 
 export default function useSceneAntennaDraft({
   activeScene,
-  fixedAntennas,
+  fixedAntennas: inventoryAntennas,
   maxActiveAntennas = null,
   rolesStorageKey = null,
   settingsStorageKey,
@@ -162,8 +162,8 @@ export default function useSceneAntennaDraft({
   supportsEnabled = false,
   type2StorageKey,
 }) {
-  const [type2AntennasByScene, setType2AntennasByScene] = useState(() => (
-    readStoredSceneMap(type2StorageKey, normalizeStoredType2Antennas)
+  const [selectedAntennasByScene, setSelectedAntennasByScene] = useState(() => (
+    readStoredSceneMap(type2StorageKey, normalizeStoredAntennaSelections)
   ));
   const [antennaSettingsByScene, setAntennaSettingsByScene] = useState(() => (
     readStoredSceneMap(settingsStorageKey, normalizeStoredAntennaSettings)
@@ -177,11 +177,11 @@ export default function useSceneAntennaDraft({
   const antennas = useMemo(
     () => networkCoverageAntennasForScene(
       activeScene,
-      fixedAntennas,
-      type2AntennasByScene,
+      inventoryAntennas,
+      selectedAntennasByScene,
       antennaSettingsByScene,
     ),
-    [activeScene, antennaSettingsByScene, fixedAntennas, type2AntennasByScene],
+    [activeScene, antennaSettingsByScene, inventoryAntennas, selectedAntennasByScene],
   );
   const activeAntennas = useMemo(
     () => antennas.filter(isAntennaEnabled),
@@ -197,10 +197,13 @@ export default function useSceneAntennaDraft({
       return;
     }
 
-    const antenna = antennas.find((item) => item.id === antennaId);
+    const antenna = antennas.find((item) => (
+      item.database_id === antennaId || item.id === antennaId
+    ));
     if (!antenna) {
       return;
     }
+    const settingKey = antenna.database_id || antenna.id;
 
     setAntennaSettingsByScene((current) => updateSceneMapDraft(
       settingsStorageKey,
@@ -209,7 +212,7 @@ export default function useSceneAntennaDraft({
       (storedSettings) => updateAntennaSetting(
         storedSettings,
         antenna,
-        antennaId,
+        settingKey,
         field,
         value,
         supportsEnabled,
@@ -218,52 +221,52 @@ export default function useSceneAntennaDraft({
     ));
   }
 
-  function addType2Antenna(antenna) {
-    const validation = validateType2AntennaAddition({
-      activeAntennas,
-      antennas,
-      antenna,
-      maxActiveAntennas,
-      scene: activeScene,
-      simulationLabel,
-    });
-
-    if (validation.error) {
-      return validation;
+  function addAntennas(antennaIds) {
+    if (!activeScene?.id) {
+      return { error: "Select a scene before adding antennas." };
     }
-
-    const { normalized } = validation;
-    setType2AntennasByScene((current) => updateSceneMapDraft(
+    const currentIds = selectedAntennasByScene.get(activeScene.id) || [];
+    const poolById = new Map(inventoryAntennas.map((antenna) => [antenna.database_id || antenna.id, antenna]));
+    const additions = [...new Set(antennaIds)]
+      .filter((antennaId) => poolById.has(antennaId) && !currentIds.includes(antennaId));
+    if (
+      maxActiveAntennas != null
+      && activeAntennas.length + additions.length > maxActiveAntennas
+    ) {
+      return { error: `${simulationLabel} supports up to ${maxActiveAntennas} active antennas.` };
+    }
+    setSelectedAntennasByScene((current) => updateSceneMapDraft(
       type2StorageKey,
       current,
       activeScene.id,
-      (sceneAntennas) => [...(sceneAntennas || []), normalized],
-      normalizeStoredType2Antennas,
+      (sceneAntennas) => [...(sceneAntennas || []), ...additions],
+      normalizeStoredAntennaSelections,
     ));
     setAntennaSettingsByScene((current) => updateSceneMapDraft(
       settingsStorageKey,
       current,
       activeScene.id,
-      (sceneSettings) => ({
-        ...(sceneSettings || {}),
-        [normalized.id]: simulationSettingsForAntenna(normalized),
-      }),
+      (sceneSettings) => additions.reduce((next, antennaId) => ({
+        ...next,
+        [antennaId]: simulationSettingsForAntenna(poolById.get(antennaId)),
+      }), { ...(sceneSettings || {}) }),
       normalizeStoredAntennaSettings,
     ));
     return { ok: true };
   }
 
-  function removeType2Antenna(antennaId) {
+  function removeAntenna(antennaId) {
     if (!activeScene?.id) {
       return;
     }
 
-    setType2AntennasByScene((current) => updateStoredSceneMap(
+    const removedAntenna = antennas.find((item) => (item.database_id || item.id) === antennaId);
+    setSelectedAntennasByScene((current) => updateStoredSceneMap(
       type2StorageKey,
       current,
       activeScene.id,
-      (sceneAntennas) => (sceneAntennas || []).filter((item) => item.id !== antennaId),
-      normalizeStoredType2Antennas,
+      (sceneAntennas) => (sceneAntennas || []).filter((item) => item !== antennaId),
+      normalizeStoredAntennaSelections,
     ));
     setAntennaSettingsByScene((current) => updateStoredSceneMap(
       settingsStorageKey,
@@ -278,7 +281,7 @@ export default function useSceneAntennaDraft({
         rolesStorageKey,
         current,
         activeScene.id,
-        (storedRoles) => removeAntennaRoles(storedRoles, antennaId),
+        (storedRoles) => removeAntennaRoles(storedRoles, removedAntenna?.id || antennaId),
         normalizeStoredSinrRoles,
       ));
     }
@@ -303,7 +306,7 @@ export default function useSceneAntennaDraft({
       return;
     }
 
-    setType2AntennasByScene((current) => (
+    setSelectedAntennasByScene((current) => (
       removeStoredSceneMapValue(type2StorageKey, current, sceneId)
     ));
     setAntennaSettingsByScene((current) => (
@@ -319,10 +322,10 @@ export default function useSceneAntennaDraft({
 
   return {
     activeAntennas,
-    addType2Antenna,
+    addAntennas,
     antennas,
     clear,
-    removeType2Antenna,
+    removeAntenna,
     roleSelection,
     updateAntenna,
     updateRoleSelection,

@@ -18,5 +18,5 @@ export function normalizeRoute(pathname) {
 }
 
 export function isWorkSceneRequiredRoute(pathname) {
-  return pathname !== SCENE_SELECTION_ROUTE && pathname !== SCENE_CREATION_ROUTE;
+  return ![SCENE_SELECTION_ROUTE, SCENE_CREATION_ROUTE, "/antennas"].includes(pathname);
 }
