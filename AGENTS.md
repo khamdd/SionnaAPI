@@ -64,7 +64,8 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   selected GeoJSON boundary as validated scene metadata; the shared 3D preview
   renders that outline across live simulations, queue results, history details,
   and compatible comparisons. Manual drawing, city change, and select-new-area
-  clear the ward overlay.
+  clear the ward overlay and erase a scene name that was auto-filled from a
+  ward and not edited by the user.
 - The frontend flow is scene-first: after login and from `/`, users land on
   `/scenes`, choose an imported scene there, or use Create new scene to open
   `/choose-scene`. Activating or creating a scene moves users into Network

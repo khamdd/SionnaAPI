@@ -60,6 +60,7 @@ export default function SceneChooserPage({
   const [isBusy, setIsBusy] = useState(false);
   const [isControlPanelVisible, setIsControlPanelVisible] = useState(true);
   const selectedWardCodeRef = useRef(null);
+  const autoSceneNameRef = useRef(null);
 
   const metrics = bounds ? calculateMetrics(bounds) : null;
   const antennaDisplayBounds = antennaPlacementBounds;
@@ -394,6 +395,7 @@ export default function SceneChooserPage({
 
     if (!sceneName.trim()) {
       setSceneName(ward.ward_name);
+      autoSceneNameRef.current = ward.ward_name;
     }
 
     setStatus(
@@ -415,6 +417,16 @@ export default function SceneChooserPage({
     antennaMarkersRef.current = [];
   }
 
+  function resetAutoSceneName() {
+    if (autoSceneNameRef.current !== null) {
+      if (sceneName === autoSceneNameRef.current) {
+        setSceneName("");
+        setSceneNameError("");
+      }
+      autoSceneNameRef.current = null;
+    }
+  }
+
   function startSelection() {
     if (isBusy || !isMapReady) {
       return;
@@ -428,6 +440,7 @@ export default function SceneChooserPage({
     clearWardOverlay();
     setWardQuery("");
     setIsWardOptionsOpen(false);
+    resetAutoSceneName();
     setIsSelectingArea(true);
   }
 
@@ -451,6 +464,7 @@ export default function SceneChooserPage({
     clearWardOverlay();
     setWardQuery("");
     setIsWardOptionsOpen(false);
+    resetAutoSceneName();
     setIsSelectingArea(false);
     setError(false);
     setStatus(`Moved map to ${place.name}.`);
@@ -637,6 +651,7 @@ export default function SceneChooserPage({
     clearWardOverlay();
     setWardQuery("");
     setIsWardOptionsOpen(false);
+    resetAutoSceneName();
     setError(false);
     setIsSelectingArea(true);
     setStatus(
@@ -815,6 +830,7 @@ export default function SceneChooserPage({
                   disabled={isBusy}
                   onChange={(event) => {
                     setSceneName(event.target.value);
+                    autoSceneNameRef.current = null;
                     if (event.target.value.trim()) {
                       setSceneNameError("");
                     }
