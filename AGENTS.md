@@ -410,6 +410,9 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 - `backend/services/osm_scene_builder.py`: OSM/Overpass to Sionna scene generation.
 - `frontend/src/App.jsx`: top-level routes, auth state, scene state, simulation
   orchestration, history/comparison orchestration.
+- `frontend/src/hooks/useSceneAntennaDraft.js`: shared scene-scoped antenna draft
+  state for Network Coverage, RSRP, SINR, and Throughput, configured with each
+  page's enabled controls, active limits, role selections, and storage keys.
 - `frontend/src/api.js`: compatibility barrel re-exporting the stable API
   function names; implementations live in the domain clients under
   `frontend/src/api/` (`http.js` shared auth/JSON/error/URL handling, plus

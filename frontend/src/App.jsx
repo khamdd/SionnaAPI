@@ -31,10 +31,6 @@ import {
 import {
   MAX_NETWORK_COVERAGE_ANTENNAS,
   antennasForActiveScene,
-  isAntennaEnabled,
-  networkCoverageAntennasForScene,
-  normalizeAntennaBase,
-  simulationSettingsForAntenna,
   validateNetworkCoverageSimulationAntennas,
 } from "./utils/antennas";
 import {
@@ -56,14 +52,9 @@ import {
 } from "./utils/routes";
 import {
   enrichScene,
-  normalizeStoredAntennaSettings,
-  normalizeStoredSinrRoles,
-  normalizeStoredType2Antennas,
-  readStoredSceneMap,
-  removeStoredSceneMapValue,
   saveSceneFixedAntennas,
-  updateStoredSceneMap,
 } from "./utils/sceneStorage";
+import useSceneAntennaDraft from "./hooks/useSceneAntennaDraft";
 import {
   CoverageApiPage,
   RsrpSimulationPage,
@@ -96,10 +87,7 @@ import {
   drawHeatmap,
   summarizeGrid,
 } from "./utils/map";
-import {
-  lngLatBoundsError,
-  solverForScene,
-} from "./utils/scene";
+import { solverForScene } from "./utils/scene";
 
 const HISTORY_PAGE_LIMIT = 200;
 const JOB_PAGE_LIMIT = 200;
@@ -108,36 +96,6 @@ const MAX_RSRP_SIMULATION_ANTENNAS = 10;
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [route, setRoute] = useState(() => normalizeRoute(window.location.pathname));
-  const [networkType2AntennasByScene, setNetworkType2AntennasByScene] = useState(() => (
-    readStoredSceneMap(NETWORK_TYPE2_ANTENNAS_STORAGE_KEY, normalizeStoredType2Antennas)
-  ));
-  const [networkAntennaSettingsByScene, setNetworkAntennaSettingsByScene] = useState(() => (
-    readStoredSceneMap(NETWORK_ANTENNA_SETTINGS_STORAGE_KEY, normalizeStoredAntennaSettings)
-  ));
-  const [rsrpType2AntennasByScene, setRsrpType2AntennasByScene] = useState(() => (
-    readStoredSceneMap(RSRP_TYPE2_ANTENNAS_STORAGE_KEY, normalizeStoredType2Antennas)
-  ));
-  const [rsrpAntennaSettingsByScene, setRsrpAntennaSettingsByScene] = useState(() => (
-    readStoredSceneMap(RSRP_ANTENNA_SETTINGS_STORAGE_KEY, normalizeStoredAntennaSettings)
-  ));
-  const [sinrType2AntennasByScene, setSinrType2AntennasByScene] = useState(() => (
-    readStoredSceneMap(SINR_TYPE2_ANTENNAS_STORAGE_KEY, normalizeStoredType2Antennas)
-  ));
-  const [sinrAntennaSettingsByScene, setSinrAntennaSettingsByScene] = useState(() => (
-    readStoredSceneMap(SINR_ANTENNA_SETTINGS_STORAGE_KEY, normalizeStoredAntennaSettings)
-  ));
-  const [sinrRoleSelectionsByScene, setSinrRoleSelectionsByScene] = useState(() => (
-    readStoredSceneMap(SINR_ROLE_SELECTION_STORAGE_KEY, normalizeStoredSinrRoles)
-  ));
-  const [throughputType2AntennasByScene, setThroughputType2AntennasByScene] = useState(() => (
-    readStoredSceneMap(THROUGHPUT_TYPE2_ANTENNAS_STORAGE_KEY, normalizeStoredType2Antennas)
-  ));
-  const [throughputAntennaSettingsByScene, setThroughputAntennaSettingsByScene] = useState(() => (
-    readStoredSceneMap(THROUGHPUT_ANTENNA_SETTINGS_STORAGE_KEY, normalizeStoredAntennaSettings)
-  ));
-  const [throughputRoleSelectionsByScene, setThroughputRoleSelectionsByScene] = useState(() => (
-    readStoredSceneMap(THROUGHPUT_ROLE_SELECTION_STORAGE_KEY, normalizeStoredSinrRoles)
-  ));
   const [latestGrid, setLatestGrid] = useState(null);
   const [latestSolver, setLatestSolver] = useState(() => clone(DEFAULT_SOLVER));
   const [networkSolverDraft, setNetworkSolverDraft] = useState(() => clone(DEFAULT_SOLVER));
@@ -183,78 +141,48 @@ export default function App() {
     () => antennasForActiveScene(activeScene, sceneAntennaOverrides),
     [activeScene, sceneAntennaOverrides],
   );
-  const antennas = useMemo(
-    () => networkCoverageAntennasForScene(
-      activeScene,
-      fixedSceneAntennas,
-      networkType2AntennasByScene,
-      networkAntennaSettingsByScene,
-    ),
-    [
-      activeScene,
-      fixedSceneAntennas,
-      networkType2AntennasByScene,
-      networkAntennaSettingsByScene,
-    ],
-  );
-  const activeNetworkAntennas = useMemo(
-    () => antennas.filter(isAntennaEnabled),
-    [antennas],
-  );
-  const rsrpAntennas = useMemo(
-    () => networkCoverageAntennasForScene(
-      activeScene,
-      fixedSceneAntennas,
-      rsrpType2AntennasByScene,
-      rsrpAntennaSettingsByScene,
-    ),
-    [
-      activeScene,
-      fixedSceneAntennas,
-      rsrpType2AntennasByScene,
-      rsrpAntennaSettingsByScene,
-    ],
-  );
-  const activeRsrpAntennas = useMemo(
-    () => rsrpAntennas.filter(isAntennaEnabled),
-    [rsrpAntennas],
-  );
-  const sinrAntennas = useMemo(
-    () => networkCoverageAntennasForScene(
-      activeScene,
-      fixedSceneAntennas,
-      sinrType2AntennasByScene,
-      sinrAntennaSettingsByScene,
-    ),
-    [
-      activeScene,
-      fixedSceneAntennas,
-      sinrType2AntennasByScene,
-      sinrAntennaSettingsByScene,
-    ],
-  );
-  const throughputAntennas = useMemo(
-    () => networkCoverageAntennasForScene(
-      activeScene,
-      fixedSceneAntennas,
-      throughputType2AntennasByScene,
-      throughputAntennaSettingsByScene,
-    ),
-    [
-      activeScene,
-      fixedSceneAntennas,
-      throughputType2AntennasByScene,
-      throughputAntennaSettingsByScene,
-    ],
-  );
-  const sinrRoleSelection = useMemo(
-    () => sinrRoleSelectionsByScene.get(activeScene?.id) || {},
-    [activeScene?.id, sinrRoleSelectionsByScene],
-  );
-  const throughputRoleSelection = useMemo(
-    () => throughputRoleSelectionsByScene.get(activeScene?.id) || {},
-    [activeScene?.id, throughputRoleSelectionsByScene],
-  );
+  const networkDraft = useSceneAntennaDraft({
+    activeScene,
+    fixedAntennas: fixedSceneAntennas,
+    maxActiveAntennas: MAX_NETWORK_COVERAGE_ANTENNAS,
+    settingsStorageKey: NETWORK_ANTENNA_SETTINGS_STORAGE_KEY,
+    simulationLabel: "Network Coverage",
+    supportsEnabled: true,
+    type2StorageKey: NETWORK_TYPE2_ANTENNAS_STORAGE_KEY,
+  });
+  const rsrpDraft = useSceneAntennaDraft({
+    activeScene,
+    fixedAntennas: fixedSceneAntennas,
+    maxActiveAntennas: MAX_RSRP_SIMULATION_ANTENNAS,
+    settingsStorageKey: RSRP_ANTENNA_SETTINGS_STORAGE_KEY,
+    simulationLabel: "RSRP Simulation",
+    supportsEnabled: true,
+    type2StorageKey: RSRP_TYPE2_ANTENNAS_STORAGE_KEY,
+  });
+  const sinrDraft = useSceneAntennaDraft({
+    activeScene,
+    fixedAntennas: fixedSceneAntennas,
+    rolesStorageKey: SINR_ROLE_SELECTION_STORAGE_KEY,
+    settingsStorageKey: SINR_ANTENNA_SETTINGS_STORAGE_KEY,
+    simulationLabel: "SINR",
+    type2StorageKey: SINR_TYPE2_ANTENNAS_STORAGE_KEY,
+  });
+  const throughputDraft = useSceneAntennaDraft({
+    activeScene,
+    fixedAntennas: fixedSceneAntennas,
+    rolesStorageKey: THROUGHPUT_ROLE_SELECTION_STORAGE_KEY,
+    settingsStorageKey: THROUGHPUT_ANTENNA_SETTINGS_STORAGE_KEY,
+    simulationLabel: "Throughput",
+    type2StorageKey: THROUGHPUT_TYPE2_ANTENNAS_STORAGE_KEY,
+  });
+  const antennas = networkDraft.antennas;
+  const activeNetworkAntennas = networkDraft.activeAntennas;
+  const rsrpAntennas = rsrpDraft.antennas;
+  const activeRsrpAntennas = rsrpDraft.activeAntennas;
+  const sinrAntennas = sinrDraft.antennas;
+  const sinrRoleSelection = sinrDraft.roleSelection;
+  const throughputAntennas = throughputDraft.antennas;
+  const throughputRoleSelection = throughputDraft.roleSelection;
 
   function authenticate(authResult) {
     localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authResult.access_token);
@@ -616,99 +544,15 @@ export default function App() {
   }
 
   function updateAntenna(antennaId, field, value) {
-    if (!activeScene?.id) {
-      return;
-    }
-
-    if (value === "") {
-      return;
-    }
-
-    const antenna = antennas.find((item) => item.id === antennaId);
-    if (!antenna) {
-      return;
-    }
-
-    setNetworkAntennaSettingsByScene((current) => {
-      return updateStoredSceneMap(
-        NETWORK_ANTENNA_SETTINGS_STORAGE_KEY,
-        current,
-        activeScene.id,
-        (storedSettings) => {
-          const sceneSettings = { ...(storedSettings || {}) };
-          const currentSetting = {
-            ...simulationSettingsForAntenna(antenna),
-            ...(sceneSettings[antennaId] || {}),
-          };
-
-          if (field === "tilt") {
-            currentSetting.tilt_current = value;
-          } else if (field === "tx_power") {
-            currentSetting.tx_power_current = value;
-          } else if (field === "azimuth") {
-            currentSetting.azimuth = value;
-          } else if (field === "enabled") {
-            currentSetting.enabled = Boolean(value);
-          }
-
-          sceneSettings[antennaId] = currentSetting;
-          return sceneSettings;
-        },
-        normalizeStoredAntennaSettings,
-      );
-    });
+    networkDraft.updateAntenna(antennaId, field, value);
   }
 
   function addType2Antenna(antenna) {
-    if (!activeScene?.id) {
-      return { error: "Select a scene before adding an antenna." };
+    const result = networkDraft.addType2Antenna(antenna);
+    if (result.ok) {
+      clearLatestNetworkResult();
     }
-
-    if (activeNetworkAntennas.length >= MAX_NETWORK_COVERAGE_ANTENNAS) {
-      return { error: `Network Coverage supports up to ${MAX_NETWORK_COVERAGE_ANTENNAS} active antennas. Uncheck one antenna before adding another.` };
-    }
-
-    const normalized = normalizeAntennaBase(antenna);
-    if (!normalized) {
-      return { error: "Antenna base config is incomplete." };
-    }
-
-    const coordinateError = lngLatBoundsError(
-      normalized,
-      activeScene.bounds,
-      "Type 2 antenna coordinates",
-    );
-    if (coordinateError) {
-      return { error: coordinateError };
-    }
-
-    if (antennas.some((item) => item.id.toLowerCase() === normalized.id.toLowerCase())) {
-      return { error: `antenna_id "${normalized.id}" is already used.` };
-    }
-
-    setNetworkType2AntennasByScene((current) => {
-      return updateStoredSceneMap(
-        NETWORK_TYPE2_ANTENNAS_STORAGE_KEY,
-        current,
-        activeScene.id,
-        (sceneAntennas) => [...(sceneAntennas || []), normalized],
-        normalizeStoredType2Antennas,
-      );
-    });
-    setNetworkAntennaSettingsByScene((current) => {
-      return updateStoredSceneMap(
-        NETWORK_ANTENNA_SETTINGS_STORAGE_KEY,
-        current,
-        activeScene.id,
-        (sceneSettings) => ({
-          ...(sceneSettings || {}),
-          [normalized.id]: simulationSettingsForAntenna(normalized),
-        }),
-        normalizeStoredAntennaSettings,
-      );
-    });
-    clearLatestNetworkResult();
-    return { ok: true };
+    return result;
   }
 
   function removeType2Antenna(antennaId) {
@@ -722,120 +566,16 @@ export default function App() {
       return;
     }
 
-    setNetworkType2AntennasByScene((current) => {
-      return updateStoredSceneMap(
-        NETWORK_TYPE2_ANTENNAS_STORAGE_KEY,
-        current,
-        activeScene.id,
-        (sceneAntennas) => (sceneAntennas || []).filter((item) => item.id !== antennaId),
-        normalizeStoredType2Antennas,
-      );
-    });
-    setNetworkAntennaSettingsByScene((current) => {
-      return updateStoredSceneMap(
-        NETWORK_ANTENNA_SETTINGS_STORAGE_KEY,
-        current,
-        activeScene.id,
-        (storedSettings) => {
-          const sceneSettings = { ...(storedSettings || {}) };
-          delete sceneSettings[antennaId];
-          return sceneSettings;
-        },
-        normalizeStoredAntennaSettings,
-      );
-    });
+    networkDraft.removeType2Antenna(antennaId);
     clearLatestNetworkResult();
   }
 
   function updateRsrpAntenna(antennaId, field, value) {
-    if (!activeScene?.id || value === "") {
-      return;
-    }
-
-    const antenna = rsrpAntennas.find((item) => item.id === antennaId);
-    if (!antenna) {
-      return;
-    }
-
-    setRsrpAntennaSettingsByScene((current) => {
-      return updateStoredSceneMap(
-        RSRP_ANTENNA_SETTINGS_STORAGE_KEY,
-        current,
-        activeScene.id,
-        (storedSettings) => {
-          const sceneSettings = { ...(storedSettings || {}) };
-          const currentSetting = {
-            ...simulationSettingsForAntenna(antenna),
-            ...(sceneSettings[antennaId] || {}),
-          };
-
-          if (field === "tilt") {
-            currentSetting.tilt_current = value;
-          } else if (field === "tx_power") {
-            currentSetting.tx_power_current = value;
-          } else if (field === "azimuth") {
-            currentSetting.azimuth = value;
-          } else if (field === "enabled") {
-            currentSetting.enabled = Boolean(value);
-          }
-
-          sceneSettings[antennaId] = currentSetting;
-          return sceneSettings;
-        },
-        normalizeStoredAntennaSettings,
-      );
-    });
+    rsrpDraft.updateAntenna(antennaId, field, value);
   }
 
   function addRsrpType2Antenna(antenna) {
-    if (!activeScene?.id) {
-      return { error: "Select a scene before adding an antenna." };
-    }
-
-    if (activeRsrpAntennas.length >= MAX_RSRP_SIMULATION_ANTENNAS) {
-      return { error: `RSRP Simulation supports up to ${MAX_RSRP_SIMULATION_ANTENNAS} active antennas. Uncheck one antenna before adding another.` };
-    }
-
-    const normalized = normalizeAntennaBase(antenna);
-    if (!normalized) {
-      return { error: "Antenna base config is incomplete." };
-    }
-
-    const coordinateError = lngLatBoundsError(
-      normalized,
-      activeScene.bounds,
-      "Type 2 antenna coordinates",
-    );
-    if (coordinateError) {
-      return { error: coordinateError };
-    }
-
-    if (rsrpAntennas.some((item) => item.id.toLowerCase() === normalized.id.toLowerCase())) {
-      return { error: `antenna_id "${normalized.id}" is already used.` };
-    }
-
-    setRsrpType2AntennasByScene((current) => {
-      return updateStoredSceneMap(
-        RSRP_TYPE2_ANTENNAS_STORAGE_KEY,
-        current,
-        activeScene.id,
-        (sceneAntennas) => [...(sceneAntennas || []), normalized],
-        normalizeStoredType2Antennas,
-      );
-    });
-    setRsrpAntennaSettingsByScene((current) => {
-      return updateStoredSceneMap(
-        RSRP_ANTENNA_SETTINGS_STORAGE_KEY,
-        current,
-        activeScene.id,
-        (sceneSettings) => ({
-          ...(sceneSettings || {}),
-          [normalized.id]: simulationSettingsForAntenna(normalized),
-        }),
-        normalizeStoredAntennaSettings,
-      );
-    });
-    return { ok: true };
+    return rsrpDraft.addType2Antenna(antenna);
   }
 
   function removeRsrpType2Antenna(antennaId) {
@@ -849,113 +589,15 @@ export default function App() {
       return;
     }
 
-    setRsrpType2AntennasByScene((current) => {
-      return updateStoredSceneMap(
-        RSRP_TYPE2_ANTENNAS_STORAGE_KEY,
-        current,
-        activeScene.id,
-        (sceneAntennas) => (sceneAntennas || []).filter((item) => item.id !== antennaId),
-        normalizeStoredType2Antennas,
-      );
-    });
-    setRsrpAntennaSettingsByScene((current) => {
-      return updateStoredSceneMap(
-        RSRP_ANTENNA_SETTINGS_STORAGE_KEY,
-        current,
-        activeScene.id,
-        (storedSettings) => {
-          const sceneSettings = { ...(storedSettings || {}) };
-          delete sceneSettings[antennaId];
-          return sceneSettings;
-        },
-        normalizeStoredAntennaSettings,
-      );
-    });
+    rsrpDraft.removeType2Antenna(antennaId);
   }
 
   function updateSinrAntenna(antennaId, field, value) {
-    if (!activeScene?.id || value === "") {
-      return;
-    }
-
-    const antenna = sinrAntennas.find((item) => item.id === antennaId);
-    if (!antenna) {
-      return;
-    }
-
-    setSinrAntennaSettingsByScene((current) => {
-      return updateStoredSceneMap(
-        SINR_ANTENNA_SETTINGS_STORAGE_KEY,
-        current,
-        activeScene.id,
-        (storedSettings) => {
-          const sceneSettings = { ...(storedSettings || {}) };
-          const currentSetting = {
-            ...simulationSettingsForAntenna(antenna),
-            ...(sceneSettings[antennaId] || {}),
-          };
-
-          if (field === "tilt") {
-            currentSetting.tilt_current = value;
-          } else if (field === "tx_power") {
-            currentSetting.tx_power_current = value;
-          } else if (field === "azimuth") {
-            currentSetting.azimuth = value;
-          }
-
-          sceneSettings[antennaId] = currentSetting;
-          return sceneSettings;
-        },
-        normalizeStoredAntennaSettings,
-      );
-    });
+    sinrDraft.updateAntenna(antennaId, field, value);
   }
 
   function addSinrType2Antenna(antenna) {
-    if (!activeScene?.id) {
-      return { error: "Select a scene before adding an antenna." };
-    }
-
-    const normalized = normalizeAntennaBase(antenna);
-    if (!normalized) {
-      return { error: "Antenna base config is incomplete." };
-    }
-
-    const coordinateError = lngLatBoundsError(
-      normalized,
-      activeScene.bounds,
-      "Type 2 antenna coordinates",
-    );
-    if (coordinateError) {
-      return { error: coordinateError };
-    }
-
-    if (sinrAntennas.some((item) => item.id.toLowerCase() === normalized.id.toLowerCase())) {
-      return { error: `antenna_id "${normalized.id}" is already used.` };
-    }
-
-    setSinrType2AntennasByScene((current) => {
-      return updateStoredSceneMap(
-        SINR_TYPE2_ANTENNAS_STORAGE_KEY,
-        current,
-        activeScene.id,
-        (sceneAntennas) => [...(sceneAntennas || []), normalized],
-        normalizeStoredType2Antennas,
-      );
-    });
-    setSinrAntennaSettingsByScene((current) => {
-      return updateStoredSceneMap(
-        SINR_ANTENNA_SETTINGS_STORAGE_KEY,
-        current,
-        activeScene.id,
-        (sceneSettings) => ({
-          ...(sceneSettings || {}),
-          [normalized.id]: simulationSettingsForAntenna(normalized),
-        }),
-        normalizeStoredAntennaSettings,
-      );
-    });
-    return { ok: true };
+    return sinrDraft.addType2Antenna(antenna);
   }
 
   function removeSinrType2Antenna(antennaId) {
@@ -969,148 +611,19 @@ export default function App() {
       return;
     }
 
-    setSinrType2AntennasByScene((current) => {
-      return updateStoredSceneMap(
-        SINR_TYPE2_ANTENNAS_STORAGE_KEY,
-        current,
-        activeScene.id,
-        (sceneAntennas) => (sceneAntennas || []).filter((item) => item.id !== antennaId),
-        normalizeStoredType2Antennas,
-      );
-    });
-    setSinrAntennaSettingsByScene((current) => {
-      return updateStoredSceneMap(
-        SINR_ANTENNA_SETTINGS_STORAGE_KEY,
-        current,
-        activeScene.id,
-        (storedSettings) => {
-          const sceneSettings = { ...(storedSettings || {}) };
-          delete sceneSettings[antennaId];
-          return sceneSettings;
-        },
-        normalizeStoredAntennaSettings,
-      );
-    });
-    setSinrRoleSelectionsByScene((current) => {
-      return updateStoredSceneMap(
-        SINR_ROLE_SELECTION_STORAGE_KEY,
-        current,
-        activeScene.id,
-        (storedRoles) => {
-          const roles = { ...(storedRoles || {}) };
-
-          for (const [role, selectedId] of Object.entries(roles)) {
-            if (selectedId === antennaId) {
-              roles[role] = "";
-            }
-          }
-
-          return roles;
-        },
-        normalizeStoredSinrRoles,
-      );
-    });
+    sinrDraft.removeType2Antenna(antennaId);
   }
 
   function updateSinrRoleSelection(nextRoles) {
-    if (!activeScene?.id) {
-      return;
-    }
-
-    setSinrRoleSelectionsByScene((current) => {
-      return updateStoredSceneMap(
-        SINR_ROLE_SELECTION_STORAGE_KEY,
-        current,
-        activeScene.id,
-        nextRoles,
-        normalizeStoredSinrRoles,
-      );
-    });
+    sinrDraft.updateRoleSelection(nextRoles);
   }
 
   function updateThroughputAntenna(antennaId, field, value) {
-    if (!activeScene?.id || value === "") {
-      return;
-    }
-
-    const antenna = throughputAntennas.find((item) => item.id === antennaId);
-    if (!antenna) {
-      return;
-    }
-
-    setThroughputAntennaSettingsByScene((current) => {
-      return updateStoredSceneMap(
-        THROUGHPUT_ANTENNA_SETTINGS_STORAGE_KEY,
-        current,
-        activeScene.id,
-        (storedSettings) => {
-          const sceneSettings = { ...(storedSettings || {}) };
-          const currentSetting = {
-            ...simulationSettingsForAntenna(antenna),
-            ...(sceneSettings[antennaId] || {}),
-          };
-
-          if (field === "tilt") {
-            currentSetting.tilt_current = value;
-          } else if (field === "tx_power") {
-            currentSetting.tx_power_current = value;
-          } else if (field === "azimuth") {
-            currentSetting.azimuth = value;
-          }
-
-          sceneSettings[antennaId] = currentSetting;
-          return sceneSettings;
-        },
-        normalizeStoredAntennaSettings,
-      );
-    });
+    throughputDraft.updateAntenna(antennaId, field, value);
   }
 
   function addThroughputType2Antenna(antenna) {
-    if (!activeScene?.id) {
-      return { error: "Select a scene before adding an antenna." };
-    }
-
-    const normalized = normalizeAntennaBase(antenna);
-    if (!normalized) {
-      return { error: "Antenna base config is incomplete." };
-    }
-
-    const coordinateError = lngLatBoundsError(
-      normalized,
-      activeScene.bounds,
-      "Type 2 antenna coordinates",
-    );
-    if (coordinateError) {
-      return { error: coordinateError };
-    }
-
-    if (throughputAntennas.some((item) => item.id.toLowerCase() === normalized.id.toLowerCase())) {
-      return { error: `antenna_id "${normalized.id}" is already used.` };
-    }
-
-    setThroughputType2AntennasByScene((current) => {
-      return updateStoredSceneMap(
-        THROUGHPUT_TYPE2_ANTENNAS_STORAGE_KEY,
-        current,
-        activeScene.id,
-        (sceneAntennas) => [...(sceneAntennas || []), normalized],
-        normalizeStoredType2Antennas,
-      );
-    });
-    setThroughputAntennaSettingsByScene((current) => {
-      return updateStoredSceneMap(
-        THROUGHPUT_ANTENNA_SETTINGS_STORAGE_KEY,
-        current,
-        activeScene.id,
-        (sceneSettings) => ({
-          ...(sceneSettings || {}),
-          [normalized.id]: simulationSettingsForAntenna(normalized),
-        }),
-        normalizeStoredAntennaSettings,
-      );
-    });
-    return { ok: true };
+    return throughputDraft.addType2Antenna(antenna);
   }
 
   function removeThroughputType2Antenna(antennaId) {
@@ -1124,79 +637,27 @@ export default function App() {
       return;
     }
 
-    setThroughputType2AntennasByScene((current) => {
-      return updateStoredSceneMap(
-        THROUGHPUT_TYPE2_ANTENNAS_STORAGE_KEY,
-        current,
-        activeScene.id,
-        (sceneAntennas) => (sceneAntennas || []).filter((item) => item.id !== antennaId),
-        normalizeStoredType2Antennas,
-      );
-    });
-    setThroughputAntennaSettingsByScene((current) => {
-      return updateStoredSceneMap(
-        THROUGHPUT_ANTENNA_SETTINGS_STORAGE_KEY,
-        current,
-        activeScene.id,
-        (storedSettings) => {
-          const sceneSettings = { ...(storedSettings || {}) };
-          delete sceneSettings[antennaId];
-          return sceneSettings;
-        },
-        normalizeStoredAntennaSettings,
-      );
-    });
-    setThroughputRoleSelectionsByScene((current) => {
-      return updateStoredSceneMap(
-        THROUGHPUT_ROLE_SELECTION_STORAGE_KEY,
-        current,
-        activeScene.id,
-        (storedRoles) => {
-          const roles = { ...(storedRoles || {}) };
-
-          for (const [role, selectedId] of Object.entries(roles)) {
-            if (selectedId === antennaId) {
-              roles[role] = "";
-            }
-          }
-
-          return roles;
-        },
-        normalizeStoredSinrRoles,
-      );
-    });
+    throughputDraft.removeType2Antenna(antennaId);
   }
 
   function updateThroughputRoleSelection(nextRoles) {
-    if (!activeScene?.id) {
-      return;
-    }
-
-    setThroughputRoleSelectionsByScene((current) => {
-      return updateStoredSceneMap(
-        THROUGHPUT_ROLE_SELECTION_STORAGE_KEY,
-        current,
-        activeScene.id,
-        nextRoles,
-        normalizeStoredSinrRoles,
-      );
-    });
+    throughputDraft.updateRoleSelection(nextRoles);
   }
 
   function resetRsrpAntennas() {
-    clearRsrpDraft(activeScene?.id);
+    rsrpDraft.clear();
   }
 
   function resetSinrAntennas() {
-    clearSinrDraft(activeScene?.id);
+    sinrDraft.clear();
   }
 
   function resetThroughputAntennas() {
-    clearThroughputDraft(activeScene?.id);
+    throughputDraft.clear();
   }
 
   function resetAntennas() {
-    clearNetworkCoverageDraft(activeScene?.id);
+    networkDraft.clear();
     clearLatestNetworkResult();
   }
 
@@ -1207,64 +668,6 @@ export default function App() {
     setHover(null);
     setRunStatus("Ready");
     setRunError(false);
-  }
-
-  function clearNetworkCoverageDraft(sceneId) {
-    if (!sceneId) {
-      return;
-    }
-
-    setNetworkType2AntennasByScene((current) => {
-      return removeStoredSceneMapValue(NETWORK_TYPE2_ANTENNAS_STORAGE_KEY, current, sceneId);
-    });
-    setNetworkAntennaSettingsByScene((current) => {
-      return removeStoredSceneMapValue(NETWORK_ANTENNA_SETTINGS_STORAGE_KEY, current, sceneId);
-    });
-  }
-
-  function clearRsrpDraft(sceneId) {
-    if (!sceneId) {
-      return;
-    }
-
-    setRsrpType2AntennasByScene((current) => {
-      return removeStoredSceneMapValue(RSRP_TYPE2_ANTENNAS_STORAGE_KEY, current, sceneId);
-    });
-    setRsrpAntennaSettingsByScene((current) => {
-      return removeStoredSceneMapValue(RSRP_ANTENNA_SETTINGS_STORAGE_KEY, current, sceneId);
-    });
-  }
-
-  function clearSinrDraft(sceneId) {
-    if (!sceneId) {
-      return;
-    }
-
-    setSinrType2AntennasByScene((current) => {
-      return removeStoredSceneMapValue(SINR_TYPE2_ANTENNAS_STORAGE_KEY, current, sceneId);
-    });
-    setSinrAntennaSettingsByScene((current) => {
-      return removeStoredSceneMapValue(SINR_ANTENNA_SETTINGS_STORAGE_KEY, current, sceneId);
-    });
-    setSinrRoleSelectionsByScene((current) => {
-      return removeStoredSceneMapValue(SINR_ROLE_SELECTION_STORAGE_KEY, current, sceneId);
-    });
-  }
-
-  function clearThroughputDraft(sceneId) {
-    if (!sceneId) {
-      return;
-    }
-
-    setThroughputType2AntennasByScene((current) => {
-      return removeStoredSceneMapValue(THROUGHPUT_TYPE2_ANTENNAS_STORAGE_KEY, current, sceneId);
-    });
-    setThroughputAntennaSettingsByScene((current) => {
-      return removeStoredSceneMapValue(THROUGHPUT_ANTENNA_SETTINGS_STORAGE_KEY, current, sceneId);
-    });
-    setThroughputRoleSelectionsByScene((current) => {
-      return removeStoredSceneMapValue(THROUGHPUT_ROLE_SELECTION_STORAGE_KEY, current, sceneId);
-    });
   }
 
   function toggleComparisonSelection(item) {
@@ -1327,10 +730,10 @@ export default function App() {
       return;
     }
 
-    clearNetworkCoverageDraft(activeScene?.id);
-    clearRsrpDraft(activeScene?.id);
-    clearSinrDraft(activeScene?.id);
-    clearThroughputDraft(activeScene?.id);
+    networkDraft.clear(activeScene?.id);
+    rsrpDraft.clear(activeScene?.id);
+    sinrDraft.clear(activeScene?.id);
+    throughputDraft.clear(activeScene?.id);
     setHasWorkScene(false);
     setActiveScene(null);
     setLatestSolver(clone(DEFAULT_SOLVER));
