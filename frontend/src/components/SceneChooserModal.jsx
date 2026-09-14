@@ -768,6 +768,20 @@ export default function SceneChooserPage({
 
           {!isPreviewing && (
             <div className="scene-page-form">
+              <label className="scene-city-field">
+                <span>Location</span>
+                <select
+                  value={selectedCityId}
+                  disabled={isBusy || !isMapReady}
+                  onChange={selectCity}
+                >
+                  {OFFLINE_VIETNAM_PLACES.map((place) => (
+                    <option key={place.place_id} value={place.place_id}>
+                      {place.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <div className="scene-ward-field">
                 <label htmlFor="scene-ward-search">
                   Ward search (Hà Nội)
@@ -805,20 +819,6 @@ export default function SceneChooserPage({
                   </ul>
                 )}
               </div>
-              <label className="scene-city-field">
-                <span>Location</span>
-                <select
-                  value={selectedCityId}
-                  disabled={isBusy || !isMapReady}
-                  onChange={selectCity}
-                >
-                  {OFFLINE_VIETNAM_PLACES.map((place) => (
-                    <option key={place.place_id} value={place.place_id}>
-                      {place.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
               <label className="scene-name-field">
                 <span>Scene name</span>
                 <input
