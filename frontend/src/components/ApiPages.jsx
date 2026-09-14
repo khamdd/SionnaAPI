@@ -147,58 +147,77 @@ export function CoverageApiPage({ activeScene, antennas = EMPTY_ARRAY, onProgres
     }));
   }
 
+  const isQueued = resultState.result?.status === "queued";
+
   return (
-    <ApiPageShell
-      layout="workspace"
-      workspaceAction={(
-        <button
-          className="primary-button"
-          type="submit"
-          form="coverage-api-form"
-          disabled={resultState.loading || !sceneStatus.isSceneReady || !positionValidation.isValid}
-        >
-          {runButtonLabel(resultState.loading, sceneStatus.isSceneReady, positionValidation.isValid, "Run coverage")}
-        </button>
-      )}
-      title="Coverage API"
-      description="Render a single-transmitter coverage map for a selected transmitter position, tilt, and power."
-      renderPreview={() => (
-        <ApiScenePreview
-          activeScene={activeScene}
-          antennas={selectedTransmitterAntennas}
-          isSceneReady={sceneStatus.isSceneReady}
-          onSceneLoadingChange={sceneStatus.handleSceneLoadingChange}
-        />
-      )}
-      onQueueOpen={onQueueOpen}
-      resultState={resultState}
-      renderResult={(result) => (
-        <CoverageResult
-          activeScene={activeScene}
-          onSceneLoadingChange={sceneStatus.handleSceneLoadingChange}
-          result={result}
-        />
-      )}
-    >
-      <form id="coverage-api-form" className="api-form" onSubmit={submit}>
-        <fieldset className="api-form-lock" disabled={resultState.loading}>
-          <FormSection title="Transmitter">
-            <SimulationAntennaPanel
-              antennaPool={fixedAntennas}
-              antennas={selectedTransmitterAntennas}
-              maxAntennas={1}
-              onAdd={(antennaIds) => selectCoverageInventoryAntenna(setForm, form, fixedAntennas, antennaIds)}
-              onChange={(_antennaId, field, value) => updateForm(setForm, field, value)}
-              onRemove={() => updateForm(setForm, "selected_antenna_id", "")}
-              simulationLabel="Coverage API"
-            />
-            {positionValidation.errors.transmitter_position && <small className="field-error">{positionValidation.errors.transmitter_position}</small>}
-            {azimuthError && <small className="field-error">{azimuthError}</small>}
-          </FormSection>
-          <SolverFields solver={sceneSolver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
-        </fieldset>
-      </form>
-    </ApiPageShell>
+    <main className="app-shell api-workspace-shell coverage-page">
+      <section className="map-panel api-workspace-result" aria-label="Coverage API result">
+        <div className="topbar">
+          <div>
+            <h1>Coverage API</h1>
+            <p id="run-status">Render a single-transmitter coverage map for a selected transmitter position, tilt, and power.</p>
+          </div>
+          <button
+            className="primary-button"
+            type="submit"
+            form="coverage-api-form"
+            disabled={resultState.loading || !sceneStatus.isSceneReady || !positionValidation.isValid}
+          >
+            {runButtonLabel(resultState.loading, sceneStatus.isSceneReady, positionValidation.isValid, "Run coverage")}
+          </button>
+        </div>
+        <div className="api-workspace-stage">
+          {resultState.error && <p className="history-status error-text">{resultState.error}</p>}
+          {!resultState.error && resultState.loading && <p className="history-status">Waiting for backend...</p>}
+          {!resultState.error && isQueued && <QueueNotice result={resultState.result} onQueueOpen={onQueueOpen} />}
+          <div className="result-summary">
+            {!resultState.error && !resultState.result && (
+              <ApiScenePreview
+                activeScene={activeScene}
+                antennas={selectedTransmitterAntennas}
+                isSceneReady={sceneStatus.isSceneReady}
+                onSceneLoadingChange={sceneStatus.handleSceneLoadingChange}
+              />
+            )}
+            {!resultState.error && resultState.result && !isQueued && (
+              <CoverageResult
+                activeScene={activeScene}
+                onSceneLoadingChange={sceneStatus.handleSceneLoadingChange}
+                result={resultState.result}
+              />
+            )}
+            <form id="coverage-api-form" className="api-form api-scene-setup-form" onSubmit={submit}>
+              <fieldset className="api-form-lock" disabled={resultState.loading}>
+                <SolverFields solver={sceneSolver} onChange={(solver) => updateForm(setForm, "solver", solver)} />
+              </fieldset>
+            </form>
+          </div>
+        </div>
+      </section>
+      <aside className="control-panel api-workspace-controls" aria-label="Coverage API controls">
+        <div className="panel-header">
+          <h2>Transmitter</h2>
+        </div>
+        <div className="api-workspace-form">
+          <div className="api-form">
+            <FormSection title="Transmitter">
+              <SimulationAntennaPanel
+                antennaPool={fixedAntennas}
+                antennas={selectedTransmitterAntennas}
+                disabled={resultState.loading}
+                maxAntennas={1}
+                onAdd={(antennaIds) => selectCoverageInventoryAntenna(setForm, form, fixedAntennas, antennaIds)}
+                onChange={(_antennaId, field, value) => updateForm(setForm, field, value)}
+                onRemove={() => updateForm(setForm, "selected_antenna_id", "")}
+                simulationLabel="Coverage API"
+              />
+              {positionValidation.errors.transmitter_position && <small className="field-error">{positionValidation.errors.transmitter_position}</small>}
+              {azimuthError && <small className="field-error">{azimuthError}</small>}
+            </FormSection>
+          </div>
+        </div>
+      </aside>
+    </main>
   );
 }
 
@@ -1135,79 +1154,6 @@ function suggestUserCount(solver) {
       250,
       estimated,
     ),
-  );
-}
-
-function ApiPageShell({
-  children,
-  description,
-  layout = "standard",
-  onQueueOpen,
-  renderPreview,
-  renderResult,
-  resultState,
-  title,
-  workspaceAction = null,
-}) {
-  const isQueued = resultState.result?.status === "queued";
-
-  if (layout === "workspace") {
-    return (
-      <main className="app-shell api-workspace-shell">
-        <section className="map-panel api-workspace-result" aria-label={`${title} result`}>
-          <div className="topbar">
-            <div>
-              <h1>{title}</h1>
-              <p id="run-status">{description}</p>
-            </div>
-            {workspaceAction}
-          </div>
-          <div className="api-workspace-stage">
-            {resultState.error && <p className="history-status error-text">{resultState.error}</p>}
-            {!resultState.error && resultState.loading && <p className="history-status">Waiting for backend...</p>}
-            {!resultState.error && !resultState.result && renderPreview?.()}
-            {!resultState.error && isQueued && <QueueNotice result={resultState.result} onQueueOpen={onQueueOpen} />}
-            {!resultState.error && resultState.result && !isQueued && renderResult(resultState.result)}
-          </div>
-        </section>
-        <aside className="control-panel api-workspace-controls" aria-label={`${title} controls`}>
-          <div className="panel-header">
-            <h2>Controls</h2>
-          </div>
-          <div className="api-workspace-form">
-            {children}
-          </div>
-        </aside>
-      </main>
-    );
-  }
-
-  return (
-    <section className={[
-      "api-page",
-      layout === "result-wide" ? "api-page-result-wide" : "",
-    ].filter(Boolean).join(" ")}>
-      <div className="page-title">
-        <h1>{title}</h1>
-        <p>{description}</p>
-      </div>
-      <div className={[
-        "api-layout",
-        layout === "result-wide" ? "api-layout-result-wide" : "",
-      ].filter(Boolean).join(" ")}>
-        <div className="api-panel">
-          {children}
-        </div>
-        <div className="api-result-panel">
-          <h2>Result</h2>
-          {resultState.error && <p className="history-status error-text">{resultState.error}</p>}
-          {!resultState.error && resultState.loading && <p className="history-status">Waiting for backend...</p>}
-          {!resultState.error && !resultState.result && renderPreview?.()}
-          {!resultState.error && isQueued && <QueueNotice result={resultState.result} onQueueOpen={onQueueOpen} />}
-          {!resultState.error && resultState.result && !isQueued && renderResult(resultState.result)}
-        </div>
-      </div>
-    </section>
   );
 }
 
