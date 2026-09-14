@@ -37,8 +37,7 @@ export default function Navbar({
   route,
 }) {
   const visibleRoutes = ROUTES.filter((item) => (
-    item.path === "/antennas"
-    || (hasWorkScene && item.path !== SCENE_SELECTION_ROUTE)
+    hasWorkScene && item.path !== SCENE_SELECTION_ROUTE
   ));
   const simulationRoutes = visibleRoutes.filter((item) => (
     item.path !== "/queue" && item.path !== "/history"

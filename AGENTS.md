@@ -72,7 +72,9 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   Coverage with that scene as the shared simulation context. If no scenes exist,
   the selector shows "No scene found."
 - Simulation/history routes are gated until the user explicitly chooses or
-  creates a work scene in the current session. The top navbar does not expose
+  creates a work scene in the current session. The `/antennas` inventory tab is
+  gated the same way and only appears in the Planning tools sidebar after a work
+  scene is selected. The top navbar does not expose
   Scenes as a normal tab; users return there from the username dropdown's Change
   scene action, and direct simulation URLs redirect back to `/scenes` when no
   work scene is selected.

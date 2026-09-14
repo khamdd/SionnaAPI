@@ -60,6 +60,10 @@ describe("isWorkSceneRequiredRoute", () => {
     expect(isWorkSceneRequiredRoute("/history")).toBe(true);
   });
 
+  it("requires a work scene for the antennas inventory", () => {
+    expect(isWorkSceneRequiredRoute("/antennas")).toBe(true);
+  });
+
   it("requires a work scene for unknown and root paths", () => {
     expect(isWorkSceneRequiredRoute("/")).toBe(true);
     expect(isWorkSceneRequiredRoute("/unknown")).toBe(true);
