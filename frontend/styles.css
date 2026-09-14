@@ -15,6 +15,7 @@
 .antenna-inventory-page {
   display: grid;
   gap: 18px;
+  align-content: start;
 }
 
 .antenna-inventory-toolbar {
@@ -35,6 +36,7 @@
 
 .antenna-inventory-toolbar select {
   justify-self: center;
+  width: 160px;
 }
 
 .antenna-toolbar-actions {
@@ -46,6 +48,8 @@
 }
 
 .antenna-toolbar-actions span {
+  min-width: 72px;
+  text-align: right;
   color: var(--muted);
   font-size: 13px;
 }
