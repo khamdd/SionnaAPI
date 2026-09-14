@@ -1233,6 +1233,11 @@ export default function App() {
     }
   }, []);
 
+  const networkSolver = useMemo(
+    () => solverForScene(activeScene, networkSolverDraft),
+    [activeScene, networkSolverDraft],
+  );
+
   const modalProgressLabel = modalContent
     ? jobProgressLabel
       || historyProgressLabel
@@ -1303,7 +1308,7 @@ export default function App() {
           maxAntennas={MAX_NETWORK_COVERAGE_ANTENNAS}
           runError={runError}
           runStatus={runStatus}
-          solver={solverForScene(activeScene, networkSolverDraft)}
+          solver={networkSolver}
           onSolverChange={setNetworkSolverDraft}
           summary={summary}
         />

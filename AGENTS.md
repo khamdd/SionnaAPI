@@ -370,15 +370,21 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
 - A performance pass addressed UI jank and hot backend paths without changing
   API contracts. `Scene3DPreview` is memoized and renders on demand (orbit,
   hover, selection, texture load, and resize mark the frame dirty instead of
-  rendering at full FPS), parent pages memoize derived preview props so the
-  WebGL scene no longer rebuilds on unrelated state changes. Coverage-map mouse
-  hover uses an O(1) cell index plus rAF throttling, heatmap redraws are
-  rAF-throttled, and scene-scoped antenna draft localStorage writes are
-  debounced (deletions stay synchronous) with a pagehide flush. Backend reads
-  cache offline building GeoJSON and the scene registry by file mtime, request
-  logging skips `/health`, and migration `0008_performance_indexes` adds
-  indexes for per-scene history listing, queue ordering by `queued_at`, and
-  foreign-key cascades on run antennas, artifacts, and job result runs.
+  rendering at full FPS). The WebGL scene is created once per scene model in
+  `createSceneState` (renderer, camera, controls, buildings, layer groups,
+  animation loop) and dynamic layers (coverage, ward boundary, antennas,
+  signal links, RSRP users) are diffed per identity in `syncSceneLayers`, so
+  dragging antenna tilt/power/azimuth only rebuilds the antenna markers and
+  preserves the camera position instead of rebuilding the scene. Parent pages
+  memoize derived preview props so the WebGL scene no longer rebuilds on
+  unrelated state changes. Coverage-map mouse hover uses an O(1) cell index
+  plus rAF throttling, heatmap redraws are rAF-throttled, and scene-scoped
+  antenna draft localStorage writes are debounced (deletions stay synchronous)
+  with a pagehide flush. Backend reads cache offline building GeoJSON and the
+  scene registry by file mtime, request logging skips `/health`, and migration
+  `0008_performance_indexes` adds indexes for per-scene history listing, queue
+  ordering by `queued_at`, and foreign-key cascades on run antennas,
+  artifacts, and job result runs.
 
 ## Important Files
 

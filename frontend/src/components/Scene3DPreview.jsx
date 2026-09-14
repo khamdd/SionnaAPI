@@ -43,6 +43,7 @@ function Scene3DPreview({
   wardBoundary = null,
 }) {
   const canvasHostRef = useRef(null);
+  const sceneStateRef = useRef(null);
   const selectedCoverageCellRef = useRef(selectedCoverageCell);
   const selectedRsrpUserRef = useRef(selectedRsrpUser);
   const [model, setModel] = useState(null);
@@ -138,24 +139,40 @@ function Scene3DPreview({
       return undefined;
     }
 
-    return renderThreeScene(
-      host,
-      model,
-      bounds,
-      wardBoundary,
-      viewMode,
+    const state = createSceneState(host, model, viewMode);
+    sceneStateRef.current = state;
+
+    return () => {
+      if (sceneStateRef.current === state) {
+        sceneStateRef.current = null;
+      }
+      state.dispose();
+    };
+  }, [model, viewMode]);
+
+  useEffect(() => {
+    const state = sceneStateRef.current;
+
+    if (!state) {
+      return undefined;
+    }
+
+    syncSceneLayers(state, {
       antennas,
-      solver,
-      coverageGrid,
+      bounds,
       coverageDisplayMode,
+      coverageGrid,
       coverageImageUrl,
-      signalLinks,
+      onCoverageCellSelect,
+      onRsrpUserSelect,
       rsrpUsers,
       selectedCoverageCellRef,
       selectedRsrpUserRef,
-      onCoverageCellSelect,
-      onRsrpUserSelect,
-    );
+      signalLinks,
+      solver,
+      wardBoundary,
+    });
+    return undefined;
   }, [
     antennas,
     bounds,
@@ -431,33 +448,35 @@ function buildModel(bounds, buildings) {
   };
 }
 
-function renderThreeScene(
-  host,
-  model,
-  bounds,
-  wardBoundary,
-  viewMode,
-  antennas,
-  solver,
-  coverageGrid,
-  coverageDisplayMode,
-  coverageImageUrl,
-  signalLinks,
-  rsrpUsers,
-  selectedCoverageCellRef,
-  selectedRsrpUserRef,
-  onCoverageCellSelect,
-  onRsrpUserSelect,
-) {
+function createSceneState(host, model, viewMode) {
   host.innerHTML = "";
 
   const width = host.clientWidth || 820;
   const height = host.clientHeight || 430;
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0xedf2f7);
-  let needsRender = true;
-
   const maxSide = Math.max(model.width, model.depth);
+  const state = {
+    bounds: null,
+    coverageGrid: null,
+    coverageMesh: null,
+    host,
+    lastHoveredCell: null,
+    lastSelectedCell: null,
+    lastSelectedRsrpUser: null,
+    maxSide,
+    model,
+    needsRender: true,
+    onCoverageCellSelect: null,
+    onRsrpUserSelect: null,
+    pointerStart: null,
+    rsrpUserObjects: [],
+    selectedCoverageCellRef: null,
+    selectedRsrpUserRef: null,
+    solver: null,
+    viewMode,
+  };
+
   const camera =
     viewMode === "top"
       ? createTopCamera(width, height, maxSide)
@@ -495,7 +514,7 @@ function renderThreeScene(
   controls.minPolarAngle = 0.05;
   controls.maxPolarAngle = Math.PI / 2.02;
   controls.addEventListener("change", () => {
-    needsRender = true;
+    state.needsRender = true;
   });
 
   scene.add(new THREE.HemisphereLight(0xffffff, 0x94a3b8, 1.25));
@@ -520,18 +539,28 @@ function renderThreeScene(
   scene.add(edge);
 
   addRoadLines(scene, model);
-  const coverageMesh =
-    addCoverageGrid(scene, model, coverageGrid, solver, coverageDisplayMode) ||
-    addCoverageImage(scene, model, coverageImageUrl, () => {
-      needsRender = true;
-    });
-  addWardBoundary(scene, model, bounds, wardBoundary);
-  const selectedCellGroup = new THREE.Group();
-  const hoveredCellGroup = new THREE.Group();
-  scene.add(selectedCellGroup);
-  scene.add(hoveredCellGroup);
-  let lastSelectedCell = null;
-  let lastHoveredCell = null;
+
+  state.coverageGroup = new THREE.Group();
+  state.wardBoundaryGroup = new THREE.Group();
+  state.antennaGroup = new THREE.Group();
+  state.signalLinkGroup = new THREE.Group();
+  state.rsrpUserGroup = new THREE.Group();
+  state.selectedCellGroup = new THREE.Group();
+  state.hoveredCellGroup = new THREE.Group();
+  state.selectedRsrpUserGroup = new THREE.Group();
+  state.raycaster = new THREE.Raycaster();
+  state.pointer = new THREE.Vector2();
+  state.layers = {};
+  scene.add(
+    state.coverageGroup,
+    state.wardBoundaryGroup,
+    state.antennaGroup,
+    state.signalLinkGroup,
+    state.rsrpUserGroup,
+    state.selectedCellGroup,
+    state.hoveredCellGroup,
+    state.selectedRsrpUserGroup,
+  );
 
   model.buildings.forEach((building) => {
     const mesh = createBuildingMesh(building);
@@ -540,49 +569,41 @@ function renderThreeScene(
     }
   });
 
-  addAntennas(scene, model, antennas, solver, bounds);
-  addSignalLinks(scene, model, signalLinks, solver);
-  const rsrpUserObjects = addRsrpUsers(scene, model, rsrpUsers, solver);
-  const selectedRsrpUserGroup = new THREE.Group();
-  scene.add(selectedRsrpUserGroup);
-  let lastSelectedRsrpUser = null;
-
   const observer = new ResizeObserver(() => {
     const nextWidth = host.clientWidth || width;
     const nextHeight = host.clientHeight || height;
     updateCameraForSize(camera, viewMode, nextWidth, nextHeight, maxSide);
     camera.updateProjectionMatrix();
     renderer.setSize(nextWidth, nextHeight);
-    needsRender = true;
+    state.needsRender = true;
   });
   observer.observe(host);
 
-  const raycaster = new THREE.Raycaster();
-  const pointer = new THREE.Vector2();
-  let pointerStart = null;
+  const raycaster = state.raycaster;
+  const pointer = state.pointer;
 
   function handlePointerDown(event) {
-    pointerStart = {
+    state.pointerStart = {
       x: event.clientX,
       y: event.clientY,
     };
   }
 
   function setHoveredCell(cell) {
-    if (cell === lastHoveredCell) {
+    if (cell === state.lastHoveredCell) {
       return;
     }
 
     updateCellOutlineGroup(
-      hoveredCellGroup,
+      state.hoveredCellGroup,
       model,
       cell,
-      solver,
+      state.solver,
       HOVER_CELL_OUTLINE,
     );
-    lastHoveredCell = cell;
+    state.lastHoveredCell = cell;
     renderer.domElement.style.cursor = cell ? "pointer" : "";
-    needsRender = true;
+    state.needsRender = true;
   }
 
   function handlePointerMove(event) {
@@ -597,7 +618,7 @@ function renderThreeScene(
       camera,
       raycaster,
       pointer,
-      rsrpUserObjects,
+      state.rsrpUserObjects,
     );
 
     if (user) {
@@ -613,29 +634,29 @@ function renderThreeScene(
         camera,
         raycaster,
         pointer,
-        coverageMesh,
+        state.coverageMesh,
         model,
-        coverageGrid,
-        solver,
+        state.coverageGrid,
+        state.solver,
       ),
     );
   }
 
   function handlePointerLeave() {
-    pointerStart = null;
+    state.pointerStart = null;
     setHoveredCell(null);
   }
 
   function handlePointerUp(event) {
-    if (!pointerStart) {
+    if (!state.pointerStart) {
       return;
     }
 
     const distance = Math.hypot(
-      event.clientX - pointerStart.x,
-      event.clientY - pointerStart.y,
+      event.clientX - state.pointerStart.x,
+      event.clientY - state.pointerStart.y,
     );
-    pointerStart = null;
+    state.pointerStart = null;
 
     if (distance > 5) {
       return;
@@ -647,15 +668,15 @@ function renderThreeScene(
       camera,
       raycaster,
       pointer,
-      rsrpUserObjects,
+      state.rsrpUserObjects,
     );
 
-    if (user && onRsrpUserSelect) {
-      onRsrpUserSelect(user);
+    if (user && state.onRsrpUserSelect) {
+      state.onRsrpUserSelect(user);
       return;
     }
 
-    if (!onCoverageCellSelect) {
+    if (!state.onCoverageCellSelect) {
       return;
     }
 
@@ -665,13 +686,13 @@ function renderThreeScene(
       camera,
       raycaster,
       pointer,
-      coverageMesh,
+      state.coverageMesh,
       model,
-      coverageGrid,
-      solver,
+      state.coverageGrid,
+      state.solver,
     );
     if (cell) {
-      onCoverageCellSelect(cell);
+      state.onCoverageCellSelect(cell);
     }
   }
 
@@ -685,37 +706,37 @@ function renderThreeScene(
     animationId = window.requestAnimationFrame(animate);
     controls.update();
     if (syncSelectedCellOutline(
-      selectedCellGroup,
+      state.selectedCellGroup,
       model,
-      selectedCoverageCellRef,
-      solver,
-      lastSelectedCell,
+      state.selectedCoverageCellRef,
+      state.solver,
+      state.lastSelectedCell,
       (cell) => {
-        lastSelectedCell = cell;
+        state.lastSelectedCell = cell;
       },
     )) {
-      needsRender = true;
+      state.needsRender = true;
     }
     if (syncSelectedRsrpUserOutline(
-      selectedRsrpUserGroup,
+      state.selectedRsrpUserGroup,
       model,
-      selectedRsrpUserRef,
-      solver,
-      lastSelectedRsrpUser,
+      state.selectedRsrpUserRef,
+      state.solver,
+      state.lastSelectedRsrpUser,
       (user) => {
-        lastSelectedRsrpUser = user;
+        state.lastSelectedRsrpUser = user;
       },
     )) {
-      needsRender = true;
+      state.needsRender = true;
     }
-    if (needsRender) {
-      needsRender = false;
+    if (state.needsRender) {
+      state.needsRender = false;
       renderer.render(scene, camera);
     }
   }
   animate();
 
-  return () => {
+  function dispose() {
     window.cancelAnimationFrame(animationId);
     observer.disconnect();
     controls.dispose();
@@ -737,7 +758,104 @@ function renderThreeScene(
       }
     });
     host.innerHTML = "";
-  };
+  }
+
+  state.dispose = dispose;
+  return state;
+}
+
+function syncSceneLayers(state, props) {
+  state.solver = props.solver;
+  state.coverageGrid = props.coverageGrid;
+  state.selectedCoverageCellRef = props.selectedCoverageCellRef;
+  state.selectedRsrpUserRef = props.selectedRsrpUserRef;
+  state.onCoverageCellSelect = props.onCoverageCellSelect;
+  state.onRsrpUserSelect = props.onRsrpUserSelect;
+
+  const layers = state.layers;
+
+  if (
+    layers.coverageGrid !== props.coverageGrid
+    || layers.coverageImageUrl !== props.coverageImageUrl
+    || layers.coverageDisplayMode !== props.coverageDisplayMode
+    || layers.coverageSolver !== props.solver
+  ) {
+    layers.coverageGrid = props.coverageGrid;
+    layers.coverageImageUrl = props.coverageImageUrl;
+    layers.coverageDisplayMode = props.coverageDisplayMode;
+    layers.coverageSolver = props.solver;
+    clearThreeGroup(state.coverageGroup);
+    state.coverageMesh =
+      addCoverageGrid(
+        state.coverageGroup,
+        state.model,
+        props.coverageGrid,
+        props.solver,
+        props.coverageDisplayMode,
+      ) ||
+      addCoverageImage(state.coverageGroup, state.model, props.coverageImageUrl, () => {
+        state.needsRender = true;
+      });
+  }
+
+  if (
+    layers.wardBounds !== props.bounds
+    || layers.wardBoundary !== props.wardBoundary
+  ) {
+    layers.wardBounds = props.bounds;
+    layers.wardBoundary = props.wardBoundary;
+    clearThreeGroup(state.wardBoundaryGroup);
+    addWardBoundary(state.wardBoundaryGroup, state.model, props.bounds, props.wardBoundary);
+  }
+
+  if (
+    layers.antennas !== props.antennas
+    || layers.antennaSolver !== props.solver
+    || layers.antennaBounds !== props.bounds
+  ) {
+    layers.antennas = props.antennas;
+    layers.antennaSolver = props.solver;
+    layers.antennaBounds = props.bounds;
+    clearThreeGroup(state.antennaGroup);
+    addAntennas(state.antennaGroup, state.model, props.antennas, props.solver, props.bounds);
+  }
+
+  if (
+    layers.signalLinks !== props.signalLinks
+    || layers.signalLinkSolver !== props.solver
+  ) {
+    layers.signalLinks = props.signalLinks;
+    layers.signalLinkSolver = props.solver;
+    clearThreeGroup(state.signalLinkGroup);
+    addSignalLinks(state.signalLinkGroup, state.model, props.signalLinks, props.solver);
+  }
+
+  if (
+    layers.rsrpUsers !== props.rsrpUsers
+    || layers.rsrpUserSolver !== props.solver
+  ) {
+    layers.rsrpUsers = props.rsrpUsers;
+    layers.rsrpUserSolver = props.solver;
+    clearThreeGroup(state.rsrpUserGroup);
+    state.rsrpUserObjects = addRsrpUsers(
+      state.rsrpUserGroup,
+      state.model,
+      props.rsrpUsers,
+      props.solver,
+    );
+  }
+
+  state.lastSelectedCell = null;
+  state.lastSelectedRsrpUser = null;
+  state.needsRender = true;
+}
+
+function clearThreeGroup(group) {
+  while (group.children.length) {
+    const child = group.children[0];
+    group.remove(child);
+    disposeThreeObject(child);
+  }
 }
 
 function syncSelectedCellOutline(
