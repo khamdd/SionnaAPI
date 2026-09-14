@@ -222,6 +222,17 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   startup with migration guidance when it is not. It no longer creates tables.
   Docker Compose runs the one-shot `database-migrate` service before starting
   the backend. No-database mode skips the revision check.
+- Vietnam admin reference data lives in `vietnam_provinces` (34 rows) and
+  `vietnam_wards` (3,321 rows with simplified `geometry` boundaries, migration
+  `0007_vietnam_admin_units`). `scripts/seed_vietnam_admin.py` upserts the
+  rows idempotently from `frontend/public/data/vietnam-provinces.csv`,
+  `vietnam-wards.csv`, and the per-province `vn-wards-*.geojson` archives, and
+  fills a diacritic-stripped `search_name` for prefix search. The
+  authenticated read-only APIs list provinces, search wards
+  (`/api/v1/vietnam/wards?q=&province_code=&limit=`), and return a ward
+  boundary as cached GeoJSON. These endpoints require a configured database
+  and return 503 in no-database mode; the frontend still uses the static
+  Hà Nội ward files until the frontend cutover.
 - RSRP work includes no-coverage rows for served/measured output and a legend UI
   update.
 - Antenna import work has started with a frontend download button that creates
@@ -395,6 +406,9 @@ you make meaningful architectural, API, UI, persistence, or workflow changes.
   decision used by reports and notifications.
 - `backend/services/notification_service.py`: idempotent terminal-study alerts,
   user-scoped listing and unread state transitions.
+- `backend/services/vietnam_admin_service.py`: Vietnam province/ward reference
+  lookups, diacritic-normalized ward search, and PostGIS boundary GeoJSON.
+- `backend/api/vietnam_admin.py`: authenticated read-only Vietnam admin routes.
 - `backend/services/simulation_profile_service.py`: saved automation-profile CRUD,
   enable-time validation, antenna-role resolution, and request construction.
 - `docs/scenario-comparison-v2-handoff.md`: accepted next-stage plan for replacing

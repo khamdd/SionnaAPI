@@ -380,6 +380,53 @@ class Notification(Base):
     )
 
 
+class VietnamProvince(Base):
+    __tablename__ = "vietnam_provinces"
+
+    code: Mapped[str] = mapped_column(Text, primary_key=True)
+    name: Mapped[str] = mapped_column(Text)
+    name_en: Mapped[str] = mapped_column(Text)
+    full_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    unit_type: Mapped[str | None] = mapped_column(Text, nullable=True)
+    center_lat: Mapped[float] = mapped_column(Float)
+    center_lng: Mapped[float] = mapped_column(Float)
+    bbox_south: Mapped[float] = mapped_column(Float)
+    bbox_north: Mapped[float] = mapped_column(Float)
+    bbox_west: Mapped[float] = mapped_column(Float)
+    bbox_east: Mapped[float] = mapped_column(Float)
+    ward_count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class VietnamWard(Base):
+    __tablename__ = "vietnam_wards"
+    __table_args__ = (
+        Index("ix_vietnam_wards_province_code", "province_code"),
+        Index("ix_vietnam_wards_search_name", "search_name"),
+    )
+
+    ward_code: Mapped[str] = mapped_column(Text, primary_key=True)
+    province_code: Mapped[str] = mapped_column(
+        ForeignKey("vietnam_provinces.code", ondelete="RESTRICT")
+    )
+    ward_name: Mapped[str] = mapped_column(Text)
+    ward_name_en: Mapped[str] = mapped_column(Text)
+    ward_full_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ward_type: Mapped[str | None] = mapped_column(Text, nullable=True)
+    search_name: Mapped[str] = mapped_column(Text)
+    center_lat: Mapped[float] = mapped_column(Float)
+    center_lng: Mapped[float] = mapped_column(Float)
+    bbox_south: Mapped[float] = mapped_column(Float)
+    bbox_north: Mapped[float] = mapped_column(Float)
+    bbox_west: Mapped[float] = mapped_column(Float)
+    bbox_east: Mapped[float] = mapped_column(Float)
+    boundary: Mapped[object | None] = mapped_column(
+        Geometry,
+        nullable=True,
+    )
+
+    province: Mapped[VietnamProvince] = relationship()
+
+
 class SimulationJob(Base):
     __tablename__ = "simulation_jobs"
     __table_args__ = (

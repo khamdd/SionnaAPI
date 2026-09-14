@@ -769,7 +769,7 @@ export default function SceneChooserPage({
           {!isPreviewing && (
             <div className="scene-page-form">
               <label className="scene-city-field">
-                <span>Location</span>
+                <span>City</span>
                 <select
                   value={selectedCityId}
                   disabled={isBusy || !isMapReady}

@@ -14,7 +14,7 @@ Automated companion coverage lives in `test/test_refactor_contracts.py` and
 
 ## API Surface
 
-The normalized OpenAPI baseline contains 46 paths and 53 operations. Its SHA-256
+The normalized OpenAPI baseline contains 49 paths and 56 operations. Its SHA-256
 digest is recorded in `test/test_refactor_contracts.py`. The digest covers paths,
 methods, operation IDs, parameters, schemas, security declarations, documented
 responses, and API metadata.
@@ -136,6 +136,19 @@ Configuration/profile invariants:
 - `GET /api/v1/notifications/unread-count`
 - `POST /api/v1/notifications/read-all`
 - `POST /api/v1/notifications/{notification_id}/read`
+
+### Vietnam admin reference data
+
+- `GET /api/v1/vietnam/provinces`
+- `GET /api/v1/vietnam/wards`
+- `GET /api/v1/vietnam/wards/{ward_code}/boundary`
+
+Vietnam admin invariants:
+
+- Province/ward rows are immutable reference data seeded from the generated
+  CSV/GeoJSON assets; the APIs are read-only.
+- Ward search normalizes diacritics before matching `search_name`.
+- Boundary responses are cached because the reference data does not change.
 
 Impact invariants:
 

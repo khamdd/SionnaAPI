@@ -12,6 +12,7 @@ from backend.api.network_configurations import router as network_configurations_
 from backend.api.notifications import router as notifications_router
 from backend.api.simulation_profiles import router as simulation_profiles_router
 from backend.api.sinr import router as sinr_router
+from backend.api.vietnam_admin import router as vietnam_admin_router
 from backend.database import ensure_database_is_current
 from backend.middleware.request_logging import RequestLoggingMiddleware
 from backend.services.event_logger import (
@@ -95,6 +96,11 @@ app.include_router(
 
 app.include_router(
     notifications_router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    vietnam_admin_router,
     prefix="/api/v1",
 )
 

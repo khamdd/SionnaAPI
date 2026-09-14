@@ -47,7 +47,7 @@ def test_database_revision_check_rejects_outdated_database(monkeypatch):
         database.ensure_database_is_current()
 
 
-def test_notifications_migration_is_the_current_head():
+def test_vietnam_admin_migration_is_the_current_head():
     assert database._get_expected_migration_heads() == (
-        "0006_notifications",
+        "0007_vietnam_admin_units",
     )
