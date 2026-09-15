@@ -16,6 +16,7 @@ export default function NetworkCoveragePage({
   mapStageRef,
   maxAntennas,
   onAddType2Antenna,
+  onCreateAntenna,
   onHover,
   onHoverEnd,
   onRemoveType2Antenna,
@@ -70,6 +71,7 @@ export default function NetworkCoveragePage({
           disabled={isRunning || isSceneLoading}
           maxAntennas={maxAntennas}
           onAdd={onAddType2Antenna}
+          onCreate={onCreateAntenna}
           onChange={onUpdateAntenna}
           onRemove={onRemoveType2Antenna}
           showEnabledToggle

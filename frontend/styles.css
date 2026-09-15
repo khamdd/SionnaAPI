@@ -153,6 +153,50 @@
   margin: 14px 0;
 }
 
+.antenna-add-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin: 16px 0;
+  padding: 4px;
+  border-radius: 9px;
+  background: var(--bg);
+}
+
+.antenna-add-tabs button {
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 700;
+  padding: 9px 12px;
+  cursor: pointer;
+}
+
+.antenna-add-tabs button.active {
+  background: var(--surface);
+  color: var(--accent-dark);
+  box-shadow: 0 1px 3px rgba(23, 32, 42, 0.14);
+}
+
+.scene-bounds-callout {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-left: 3px solid var(--accent);
+  background: #f0fdfa;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.scene-bounds-callout strong { color: var(--text); }
+.simulation-antenna-create .antenna-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.simulation-antenna-create .form-field { display: grid; align-content: start; gap: 5px; }
+.simulation-antenna-create .input-hint { line-height: 1.35; }
+
 .antenna-picker-list {
   display: grid;
   gap: 6px;
@@ -239,6 +283,9 @@
   .antenna-picker-list span {
     grid-column: 2;
   }
+
+  .simulation-antenna-create .antenna-form-grid { grid-template-columns: 1fr; }
+  .scene-bounds-callout { flex-direction: column; }
 }
 
 * {

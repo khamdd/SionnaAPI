@@ -40,7 +40,7 @@ const SINR_ROLES = [
   { key: "interferer", label: "Interferer" },
 ];
 
-export function CoverageApiPage({ activeScene, antennas = EMPTY_ARRAY, onProgressChange, onQueueOpen, onSceneLoadingChange, onSimulationQueued }) {
+export function CoverageApiPage({ activeScene, antennas = EMPTY_ARRAY, onCreateAntenna, onProgressChange, onQueueOpen, onSceneLoadingChange, onSimulationQueued }) {
   const fixedAntennas = Array.isArray(antennas) ? antennas : EMPTY_ARRAY;
   const [form, setForm] = useState(() => loadCoverageDraft(activeScene?.id, {
     tilt: 8,
@@ -207,6 +207,7 @@ export function CoverageApiPage({ activeScene, antennas = EMPTY_ARRAY, onProgres
                 disabled={resultState.loading}
                 maxAntennas={1}
                 onAdd={(antennaIds) => selectCoverageInventoryAntenna(setForm, form, fixedAntennas, antennaIds)}
+                onCreate={onCreateAntenna}
                 onChange={(_antennaId, field, value) => updateForm(setForm, field, value)}
                 onRemove={() => updateForm(setForm, "selected_antenna_id", "")}
                 simulationLabel="Coverage API"
@@ -226,6 +227,7 @@ export function SinrApiPage({
   antennaPool = EMPTY_ARRAY,
   antennas = EMPTY_ARRAY,
   onAddType2Antenna,
+  onCreateAntenna,
   onProgressChange,
   onQueueOpen,
   onRemoveType2Antenna,
@@ -458,6 +460,7 @@ sceneBadges={resultSceneBadges}
                 antennas={antennas}
                 disabled={resultState.loading}
                 onAdd={onAddType2Antenna}
+                onCreate={onCreateAntenna}
                 onChange={onUpdateAntenna}
                 onRemove={onRemoveType2Antenna}
                 simulationLabel="SINR API"
@@ -476,6 +479,7 @@ export function RsrpSimulationPage({
   antennas,
   maxAntennas = 10,
   onAddType2Antenna,
+  onCreateAntenna,
   onProgressChange,
   onQueueOpen,
   onRemoveType2Antenna,
@@ -673,6 +677,7 @@ export function RsrpSimulationPage({
                   disabled={resultState.loading}
                   maxAntennas={maxAntennas}
                   onAdd={onAddType2Antenna}
+                  onCreate={onCreateAntenna}
                   onChange={onUpdateAntenna}
                   onRemove={onRemoveType2Antenna}
                   showEnabledToggle
@@ -709,6 +714,7 @@ export function ThroughputApiPage({
   antennaPool = EMPTY_ARRAY,
   antennas = EMPTY_ARRAY,
   onAddType2Antenna,
+  onCreateAntenna,
   onProgressChange,
   onQueueOpen,
   onRemoveType2Antenna,
@@ -1024,6 +1030,7 @@ export function ThroughputApiPage({
                 antennas={antennas}
                 disabled={resultState.loading}
                 onAdd={onAddType2Antenna}
+                onCreate={onCreateAntenna}
                 onChange={onUpdateAntenna}
                 onRemove={onRemoveType2Antenna}
                 simulationLabel="Throughput API"
@@ -1954,7 +1961,11 @@ function selectCoverageInventoryAntenna(onChange, form, antennas, antennaIds) {
   if (antennaIds.length !== 1) {
     return { error: "Coverage API uses exactly one antenna." };
   }
-  const antenna = antennas.find((item) => (item.database_id || item.id) === antennaIds[0]);
+  const requested = antennaIds[0];
+  const antenna = requested && typeof requested === "object"
+    ? requested
+    : antennas.find((item) => (item.database_id || item.id) === requested);
+  if (!antenna) return { error: "The selected antenna is no longer available." };
   onChange({
     ...form,
     selected_antenna_id: antenna.database_id || antenna.id,

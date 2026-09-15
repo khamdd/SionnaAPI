@@ -226,8 +226,15 @@ export default function useSceneAntennaDraft({
       return { error: "Select a scene before adding antennas." };
     }
     const currentIds = selectedAntennasByScene.get(activeScene.id) || [];
-    const poolById = new Map(inventoryAntennas.map((antenna) => [antenna.database_id || antenna.id, antenna]));
-    const additions = [...new Set(antennaIds)]
+    const suppliedAntennas = antennaIds.filter((item) => item && typeof item === "object");
+    const poolById = new Map(
+      [...inventoryAntennas, ...suppliedAntennas]
+        .map((antenna) => [antenna.database_id || antenna.id, antenna]),
+    );
+    const requestedIds = antennaIds.map((item) => (
+      item && typeof item === "object" ? item.database_id || item.id : item
+    ));
+    const additions = [...new Set(requestedIds)]
       .filter((antennaId) => poolById.has(antennaId) && !currentIds.includes(antennaId));
     if (
       maxActiveAntennas != null

@@ -12,6 +12,7 @@ import {
   getCurrentUser,
   saveSimulationJobResult,
   listAntennas,
+  createAntenna,
 } from "./api";
 import {
   DEFAULT_SOLVER,
@@ -568,6 +569,13 @@ export default function App() {
 
   function updateAntenna(antennaId, field, value) {
     networkDraft.updateAntenna(antennaId, field, value);
+  }
+
+  async function createInventoryAntenna(payload) {
+    const result = await createAntenna(payload);
+    const antenna = result.antenna || result;
+    setAntennaInventory((current) => [...current, antenna]);
+    return antenna;
   }
 
   function addType2Antenna(antenna) {
@@ -1278,6 +1286,7 @@ export default function App() {
           onOptimize={() => navigate(NETWORK_OPTIMIZATION_ROUTE)}
           onSceneLoadingChange={setIsSceneLoading}
           onAddType2Antenna={addType2Antenna}
+          onCreateAntenna={createInventoryAntenna}
           onRemoveType2Antenna={removeType2Antenna}
           onUpdateAntenna={updateAntenna}
           maxAntennas={MAX_NETWORK_COVERAGE_ANTENNAS}
@@ -1332,6 +1341,7 @@ export default function App() {
           antennas={fixedSceneAntennas}
           onQueueOpen={() => navigate("/queue")}
           onSimulationQueued={showQueuedPrompt}
+          onCreateAntenna={createInventoryAntenna}
           onProgressChange={handleApiProgressChange}
           onSceneLoadingChange={setIsSceneLoading}
         />
@@ -1344,6 +1354,7 @@ export default function App() {
           simulationAntennas={activeRsrpAntennas}
           maxAntennas={MAX_RSRP_SIMULATION_ANTENNAS}
           onAddType2Antenna={addRsrpType2Antenna}
+          onCreateAntenna={createInventoryAntenna}
           onQueueOpen={() => navigate("/queue")}
           onRemoveType2Antenna={removeRsrpType2Antenna}
           onResetAntennas={resetRsrpAntennas}
@@ -1359,6 +1370,7 @@ export default function App() {
           antennaPool={fixedSceneAntennas}
           antennas={sinrAntennas}
           onAddType2Antenna={addSinrType2Antenna}
+          onCreateAntenna={createInventoryAntenna}
           onQueueOpen={() => navigate("/queue")}
           onRemoveType2Antenna={removeSinrType2Antenna}
           onResetAntennas={resetSinrAntennas}
@@ -1376,6 +1388,7 @@ export default function App() {
           antennaPool={fixedSceneAntennas}
           antennas={throughputAntennas}
           onAddType2Antenna={addThroughputType2Antenna}
+          onCreateAntenna={createInventoryAntenna}
           onQueueOpen={() => navigate("/queue")}
           onRemoveType2Antenna={removeThroughputType2Antenna}
           onResetAntennas={resetThroughputAntennas}
