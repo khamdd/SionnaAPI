@@ -4723,7 +4723,7 @@ textarea:hover:not(:disabled) {
 
 .optimization-target-row {
   display: grid;
-  grid-template-columns: 66px minmax(190px, 280px) 100px 142px auto;
+  grid-template-columns: 66px minmax(175px, 220px) minmax(0, 1fr) auto;
   flex-wrap: initial;
   align-items: end;
   justify-content: start;
@@ -4754,6 +4754,25 @@ textarea:hover:not(:disabled) {
   color: #4d5d6b;
   font-size: 11px;
   font-weight: 600;
+}
+
+.optimization-objective-fields {
+  display: grid;
+  min-width: 0;
+  align-items: end;
+  gap: 10px;
+}
+
+.optimization-objective-fields.aggregate-fields {
+  grid-template-columns: minmax(180px, 1fr) 92px minmax(126px, 0.7fr);
+}
+
+.optimization-objective-fields.threshold-area-fields {
+  grid-template-columns: minmax(112px, 0.8fr) 102px minmax(126px, 0.8fr) 102px minmax(126px, 0.8fr);
+}
+
+.optimization-objective-fields.percentile-fields {
+  grid-template-columns: minmax(112px, 1fr) 100px 92px minmax(126px, 0.9fr);
 }
 
 .optimization-target-row select,
@@ -4947,11 +4966,15 @@ textarea:hover:not(:disabled) {
   }
 
   .optimization-target-row {
-    grid-template-columns: minmax(180px, 1fr) 92px 132px auto;
+    grid-template-columns: minmax(170px, 220px) minmax(0, 1fr) auto;
   }
 
   .optimization-target-index {
     grid-column: 1 / -1;
+  }
+
+  .optimization-objective-fields.threshold-area-fields {
+    grid-template-columns: repeat(2, minmax(126px, 1fr));
   }
 
   .optimization-parameter-grid {
@@ -4978,7 +5001,11 @@ textarea:hover:not(:disabled) {
   }
 
   .optimization-target-row,
-  .optimization-parameter-grid {
+  .optimization-parameter-grid,
+  .optimization-objective-fields,
+  .optimization-objective-fields.aggregate-fields,
+  .optimization-objective-fields.threshold-area-fields,
+  .optimization-objective-fields.percentile-fields {
     grid-template-columns: 1fr;
   }
 

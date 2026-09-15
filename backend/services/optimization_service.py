@@ -2,6 +2,10 @@ import itertools
 import math
 
 from backend.services.network_coverage_kpis import (
+    calculate_percentile,
+    calculate_threshold_area_percent,
+)
+from backend.services.network_coverage_kpis import (
     extract_network_coverage_kpis as extract_network_coverage_kpis,
 )
 from backend.services.network_coverage_kpis import (
@@ -157,7 +161,7 @@ def run_network_coverage_optimization(req, simulate, progress=None):
 def optimization_rank(evaluation):
     """Rank passing configurations first, then the smallest normalized shortfall."""
     normalized_gap = sum(
-        item["score"] / (10 if item["metric"] == "average_overlap_count" else 100)
+        item["score"] / item.get("normalization_scale", 100)
         for item in evaluation["evaluations"]
     )
     return (
@@ -170,7 +174,7 @@ def optimization_rank(evaluation):
 def evaluate_network_coverage_objectives(result_or_grid, objectives):
     kpis = extract_network_coverage_kpis(result_or_grid)
     evaluations = [
-        evaluate_objective(kpis, objective)
+        evaluate_objective(kpis, objective, result_or_grid)
         for objective in objectives
     ]
     scores = [
@@ -631,34 +635,73 @@ def format_step(step):
     return str(step)
 
 
-def evaluate_objective(kpis, objective):
+def evaluate_objective(kpis, objective, result_or_grid=None):
+    kind = objective_value(objective, "kind") or "aggregate"
     metric = objective_value(objective, "metric")
     operator = objective_value(objective, "operator")
     target = numeric_value(objective_value(objective, "target"))
-    actual = numeric_value(kpis.get(metric))
 
     if target is None:
         raise ValueError("optimization objective target must be numeric")
 
+    details = {"kind": kind}
+    normalization_scale = 100
+    if kind == "threshold_area":
+        measurement = objective_value(objective, "measurement")
+        threshold_operator = objective_value(objective, "threshold_operator")
+        threshold = objective_value(objective, "threshold")
+        grid = network_coverage_grid(result_or_grid)
+        cells = grid.get("cells") if isinstance(grid, dict) else []
+        threshold_result = calculate_threshold_area_percent(
+            cells, measurement, threshold_operator, threshold,
+        )
+        metric = f"{measurement}_threshold_area_percent"
+        actual = threshold_result["area_percent"]
+        details.update({
+            "measurement": measurement,
+            "threshold_operator": threshold_operator,
+            "threshold": numeric_value(threshold),
+            **threshold_result,
+        })
+    elif kind == "percentile":
+        measurement = objective_value(objective, "measurement")
+        percentile_value = objective_value(objective, "percentile")
+        grid = network_coverage_grid(result_or_grid)
+        cells = grid.get("cells") if isinstance(grid, dict) else []
+        actual = calculate_percentile(cells, measurement, percentile_value)
+        metric = f"{measurement}_p{int(percentile_value)}"
+        normalization_scale = 100 if measurement == "throughput_mbps" else 10
+        details.update({
+            "measurement": measurement,
+            "percentile": int(percentile_value),
+        })
+    else:
+        actual = numeric_value(kpis.get(metric))
+        normalization_scale = 10 if metric == "average_overlap_count" else 100
+
     if actual is None:
         return {
+            **details,
             "metric": metric,
             "operator": operator,
             "target": target,
             "actual": None,
             "passed": False,
             "score": math.inf,
+            "normalization_scale": normalization_scale,
         }
 
     passed = compare_metric(actual, operator, target)
 
     return {
+        **details,
         "metric": metric,
         "operator": operator,
         "target": target,
         "actual": actual,
         "passed": passed,
         "score": objective_score(actual, operator, target),
+        "normalization_scale": normalization_scale,
     }
 
 

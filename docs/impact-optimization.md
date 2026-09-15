@@ -39,6 +39,35 @@ The comparison response shows baseline, candidate, and optimized objective
 outcomes. It also records the exact candidate configuration ID and content hash
 used as the optimization source.
 
+Network Coverage objectives support three shapes. Existing aggregate objectives
+remain unchanged. Threshold-area objectives express requirements such as “at
+least 95% of cells have RSRP at least -110 dBm”:
+
+```json
+{
+  "kind": "threshold_area",
+  "measurement": "rsrp_dbm",
+  "threshold_operator": ">=",
+  "threshold": -110,
+  "operator": ">=",
+  "target": 95
+}
+```
+
+Percentile objectives express requirements such as “P10 SINR is at least 5 dB”:
+
+```json
+{
+  "kind": "percentile",
+  "measurement": "sinr_db",
+  "percentile": 10,
+  "operator": ">=",
+  "target": 5
+}
+```
+
+Supported RF measurements are `rsrp_dbm`, `sinr_db`, and `throughput_mbps`.
+
 ## Create a suggested draft
 
 After a profile's optimization job succeeds, call:

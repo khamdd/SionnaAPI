@@ -384,6 +384,88 @@ def test_evaluate_network_coverage_objectives_returns_combined_result():
     assert evaluation["kpis"]["uncovered_area_percent"] == 50.0
 
 
+def test_evaluate_threshold_area_objective_uses_all_grid_cells():
+    cells = [
+        {"signal_dbm": -120, "overlap_count": 1},
+        {"signal_dbm": -110, "overlap_count": 1},
+        {"signal_dbm": -100, "overlap_count": 1},
+        {"signal_dbm": None, "overlap_count": 0},
+    ]
+
+    evaluation = evaluate_network_coverage_objectives(
+        {"grid": {"cells": cells}},
+        [{
+            "kind": "threshold_area",
+            "measurement": "rsrp_dbm",
+            "threshold_operator": ">=",
+            "threshold": -110,
+            "operator": ">=",
+            "target": 60,
+        }],
+    )["evaluations"][0]
+
+    assert evaluation["metric"] == "rsrp_dbm_threshold_area_percent"
+    assert evaluation["actual"] == 50.0
+    assert evaluation["passing_cells"] == 2
+    assert evaluation["total_cells"] == 4
+    assert evaluation["passed"] is False
+    assert evaluation["score"] == 10.0
+
+
+def test_evaluate_percentile_objective_supports_negative_rf_target():
+    cells = [
+        {"signal_dbm": value, "overlap_count": 1}
+        for value in range(-120, -110)
+    ]
+
+    evaluation = evaluate_network_coverage_objectives(
+        {"grid": {"cells": cells}},
+        [{
+            "kind": "percentile",
+            "measurement": "rsrp_dbm",
+            "percentile": 10,
+            "operator": ">=",
+            "target": -115,
+        }],
+    )["evaluations"][0]
+
+    assert evaluation["metric"] == "rsrp_dbm_p10"
+    assert evaluation["actual"] == -120
+    assert evaluation["passed"] is False
+    assert evaluation["score"] == 5
+    assert evaluation["normalization_scale"] == 10
+
+
+def test_optimization_request_validates_rf_objective_shapes_and_duplicates():
+    payload = optimization_request().model_dump()
+    payload["objectives"] = [{
+        "kind": "threshold_area",
+        "measurement": "sinr_db",
+        "threshold_operator": ">=",
+        "threshold": 5,
+        "operator": ">=",
+        "target": 90,
+    }]
+
+    request = NetworkCoverageOptimizationRequest(**payload)
+
+    assert request.objectives[0].metric is None
+    assert request.objectives[0].threshold == 5
+
+    duplicate = {**payload, "objectives": payload["objectives"] * 2}
+    with pytest.raises(ValueError, match="objectives must be unique"):
+        NetworkCoverageOptimizationRequest(**duplicate)
+
+    invalid = {**payload, "objectives": [{
+        "kind": "percentile",
+        "measurement": "sinr_db",
+        "operator": ">=",
+        "target": 5,
+    }]}
+    with pytest.raises(ValueError, match="require a percentile"):
+        NetworkCoverageOptimizationRequest(**invalid)
+
+
 def test_evaluate_objective_marks_missing_kpi_as_not_passed():
     evaluation = evaluate_objective(
         {"average_overlap_count": None},

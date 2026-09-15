@@ -7,7 +7,10 @@ from backend.services.network_coverage_kpis import (
     is_no_coverage_cell,
     numeric_value,
 )
-from backend.services.optimization_service import compare_metric
+from backend.services.optimization_service import (
+    compare_metric,
+    evaluate_network_coverage_objectives,
+)
 from backend.services.simulation_job_store import load_simulation_job_result
 
 METRIC_SPECS = {
@@ -204,6 +207,19 @@ def compare_profile_jobs(plan, jobs, result_loader=load_simulation_job_result):
         )
 
     objectives = plan.get("objectives") or []
+    kpi_comparisons = [
+        compare_kpi(
+            metric,
+            baseline_kpis[metric],
+            candidate_kpis[metric],
+            objectives,
+        )
+        for metric in common_metrics
+    ]
+    if expected_type in GRID_SIMULATION_TYPES:
+        kpi_comparisons.extend(
+            compare_rf_objectives(baseline_result, candidate_result, objectives)
+        )
     comparison = {
         "profile_id": _text(plan.get("profile_id")),
         "profile_name": plan.get("profile_name"),
@@ -211,15 +227,7 @@ def compare_profile_jobs(plan, jobs, result_loader=load_simulation_job_result):
         "status": "compared",
         "baseline_job": _job_state(baseline_job),
         "candidate_job": _job_state(candidate_job),
-        "kpis": [
-            compare_kpi(
-                metric,
-                baseline_kpis[metric],
-                candidate_kpis[metric],
-                objectives,
-            )
-            for metric in common_metrics
-        ],
+        "kpis": kpi_comparisons,
     }
     spatial = compare_spatial_coverage(
         baseline_result,
@@ -313,6 +321,87 @@ def compare_kpi(metric, baseline, candidate, objectives):
             candidate,
         ),
     }
+
+
+def compare_rf_objectives(baseline_result, candidate_result, objectives):
+    rf_objectives = [
+        objective
+        for objective in objectives
+        if (_value(objective, "kind") or "aggregate") != "aggregate"
+    ]
+    if not rf_objectives:
+        return []
+    baseline_evaluations = evaluate_network_coverage_objectives(
+        baseline_result, rf_objectives,
+    )["evaluations"]
+    candidate_evaluations = evaluate_network_coverage_objectives(
+        candidate_result, rf_objectives,
+    )["evaluations"]
+    return [
+        compare_rf_objective(objective, baseline, candidate)
+        for objective, baseline, candidate in zip(
+            rf_objectives,
+            baseline_evaluations,
+            candidate_evaluations,
+        )
+    ]
+
+
+def compare_rf_objective(objective, baseline, candidate):
+    measurement = _value(objective, "measurement")
+    kind = _value(objective, "kind")
+    unit = "%" if kind == "threshold_area" else {
+        "rsrp_dbm": "dBm",
+        "sinr_db": "dB",
+        "throughput_mbps": "Mbps",
+    }[measurement]
+    label = (
+        f"{measurement_label(measurement)} threshold area"
+        if kind == "threshold_area"
+        else f"{measurement_label(measurement)} P{_value(objective, 'percentile')}"
+    )
+    baseline_value = numeric_value(baseline.get("actual"))
+    candidate_value = numeric_value(candidate.get("actual"))
+    if baseline_value is None or candidate_value is None:
+        delta = percentage_delta = None
+        direction = "unavailable"
+    else:
+        delta = candidate_value - baseline_value
+        percentage_delta = None
+        if math.isclose(delta, 0.0, abs_tol=1e-9):
+            direction = "unchanged"
+        else:
+            higher_is_better = candidate.get("operator") in {">", ">="}
+            direction = (
+                "improved"
+                if (delta > 0) == higher_is_better
+                else "degraded"
+            )
+    return {
+        "metric": candidate["metric"],
+        "label": label,
+        "unit": unit,
+        "baseline": _rounded(baseline_value),
+        "candidate": _rounded(candidate_value),
+        "absolute_delta": _rounded(delta),
+        "percentage_delta": percentage_delta,
+        "direction": direction,
+        "objective": {
+            "status": "passed" if candidate.get("passed") else "failed",
+            "operator": candidate.get("operator"),
+            "target": _rounded(candidate.get("target")),
+            "baseline_status": "passed" if baseline.get("passed") else "failed",
+            "candidate_status": "passed" if candidate.get("passed") else "failed",
+        },
+    }
+
+
+def measurement_label(measurement):
+    return {
+        "rsrp_dbm": "RSRP",
+        "sinr_db": "SINR",
+        "throughput_mbps": "Throughput",
+    }.get(measurement, measurement)
 
 
 def evaluate_comparison_objective(objective, baseline, candidate):

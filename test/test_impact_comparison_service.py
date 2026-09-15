@@ -155,6 +155,42 @@ def test_grid_comparison_reports_rf_averages_and_percentiles():
     assert kpis["rsrp_dbm_p10"]["direction"] == "improved"
 
 
+def test_grid_comparison_evaluates_rf_objectives_for_both_scenarios():
+    baseline = grid_result([
+        coverage_cell(0, covered=True, sinr=2.0),
+        coverage_cell(1, covered=True, sinr=6.0),
+    ])
+    candidate = grid_result([
+        coverage_cell(0, covered=True, sinr=7.0),
+        coverage_cell(1, covered=True, sinr=8.0),
+    ])
+    objective = {
+        "kind": "threshold_area",
+        "measurement": "sinr_db",
+        "threshold_operator": ">=",
+        "threshold": 5,
+        "operator": ">=",
+        "target": 75,
+    }
+
+    comparison = build_impact_comparison(
+        [job("base", "baseline", baseline), job("next", "candidate", candidate)],
+        plan(objectives=[objective]),
+        result_loader=load_result,
+    )
+
+    kpi = next(
+        item
+        for item in comparison["profiles"][0]["kpis"]
+        if item["metric"] == "sinr_db_threshold_area_percent"
+    )
+    assert kpi["baseline"] == 50.0
+    assert kpi["candidate"] == 100.0
+    assert kpi["direction"] == "improved"
+    assert kpi["objective"]["baseline_status"] == "failed"
+    assert kpi["objective"]["candidate_status"] == "passed"
+
+
 def test_identical_sinr_results_are_unchanged():
     result = {"propagation_model": "friis", "sinr_db": 12.5, "signal_power": -72.0, "noise_power": -95.0}
 

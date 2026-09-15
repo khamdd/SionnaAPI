@@ -17,9 +17,9 @@ class ImpactProfilePairRequest(BaseModel):
 
     @model_validator(mode="after")
     def require_unique_objective_metrics(self):
-        metrics = [objective.metric for objective in self.objectives]
-        if len(metrics) != len(set(metrics)):
-            raise ValueError("profile-pair objective metrics must be unique")
+        objective_keys = [objective.identity_key() for objective in self.objectives]
+        if len(objective_keys) != len(set(objective_keys)):
+            raise ValueError("profile-pair objectives must be unique")
         return self
 
 

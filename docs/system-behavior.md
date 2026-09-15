@@ -69,6 +69,9 @@ authority; verify them before making behavior changes.
 - A run snapshots the active scene and Network Coverage request, simulates a fresh
   baseline, holds solver settings fixed, and searches legal tilt, power, and
   azimuth values within a user budget of 1 to 5000 simulations.
+- Objectives may use aggregate coverage/overlap KPIs, the percentage of scene
+  cells meeting an RSRP/SINR/throughput threshold, or an RF percentile from P1
+  through P99. Existing aggregate objective payloads remain valid.
 - Small discrete spaces are exhaustive. Larger spaces use deterministic
   space-filling candidates, diverse beam selection, and local refinement.
 - Ranking first favors satisfying all objectives, then normalized total shortfall,

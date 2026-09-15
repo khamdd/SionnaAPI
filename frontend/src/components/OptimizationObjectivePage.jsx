@@ -1,12 +1,24 @@
 import { useEffect, useState } from "react";
 import { getSimulationJob, getSimulationJobResult, runNetworkCoverageOptimization, saveSimulationJobResult } from "../api";
 
-const METRICS = [
-  ["uncovered_area_percent", "Uncovered area", "%", "<=", 2],
-  ["covered_area_percent", "Covered area", "%", ">=", 98],
-  ["overlap_area_percent", "Overlap area", "%", "<=", 25],
-  ["average_overlap_count", "Average overlap", "antennas", "<=", 2],
+const AGGREGATE_METRICS = [
+  { id: "uncovered_area_percent", label: "Uncovered area", unit: "%", operator: "<=", target: 2 },
+  { id: "covered_area_percent", label: "Covered area", unit: "%", operator: ">=", target: 98 },
+  { id: "overlap_area_percent", label: "Overlap area", unit: "%", operator: "<=", target: 25 },
+  { id: "average_overlap_count", label: "Average overlap", unit: "antennas", operator: "<=", target: 2 },
 ];
+const RF_MEASUREMENTS = [
+  { id: "rsrp_dbm", label: "RSRP", unit: "dBm", threshold: -110 },
+  { id: "sinr_db", label: "SINR", unit: "dB", threshold: 5 },
+  { id: "throughput_mbps", label: "Throughput", unit: "Mbps", threshold: 20 },
+];
+const OBJECTIVE_TYPES = [
+  ["aggregate", "Coverage or overlap"],
+  ["threshold_area", "Area meeting RF threshold"],
+  ["percentile", "RF percentile"],
+];
+const OPERATORS = ["<=", ">=", "<", ">", "="];
+const THRESHOLD_OPERATORS = [">=", ">", "<=", "<"];
 function read(key) {
   try { return JSON.parse(localStorage.getItem(key) || "null"); } catch { return null; }
 }
@@ -16,9 +28,7 @@ function write(key, value) {
 
 export default function OptimizationObjectivePage({ activeScene, baseRequest, onBack, onApply, storageKey }) {
   const runKey = `${storageKey}:run:${activeScene.id}`;
-  const [objectives, setObjectives] = useState(() => read(storageKey)?.[activeScene.id]?.objectives?.map(({ metric, operator, target }) => ({ metric, operator, target })) || [
-    { metric: "uncovered_area_percent", operator: "<=", target: 2 },
-  ]);
+  const [objectives, setObjectives] = useState(() => read(storageKey)?.[activeScene.id]?.objectives?.map(normalizeObjective) || [defaultObjective("aggregate")]);
   const [step, setStep] = useState(2);
   const [powerStep, setPowerStep] = useState(2);
   const [azimuthStep, setAzimuthStep] = useState(30);
@@ -94,9 +104,16 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
   function update(index, field, value) {
     setObjectives((current) => current.map((item, i) => {
       if (i !== index) return item;
+      if (field === "kind") return defaultObjective(value);
       if (field === "metric") {
-        const metric = METRICS.find(([id]) => id === value);
-        return { metric: value, operator: metric[3], target: metric[4] };
+        const metric = AGGREGATE_METRICS.find(({ id }) => id === value);
+        return { ...item, metric: value, operator: metric.operator, target: metric.target };
+      }
+      if (field === "measurement") {
+        const measurement = RF_MEASUREMENTS.find(({ id }) => id === value);
+        return item.kind === "threshold_area"
+          ? { ...item, measurement: value, threshold: measurement.threshold }
+          : { ...item, measurement: value, target: measurement.threshold };
       }
       return { ...item, [field]: value };
     }));
@@ -105,7 +122,7 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
   async function start(event) {
     event.preventDefault();
     if (busy) return;
-    const targets = objectives.map((item) => ({ ...item, target: Number(item.target) }));
+    const targets = objectives.map(serializeObjective);
     setBusy(true);
     setJobId(null);
     setResult(null);
@@ -154,7 +171,7 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
 
   const optimization = result?.optimization;
   const stale = sourceSignature !== signature;
-  const valid = objectives.length > 0 && new Set(objectives.map((o) => o.metric)).size === objectives.length;
+  const valid = objectives.length > 0 && objectives.every(objectiveIsValid) && new Set(objectives.map(objectiveKey)).size === objectives.length;
   return (
     <main className="route-page optimization-page">
       <div className="page-title with-action">
@@ -174,43 +191,30 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
             <div className="optimization-form-heading">
               <div>
                 <h3>Performance targets</h3>
-                <p>Add up to two conditions. Every target must be met for the search to finish early.</p>
+                <p>Describe the network result you need. Every target must pass.</p>
               </div>
               <span>{objectives.length} of 2 configured</span>
             </div>
             <div className="optimization-objective-list">
               {objectives.map((objective, index) => {
-                const unit = METRICS.find(([id]) => id === objective.metric)?.[2];
                 return (
                   <div className="optimization-target-row" key={index}>
                     <span className="optimization-target-index">Target {index + 1}</span>
-                    <label className="optimization-metric-field">
-                      <span>Metric</span>
-                      <select value={objective.metric} onChange={(e) => update(index, "metric", e.target.value)}>
-                        {METRICS.map(([id, label]) => <option key={id} value={id} disabled={objectives.some((o, i) => i !== index && o.metric === id)}>{label}</option>)}
+                    <label>
+                      <span>Target type</span>
+                      <select value={objective.kind} onChange={(e) => update(index, "kind", e.target.value)}>
+                        {OBJECTIVE_TYPES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
                       </select>
                     </label>
-                    <label className="optimization-condition-field">
-                      <span>Condition</span>
-                      <select value={objective.operator} onChange={(e) => update(index, "operator", e.target.value)}>
-                        {["<=", ">=", "<", ">", "="].map((operator) => <option key={operator}>{operator}</option>)}
-                      </select>
-                    </label>
-                    <label className="optimization-target-field">
-                      <span>Target</span>
-                      <span className="optimization-input-unit">
-                        <input type="number" required min="0" max={objective.metric === "average_overlap_count" ? 10 : 100} step="any" value={objective.target} onChange={(e) => update(index, "target", e.target.value)} />
-                        <small>{unit}</small>
-                      </span>
-                    </label>
+                    <ObjectiveFields objective={objective} index={index} update={update} />
                     {index > 0 && <button type="button" className="ghost-button optimization-remove-target" onClick={() => setObjectives((current) => current.filter((_, i) => i !== index))}>Remove</button>}
                   </div>
                 );
               })}
             </div>
             {objectives.length < 2 && <button className="ghost-button optimization-add-target" type="button" onClick={() => {
-              const metric = METRICS.find(([id]) => !objectives.some((o) => o.metric === id) && id === "overlap_area_percent") || METRICS.find(([id]) => id !== objectives[0].metric);
-              setObjectives([...objectives, { metric: metric[0], operator: metric[3], target: metric[4] }]);
+              const metric = AGGREGATE_METRICS.find(({ id }) => !objectives.some((o) => o.metric === id) && id === "overlap_area_percent") || AGGREGATE_METRICS.find(({ id }) => !objectives.some((o) => o.metric === id));
+              setObjectives([...objectives, { kind: "aggregate", metric: metric.id, operator: metric.operator, target: metric.target }]);
             }}>Add another target</button>}
           </section>
 
@@ -264,9 +268,10 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
         <p>{optimizationResultSummary(optimization)}</p>
         {Number.isFinite(Number(optimization.global_tested)) && <p>Global exploration: {formatInteger(optimization.global_tested)} setups. Local refinement: {formatInteger(optimization.local_tested)} setups.</p>}
         <table className="optimization-results-table"><thead><tr><th>Metric</th><th>Before</th><th>After</th><th>Target</th></tr></thead>
-          <tbody>{METRICS.map(([id, label, unit]) => {
-            const target = optimization.objectives.find((o) => o.metric === id);
-            return <tr key={id}><td>{label}</td><td>{formatMetric(optimization.baseline.evaluation.kpis[id], unit)}</td><td>{formatMetric(optimization.best.evaluation.kpis[id], unit)}</td><td>{target ? `${target.operator} ${formatMetric(target.target, unit)}` : "—"}</td></tr>;
+          <tbody>{optimization.objectives.map((objective, index) => {
+            const before = optimization.baseline.evaluation.evaluations[index];
+            const after = optimization.best.evaluation.evaluations[index];
+            return <tr key={objectiveKey(objective)}><td>{objectiveLabel(objective)}</td><td>{formatObjectiveActual(before, objective)}</td><td>{formatObjectiveActual(after, objective)}</td><td>{objectiveTarget(objective)}</td></tr>;
           })}</tbody>
         </table>
         <p>Covered cells: {formatInteger(optimization.baseline.evaluation.kpis.covered_cells)} → {formatInteger(optimization.best.evaluation.kpis.covered_cells)} of {formatInteger(optimization.best.evaluation.kpis.total_cells)}.</p>
@@ -304,7 +309,160 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
   );
 }
 
+function ObjectiveFields({ objective, index, update }) {
+  if (objective.kind === "threshold_area") {
+    const measurement = measurementSpec(objective.measurement);
+    return <div className="optimization-objective-fields threshold-area-fields">
+      <MeasurementField objective={objective} index={index} update={update} />
+      <label>
+        <span>Cell condition</span>
+        <select value={objective.threshold_operator} onChange={(e) => update(index, "threshold_operator", e.target.value)}>
+          {THRESHOLD_OPERATORS.map((operator) => <option key={operator}>{operator}</option>)}
+        </select>
+      </label>
+      <NumberWithUnit label="RF threshold" unit={measurement.unit} value={objective.threshold} onChange={(value) => update(index, "threshold", value)} />
+      <label>
+        <span>Required area</span>
+        <select value={objective.operator} onChange={(e) => update(index, "operator", e.target.value)}>
+          {OPERATORS.map((operator) => <option key={operator}>{operator}</option>)}
+        </select>
+      </label>
+      <NumberWithUnit label="Area target" unit="%" value={objective.target} min="0" max="100" onChange={(value) => update(index, "target", value)} />
+    </div>;
+  }
+
+  if (objective.kind === "percentile") {
+    const measurement = measurementSpec(objective.measurement);
+    return <div className="optimization-objective-fields percentile-fields">
+      <MeasurementField objective={objective} index={index} update={update} />
+      <NumberWithUnit label="Percentile" unit="P" value={objective.percentile} min="1" max="99" step="1" onChange={(value) => update(index, "percentile", value)} />
+      <label>
+        <span>Condition</span>
+        <select value={objective.operator} onChange={(e) => update(index, "operator", e.target.value)}>
+          {OPERATORS.map((operator) => <option key={operator}>{operator}</option>)}
+        </select>
+      </label>
+      <NumberWithUnit label="Target" unit={measurement.unit} value={objective.target} min={objective.measurement === "throughput_mbps" ? "0" : undefined} onChange={(value) => update(index, "target", value)} />
+    </div>;
+  }
+
+  const metric = aggregateMetric(objective.metric);
+  return <div className="optimization-objective-fields aggregate-fields">
+    <label>
+      <span>Metric</span>
+      <select value={objective.metric} onChange={(e) => update(index, "metric", e.target.value)}>
+        {AGGREGATE_METRICS.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
+      </select>
+    </label>
+    <label>
+      <span>Condition</span>
+      <select value={objective.operator} onChange={(e) => update(index, "operator", e.target.value)}>
+        {OPERATORS.map((operator) => <option key={operator}>{operator}</option>)}
+      </select>
+    </label>
+    <NumberWithUnit label="Target" unit={metric.unit} value={objective.target} min="0" max={objective.metric === "average_overlap_count" ? "10" : "100"} onChange={(value) => update(index, "target", value)} />
+  </div>;
+}
+
+function MeasurementField({ objective, index, update }) {
+  return <label>
+    <span>Measurement</span>
+    <select value={objective.measurement} onChange={(e) => update(index, "measurement", e.target.value)}>
+      {RF_MEASUREMENTS.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
+    </select>
+  </label>;
+}
+
+function NumberWithUnit({ label, unit, value, onChange, min, max, step = "any" }) {
+  return <label>
+    <span>{label}</span>
+    <span className="optimization-input-unit">
+      <input type="number" required min={min} max={max} step={step} value={value} onChange={(event) => onChange(event.target.value)} />
+      <small>{unit}</small>
+    </span>
+  </label>;
+}
+
+function defaultObjective(kind) {
+  if (kind === "threshold_area") return { kind, measurement: "rsrp_dbm", threshold_operator: ">=", threshold: -110, operator: ">=", target: 95 };
+  if (kind === "percentile") return { kind, measurement: "sinr_db", percentile: 10, operator: ">=", target: 5 };
+  return { kind: "aggregate", metric: "uncovered_area_percent", operator: "<=", target: 2 };
+}
+
+function normalizeObjective(objective) {
+  return { ...objective, kind: objective.kind || "aggregate" };
+}
+
+function serializeObjective(objective) {
+  if (objective.kind === "threshold_area") return {
+    kind: objective.kind,
+    measurement: objective.measurement,
+    threshold_operator: objective.threshold_operator,
+    threshold: Number(objective.threshold),
+    operator: objective.operator,
+    target: Number(objective.target),
+  };
+  if (objective.kind === "percentile") return {
+    kind: objective.kind,
+    measurement: objective.measurement,
+    percentile: Number(objective.percentile),
+    operator: objective.operator,
+    target: Number(objective.target),
+  };
+  return { metric: objective.metric, operator: objective.operator, target: Number(objective.target) };
+}
+
+function objectiveIsValid(objective) {
+  if (!Number.isFinite(Number(objective.target))) return false;
+  if (objective.kind === "threshold_area") return Boolean(objective.measurement && objective.threshold_operator) && Number.isFinite(Number(objective.threshold));
+  if (objective.kind === "percentile") return Boolean(objective.measurement) && Number(objective.percentile) >= 1 && Number(objective.percentile) <= 99;
+  return Boolean(objective.metric);
+}
+
+function objectiveKey(objective) {
+  if ((objective.kind || "aggregate") === "threshold_area") return `threshold-${objective.measurement}-${objective.threshold_operator}-${objective.threshold}`;
+  if (objective.kind === "percentile") return `percentile-${objective.measurement}-${objective.percentile}`;
+  return `aggregate-${objective.metric}`;
+}
+
+function measurementSpec(id) {
+  return RF_MEASUREMENTS.find((measurement) => measurement.id === id) || RF_MEASUREMENTS[0];
+}
+
+function aggregateMetric(id) {
+  return AGGREGATE_METRICS.find((metric) => metric.id === id) || AGGREGATE_METRICS[0];
+}
+
+function objectiveLabel(objective) {
+  const kind = objective.kind || "aggregate";
+  if (kind === "threshold_area") {
+    const measurement = measurementSpec(objective.measurement);
+    return `Area with ${measurement.label} ${objective.threshold_operator} ${formatMetric(objective.threshold, measurement.unit)}`;
+  }
+  if (kind === "percentile") return `P${objective.percentile} ${measurementSpec(objective.measurement).label}`;
+  return aggregateMetric(objective.metric).label;
+}
+
+function objectiveTarget(objective) {
+  const unit = (objective.kind || "aggregate") === "threshold_area"
+    ? "%"
+    : objective.kind === "percentile"
+      ? measurementSpec(objective.measurement).unit
+      : aggregateMetric(objective.metric).unit;
+  return `${objective.operator} ${formatMetric(objective.target, unit)}`;
+}
+
+function formatObjectiveActual(evaluation, objective) {
+  const unit = (objective.kind || "aggregate") === "threshold_area"
+    ? "%"
+    : objective.kind === "percentile"
+      ? measurementSpec(objective.measurement).unit
+      : aggregateMetric(objective.metric).unit;
+  return formatMetric(evaluation?.actual, unit);
+}
+
 function formatMetric(value, unit = "", decimals = 2) {
+  if (value === null || value === undefined || value === "") return "--";
   const number = Number(value);
   if (!Number.isFinite(number)) return "--";
   const text = number.toLocaleString(undefined, {
@@ -342,3 +500,10 @@ function optimizationResultSummary(optimization) {
   }
   return `Targets not fully met. The search exhausted its remaining unique candidates after ${tested} of up to ${limit} simulations. Showing the closest setup found.`;
 }
+
+export {
+  normalizeObjective,
+  objectiveLabel,
+  objectiveTarget,
+  serializeObjective,
+};

@@ -1,7 +1,7 @@
 import math
 from typing import List, Literal, Tuple
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from backend.constants import (
     DEFAULT_RSRP_USER_COUNT,
@@ -118,21 +118,82 @@ class NetworkCoverageRequest(BaseModel):
 class OptimizationObjective(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    kind: Literal["aggregate", "threshold_area", "percentile"] = "aggregate"
     metric: Literal[
         "uncovered_area_percent",
         "covered_area_percent",
         "overlap_area_percent",
         "average_overlap_count",
-    ]
+    ] | None = None
+    measurement: Literal["rsrp_dbm", "sinr_db", "throughput_mbps"] | None = None
+    threshold_operator: Literal["<", ">", "<=", ">="] | None = None
+    threshold: float | None = Field(default=None, allow_inf_nan=False)
+    percentile: int | None = Field(default=None, ge=1, le=99)
     operator: Literal["<", ">", "<=", ">=", "="]
-    target: float = Field(ge=0, allow_inf_nan=False)
+    target: float = Field(allow_inf_nan=False)
 
     @model_validator(mode="after")
-    def validate_target_range(self):
-        limit = 10 if self.metric == "average_overlap_count" else 100
-        if self.target > limit:
-            raise ValueError(f"Target must not exceed {limit}")
+    def validate_objective_shape(self):
+        if self.kind == "aggregate":
+            if self.metric is None:
+                raise ValueError("Aggregate objectives require a metric")
+            if self.target < 0:
+                raise ValueError("Aggregate objective targets must not be negative")
+            limit = 10 if self.metric == "average_overlap_count" else 100
+            if self.target > limit:
+                raise ValueError(f"Target must not exceed {limit}")
+            if any(
+                value is not None
+                for value in (
+                    self.measurement,
+                    self.threshold_operator,
+                    self.threshold,
+                    self.percentile,
+                )
+            ):
+                raise ValueError("Aggregate objectives only accept metric, operator, and target")
+            return self
+
+        if self.metric is not None:
+            raise ValueError("RF objectives use measurement instead of metric")
+        if self.measurement is None:
+            raise ValueError("RF objectives require a measurement")
+        if self.measurement == "throughput_mbps" and self.target < 0:
+            raise ValueError("Throughput targets must not be negative")
+
+        if self.kind == "threshold_area":
+            if self.threshold is None or self.threshold_operator is None:
+                raise ValueError(
+                    "Threshold-area objectives require a threshold and threshold operator"
+                )
+            if self.percentile is not None:
+                raise ValueError("Threshold-area objectives do not accept a percentile")
+            if self.target < 0 or self.target > 100:
+                raise ValueError("Threshold-area targets must be between 0 and 100")
+            return self
+
+        if self.percentile is None:
+            raise ValueError("Percentile objectives require a percentile")
+        if self.threshold is not None or self.threshold_operator is not None:
+            raise ValueError("Percentile objectives do not accept threshold fields")
         return self
+
+    def identity_key(self):
+        if self.kind == "aggregate":
+            return (self.kind, self.metric)
+        if self.kind == "threshold_area":
+            return (self.kind, self.measurement)
+        return (self.kind, self.measurement, self.percentile)
+
+    @model_serializer(mode="wrap")
+    def serialize_objective(self, handler):
+        data = handler(self)
+        if self.kind == "aggregate":
+            data.pop("kind", None)
+        for key in tuple(data):
+            if data[key] is None:
+                data.pop(key)
+        return data
 
 
 class OptimizationVariable(BaseModel):
@@ -176,12 +237,9 @@ class NetworkCoverageOptimizationRequest(BaseModel):
         antenna_ids = [antenna.id for antenna in self.base_request.antennas]
         if len(antenna_ids) != len(set(antenna_ids)):
             raise ValueError("Optimization antennas must have unique IDs")
-        metrics = [
-            objective.metric
-            for objective in self.objectives
-        ]
-        if len(metrics) != len(set(metrics)):
-            raise ValueError("optimization objectives must use unique metrics")
+        objective_keys = [objective.identity_key() for objective in self.objectives]
+        if len(objective_keys) != len(set(objective_keys)):
+            raise ValueError("optimization objectives must be unique")
         return self
 
 
