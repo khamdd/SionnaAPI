@@ -4768,6 +4768,14 @@ textarea:hover:not(:disabled) {
   transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
 
+.optimization-section-collapsed {
+  cursor: pointer;
+}
+
+.optimization-section-collapsed:hover {
+  background: #f2f6f7;
+}
+
 .optimization-form-section.optimization-section-active {
   background: #f2f8f7;
   box-shadow: inset 3px 0 0 var(--accent);
