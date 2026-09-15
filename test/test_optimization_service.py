@@ -8,6 +8,7 @@ from backend.schemas.requests import (
 )
 from backend.services.optimization_service import (
     build_network_coverage_candidate_request,
+    candidate_change_cost,
     evaluate_network_coverage_objectives,
     evaluate_objective,
     extract_network_coverage_kpis,
@@ -33,8 +34,8 @@ def coverage_result(covered):
     ]}}
 
 
-def test_search_runs_fresh_baseline_stops_at_target_and_preserves_request():
-    req = optimization_request()
+def test_search_runs_fresh_baseline_uses_budget_and_preserves_request():
+    req = optimization_request(max_candidates=3)
     original = req.model_dump()
     calls = []
     progress = []
@@ -42,7 +43,7 @@ def test_search_runs_fresh_baseline_stops_at_target_and_preserves_request():
         calls.append(candidate)
         return coverage_result(5 if len(calls) == 1 else 10)
     result = run_network_coverage_optimization(req, simulate, progress.append)
-    assert len(calls) == 2
+    assert len(calls) == 3
     assert calls[0].antennas[0].tilt.current == 5
     assert calls[1].antennas[0].tilt.current == 0
     assert calls[1].antennas[0].tx_power.current == 20
@@ -50,7 +51,9 @@ def test_search_runs_fresh_baseline_stops_at_target_and_preserves_request():
     assert req.model_dump() == original
     assert result["optimization"]["stop_reason"] == "targets_met"
     assert result["optimization"]["best"]["settings"]["A1"]["tilt"] == 0
-    assert progress[-1]["completed"] == 2
+    assert result["optimization"]["recommended_candidate"] == result["optimization"]["best"]
+    assert len(result["optimization"]["alternatives"]) == 2
+    assert progress[-1]["completed"] == 3
 
 
 def test_search_keeps_baseline_when_other_settings_are_worse_or_equal():
@@ -87,6 +90,28 @@ def test_optimization_rejects_invalid_target_and_unbounded_search():
         NetworkCoverageOptimizationRequest(**req)
     with pytest.raises(ValidationError):
         optimization_request(max_candidates=5001)
+
+
+def test_optimization_accepts_four_goals_but_rejects_five():
+    payload = optimization_request().model_dump()
+    payload["objectives"] = [
+        {"metric": "covered_area_percent", "operator": ">=", "target": 95},
+        {"metric": "uncovered_area_percent", "operator": "<=", "target": 5},
+        {"metric": "overlap_area_percent", "operator": "<=", "target": 25},
+        {"metric": "average_overlap_count", "operator": "<=", "target": 2},
+    ]
+
+    assert len(NetworkCoverageOptimizationRequest(**payload).objectives) == 4
+    with pytest.raises(ValueError):
+        NetworkCoverageOptimizationRequest(
+            **{**payload, "objectives": payload["objectives"] + [{
+                "kind": "percentile",
+                "measurement": "sinr_db",
+                "percentile": 10,
+                "operator": ">=",
+                "target": 5,
+            }]}
+        )
 
 
 def test_search_normalizes_conflicting_objectives_and_does_not_claim_success():
@@ -250,9 +275,45 @@ def test_global_exploration_finds_distant_mixed_range_combination():
     result = run_network_coverage_optimization(req, simulate)
 
     assert result["optimization"]["stop_reason"] == "targets_met"
-    assert result["optimization"]["rounds_completed"] == 0
+    assert result["optimization"]["global_tested"] > 1
     assert result["optimization"]["best"]["settings"]["A1"]["tx_power"] == 20
     assert result["optimization"]["best"]["settings"]["A1"]["azimuth"] == 315
+
+
+def test_recommendation_prefers_smaller_change_after_targets_pass():
+    payload = optimization_request(max_candidates=4).model_dump()
+    payload["base_request"]["antennas"][0]["tilt"] = {
+        "min": 0,
+        "current": 4,
+        "max": 10,
+    }
+    payload["tilt_step"] = 4
+    payload["variables"] = [{"field": "tilt", "scope": "enabled_antennas"}]
+    req = NetworkCoverageOptimizationRequest(**payload)
+
+    def simulate(candidate):
+        return coverage_result(10 if candidate.antennas[0].tilt.current >= 8 else 5)
+
+    result = run_network_coverage_optimization(req, simulate)
+
+    assert result["optimization"]["tested_count"] == 4
+    assert result["optimization"]["best"]["settings"]["A1"]["tilt"] == 8
+    assert "fewer changed antennas" in result["optimization"]["recommendation_reason"]
+
+
+def test_change_cost_counts_antennas_and_uses_short_azimuth_rotation():
+    cost = candidate_change_cost({
+        "changes": [
+            {"antenna_id": "A1", "field": "tilt", "delta": 2},
+            {"antenna_id": "A1", "field": "azimuth", "delta": -350},
+            {"antenna_id": "A2", "field": "tx_power", "delta": 4},
+        ]
+    })
+
+    assert cost["changed_antennas"] == 2
+    assert cost["normalized_magnitude"] == pytest.approx(
+        (2 / 20) + (10 / 180) + (4 / 20), abs=1e-6,
+    )
 
 
 def test_search_strict_target_equality_is_not_success():

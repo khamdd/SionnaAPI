@@ -4957,6 +4957,22 @@ textarea:hover:not(:disabled) {
   font-weight: 650;
 }
 
+.optimization-candidate-table td:first-child,
+.optimization-candidate-table th:first-child {
+  width: 54px;
+  text-align: center;
+}
+
+.optimization-candidate-table input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.optimization-candidate-table tr.selected td {
+  background: #eef5f9;
+}
+
 @media (max-width: 760px) {
   .optimization-config-header,
   .optimization-form-heading,

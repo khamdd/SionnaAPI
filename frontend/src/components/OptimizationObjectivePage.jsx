@@ -19,6 +19,7 @@ const OBJECTIVE_TYPES = [
 ];
 const OPERATORS = ["<=", ">=", "<", ">", "="];
 const THRESHOLD_OPERATORS = [">=", ">", "<=", "<"];
+const MAX_OBJECTIVES = 4;
 function read(key) {
   try { return JSON.parse(localStorage.getItem(key) || "null"); } catch { return null; }
 }
@@ -43,6 +44,7 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
   const [saving, setSaving] = useState(false);
   const [applied, setApplied] = useState(false);
   const [showTestedSetups, setShowTestedSetups] = useState(false);
+  const [selectedCandidateId, setSelectedCandidateId] = useState(null);
   const signature = JSON.stringify(baseRequest);
 
   useEffect(() => {
@@ -82,6 +84,7 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
           }
           setShowTestedSetups(false);
           setResult(full);
+          setSelectedCandidateId((full.optimization.recommended_candidate || full.optimization.best)?.id);
           setSaved(Boolean(job.result_run_id));
           setBusy(false);
           setError("");
@@ -130,6 +133,7 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
     setSaved(false);
     setApplied(false);
     setShowTestedSetups(false);
+    setSelectedCandidateId(null);
     setSourceSignature(signature);
     write(runKey, null);
     write(storageKey, { ...(read(storageKey) || {}), [activeScene.id]: { simulation_type: "network_coverage", objectives: targets } });
@@ -150,6 +154,7 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
       } else {
         if (!response.optimization) throw new Error(response.error || "No optimization result returned.");
         setResult(response);
+        setSelectedCandidateId((response.optimization.recommended_candidate || response.optimization.best)?.id);
         setBusy(false);
         setStatus("Optimization finished.");
       }
@@ -170,6 +175,9 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
   }
 
   const optimization = result?.optimization;
+  const recommendedCandidate = optimization?.recommended_candidate || optimization?.best;
+  const candidateOptions = optimization ? [recommendedCandidate, ...(optimization.alternatives || [])].filter(Boolean) : [];
+  const selectedCandidate = candidateOptions.find((candidate) => candidate.id === selectedCandidateId) || recommendedCandidate;
   const stale = sourceSignature !== signature;
   const valid = objectives.length > 0 && objectives.every(objectiveIsValid) && new Set(objectives.map(objectiveKey)).size === objectives.length;
   return (
@@ -193,7 +201,7 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
                 <h3>Performance targets</h3>
                 <p>Describe the network result you need. Every target must pass.</p>
               </div>
-              <span>{objectives.length} of 2 configured</span>
+              <span>{objectives.length} of {MAX_OBJECTIVES} configured</span>
             </div>
             <div className="optimization-objective-list">
               {objectives.map((objective, index) => {
@@ -212,7 +220,7 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
                 );
               })}
             </div>
-            {objectives.length < 2 && <button className="ghost-button optimization-add-target" type="button" onClick={() => {
+            {objectives.length < MAX_OBJECTIVES && <button className="ghost-button optimization-add-target" type="button" onClick={() => {
               const metric = AGGREGATE_METRICS.find(({ id }) => !objectives.some((o) => o.metric === id) && id === "overlap_area_percent") || AGGREGATE_METRICS.find(({ id }) => !objectives.some((o) => o.metric === id));
               setObjectives([...objectives, { kind: "aggregate", metric: metric.id, operator: metric.operator, target: metric.target }]);
             }}>Add another target</button>}
@@ -264,17 +272,31 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
         {error && <p className="error-text" role="alert">{error}</p>}
       </form>
       {optimization && <section className="optimization-panel">
-        <h2>Best setup found</h2>
+        <h2>Recommended setup</h2>
         <p>{optimizationResultSummary(optimization)}</p>
+        <p>{optimization.recommendation_reason || "This setup ranked highest against the configured targets."}</p>
         {Number.isFinite(Number(optimization.global_tested)) && <p>Global exploration: {formatInteger(optimization.global_tested)} setups. Local refinement: {formatInteger(optimization.local_tested)} setups.</p>}
+        <table className="optimization-results-table optimization-candidate-table"><thead><tr><th>Use</th><th>Option</th><th>Goals met</th><th>Antennas changed</th><th>Adjustments</th></tr></thead>
+          <tbody>{candidateOptions.map((candidate, index) => {
+            const evaluations = candidate.evaluation?.evaluations || [];
+            return <tr key={candidate.id} className={candidate.id === selectedCandidate?.id ? "selected" : ""}>
+              <td><input type="radio" name="optimization-candidate" aria-label={`Select ${index === 0 ? "recommended setup" : `alternative ${index}`}`} checked={candidate.id === selectedCandidate?.id} onChange={() => { setSelectedCandidateId(candidate.id); setApplied(false); }} /></td>
+              <td>{index === 0 ? "Recommended" : `Alternative ${index}`}</td>
+              <td>{evaluations.filter((item) => item.passed).length} / {evaluations.length}</td>
+              <td>{candidate.change_cost?.changed_antennas ?? new Set((candidate.changes || []).map((change) => change.antenna_id)).size}</td>
+              <td>{candidate.changes?.length || 0}</td>
+            </tr>;
+          })}</tbody>
+        </table>
+        <h3>Selected setup details</h3>
         <table className="optimization-results-table"><thead><tr><th>Metric</th><th>Before</th><th>After</th><th>Target</th></tr></thead>
           <tbody>{optimization.objectives.map((objective, index) => {
             const before = optimization.baseline.evaluation.evaluations[index];
-            const after = optimization.best.evaluation.evaluations[index];
+            const after = selectedCandidate.evaluation.evaluations[index];
             return <tr key={objectiveKey(objective)}><td>{objectiveLabel(objective)}</td><td>{formatObjectiveActual(before, objective)}</td><td>{formatObjectiveActual(after, objective)}</td><td>{objectiveTarget(objective)}</td></tr>;
           })}</tbody>
         </table>
-        <p>Covered cells: {formatInteger(optimization.baseline.evaluation.kpis.covered_cells)} → {formatInteger(optimization.best.evaluation.kpis.covered_cells)} of {formatInteger(optimization.best.evaluation.kpis.total_cells)}.</p>
+        <p>Covered cells: {formatInteger(optimization.baseline.evaluation.kpis.covered_cells)} → {formatInteger(selectedCandidate.evaluation.kpis.covered_cells)} of {formatInteger(selectedCandidate.evaluation.kpis.total_cells)}.</p>
         <button
           type="button"
           className="ghost-button"
@@ -296,13 +318,13 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
             ))}</tbody>
           </table>
         </>}
-        <p>When targets conflict, results are ranked by the combined shortfall, adjusted for each metric’s scale. Ties keep the earlier setup.</p>
-        {optimization.best.changes.length ? <ul>{optimization.best.changes.map((change) => <li key={`${change.antenna_id}-${change.field || "tilt"}`}>{change.antenna_id} {formatField(change.field)}: {formatMetric(change.from)} → {formatMetric(change.to)}</li>)}</ul> : <p>The starting setup remains the best found. No changes suggested.</p>}
+        <p>Setups are ranked by target results first, then by fewer changed antennas and smaller adjustments.</p>
+        {selectedCandidate.changes.length ? <ul>{selectedCandidate.changes.map((change) => <li key={`${change.antenna_id}-${change.field || "tilt"}`}>{change.antenna_id} {formatField(change.field)}: {formatMetric(change.from)} → {formatMetric(change.to)}</li>)}</ul> : <p>This option keeps the starting antenna settings.</p>}
         {optimization.trials.some((trial) => trial.error) && <p className="error-text">Some setups failed: {optimization.trials.filter((trial) => trial.error).map((trial) => `${trial.label}: ${trial.error}`).join("; ")}</p>}
         {stale && !applied && <p className="error-text">Your antenna settings changed. Run optimization again before applying.</p>}
         <div className="panel-actions">
-          <button className="primary-button" disabled={busy || stale || applied || !optimization.best.changes.length} onClick={() => { onApply(optimization.best.settings || optimization.best.tilts); setApplied(true); }}>{applied ? "Settings applied" : "Apply suggested settings"}</button>
-          {jobId && <button className="ghost-button" disabled={saved || saving || busy} onClick={save}>{saved ? "Saved to history" : saving ? "Saving..." : "Save best result to history"}</button>}
+          <button className="primary-button" disabled={busy || stale || applied || !selectedCandidate.changes.length} onClick={() => { onApply(selectedCandidate.settings || selectedCandidate.tilts); setApplied(true); }}>{applied ? "Settings applied" : "Apply selected settings"}</button>
+          {jobId && <button className="ghost-button" disabled={saved || saving || busy} onClick={save}>{saved ? "Saved to history" : saving ? "Saving..." : "Save recommendation to history"}</button>}
         </div>
       </section>}
     </main>

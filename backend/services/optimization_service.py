@@ -42,7 +42,7 @@ def run_network_coverage_optimization(req, simulate, progress=None):
     global_tested = 0
 
     def run_candidate(candidate):
-        nonlocal baseline, best, best_result, best_request, best_rank, stop_reason
+        nonlocal baseline, best, best_result, best_request, best_rank
         candidate_request = build_network_coverage_candidate_request(
             req.base_request, candidate.get("settings") or candidate["tilts"],
         )["request"]
@@ -58,21 +58,23 @@ def run_network_coverage_optimization(req, simulate, progress=None):
                 raise ValueError(f"Starting setup failed: {exc}") from exc
             trials.append({**candidate, "error": str(exc)})
             return None
-        trial = {**candidate, "evaluation": evaluation}
+        trial = {
+            **candidate,
+            "evaluation": evaluation,
+            "change_cost": candidate_change_cost(candidate),
+        }
         trials.append(trial)
         if baseline is None:
             baseline = trial
-        rank = optimization_rank(evaluation)
+        rank = optimization_rank(evaluation, trial)
         if best_rank is None or rank < best_rank:
             best, best_result, best_request, best_rank = trial, result, candidate_request, rank
-        if evaluation["passed"]:
-            stop_reason = "targets_met"
         return {"trial": trial, "rank": rank}
 
     baseline_node = run_candidate(baseline_candidate)
     global_nodes = [baseline_node]
 
-    if stop_reason != "targets_met" and len(trials) < planned_total:
+    if len(trials) < planned_total:
         if exhaustive:
             global_limit = planned_total - len(trials)
             global_candidates = exhaustive_parameter_candidates(
@@ -95,18 +97,17 @@ def run_network_coverage_optimization(req, simulate, progress=None):
             node = run_candidate(candidate)
             if node is not None:
                 global_nodes.append(node)
-            if stop_reason == "targets_met" or len(trials) >= planned_total:
+            if len(trials) >= planned_total:
                 break
     global_tested = len(trials)
 
     if (
         not exhaustive
-        and stop_reason != "targets_met"
         and len(trials) < req.max_candidates
     ):
         frontier = select_diverse_beam(global_nodes, beam_width, dimensions)
 
-    while frontier and stop_reason != "targets_met" and len(trials) < req.max_candidates:
+    while frontier and len(trials) < req.max_candidates:
         rounds_completed += 1
         layer = []
         candidates = interleaved_beam_candidates(
@@ -124,20 +125,29 @@ def run_network_coverage_optimization(req, simulate, progress=None):
             node = run_candidate(candidate)
             if node is not None:
                 layer.append(node)
-            if stop_reason == "targets_met" or len(trials) >= req.max_candidates:
+            if len(trials) >= req.max_candidates:
                 break
-        if stop_reason == "targets_met":
-            break
         frontier = select_diverse_beam(layer, beam_width, dimensions)
 
-    if stop_reason != "targets_met" and len(trials) >= req.max_candidates:
+    if best["evaluation"]["passed"]:
+        stop_reason = "targets_met"
+    elif len(trials) >= req.max_candidates:
         stop_reason = "budget_exhausted"
+    successful_trials = [trial for trial in trials if "evaluation" in trial]
+    ranked_trials = sorted(
+        successful_trials,
+        key=lambda trial: optimization_rank(trial["evaluation"], trial),
+    )
+    alternatives = [trial for trial in ranked_trials if trial["id"] != best["id"]][:3]
     if progress:
         progress({"completed": len(trials), "total": planned_total, "current": "Finished"})
     return {
         **best_result,
         "optimization": {
             "baseline": baseline, "best": best, "trials": trials,
+            "recommended_candidate": best,
+            "alternatives": alternatives,
+            "recommendation_reason": recommendation_reason(best),
             "stop_reason": stop_reason, "tested_count": len(trials),
             "budget_limit": req.max_candidates,
             "planned_total": planned_total,
@@ -158,16 +168,56 @@ def run_network_coverage_optimization(req, simulate, progress=None):
     }
 
 
-def optimization_rank(evaluation):
-    """Rank passing configurations first, then the smallest normalized shortfall."""
+def optimization_rank(evaluation, candidate=None):
+    """Rank goal fit first, then prefer fewer and smaller operational changes."""
     normalized_gap = sum(
         item["score"] / item.get("normalization_scale", 100)
         for item in evaluation["evaluations"]
     )
+    change_cost = (candidate or {}).get("change_cost") or {
+        "changed_antennas": 0,
+        "normalized_magnitude": 0.0,
+    }
     return (
         not evaluation["passed"],
         normalized_gap,
         sum(not item["passed"] for item in evaluation["evaluations"]),
+        change_cost["changed_antennas"],
+        change_cost["normalized_magnitude"],
+    )
+
+
+def candidate_change_cost(candidate):
+    changes = candidate.get("changes") or []
+    changed_antennas = {change["antenna_id"] for change in changes}
+    normalized_magnitude = 0.0
+    for change in changes:
+        field = change.get("field") or "tilt"
+        delta = abs(float(change.get("delta", 0)))
+        if field == "azimuth":
+            delta = min(delta, 360.0 - delta)
+        normalized_magnitude += delta / {
+            "tilt": 20.0,
+            "tx_power": 20.0,
+            "azimuth": 180.0,
+        }.get(field, 1.0)
+    return {
+        "changed_antennas": len(changed_antennas),
+        "normalized_magnitude": round(normalized_magnitude, 6),
+    }
+
+
+def recommendation_reason(candidate):
+    if candidate["id"] == "baseline":
+        return "The starting setup ranked highest, so no antenna changes are recommended."
+    if candidate["evaluation"]["passed"]:
+        return (
+            "This setup meets every target and ranked best after preferring fewer "
+            "changed antennas and smaller setting adjustments."
+        )
+    return (
+        "No tested setup met every target. This setup has the smallest combined "
+        "target shortfall, then the lowest change cost."
     )
 
 

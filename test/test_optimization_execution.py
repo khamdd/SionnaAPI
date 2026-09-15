@@ -42,7 +42,7 @@ def test_worker_converts_each_candidate_and_reports_progress(monkeypatch):
     monkeypatch.setattr(worker, "mark_simulation_job_succeeded", lambda job_id, result: results.append(result))
     monkeypatch.setattr(worker, "mark_simulation_job_failed", lambda *args, **kwargs: failures.append(args))
     worker.run_simulation_job({"id": "job-1", "simulation_type": "network_coverage_optimization",
-                               "scene_json": scene_info(), "request_json": optimization_request().model_dump()})
+                               "scene_json": scene_info(), "request_json": optimization_request(max_candidates=2).model_dump()})
     assert not failures
     assert len(calls) == 2
     assert progress[-1]["completed"] == 2

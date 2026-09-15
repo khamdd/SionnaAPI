@@ -67,6 +67,10 @@ Percentile objectives express requirements such as â€œP10 SINR is at least 5 dBâ
 ```
 
 Supported RF measurements are `rsrp_dbm`, `sinr_db`, and `throughput_mbps`.
+An optimization request accepts up to four objectives. It searches the available
+budget instead of stopping at the first passing setup, then returns the
+lowest-change recommendation and up to three ranked alternatives. The legacy
+`best` and `best_request` fields continue to identify the recommendation.
 
 ## Create a suggested draft
 

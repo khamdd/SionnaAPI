@@ -12,7 +12,7 @@ class ImpactProfilePairRequest(BaseModel):
     candidate_profile_id: UUID
     objectives: list[OptimizationObjective] = Field(
         default_factory=list,
-        max_length=2,
+        max_length=4,
     )
 
     @model_validator(mode="after")

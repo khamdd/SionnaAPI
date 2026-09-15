@@ -71,12 +71,14 @@ authority; verify them before making behavior changes.
   azimuth values within a user budget of 1 to 5000 simulations.
 - Objectives may use aggregate coverage/overlap KPIs, the percentage of scene
   cells meeting an RSRP/SINR/throughput threshold, or an RF percentile from P1
-  through P99. Existing aggregate objective payloads remain valid.
+  through P99. Runs accept up to four goals, and existing aggregate objective
+  payloads remain valid.
 - Small discrete spaces are exhaustive. Larger spaces use deterministic
   space-filling candidates, diverse beam selection, and local refinement.
-- Ranking first favors satisfying all objectives, then normalized total shortfall,
-  then fewer failed objectives. It uses unrounded KPI values and preserves the
-  earlier setup on exact ties.
+- The search uses its available candidate budget even after finding a passing
+  setup. Ranking favors satisfying all objectives, normalized total shortfall,
+  fewer failed objectives, fewer changed antennas, and smaller adjustments, in
+  that order. Results include one recommendation and up to three alternatives.
 - Network Coverage and Impact comparison share coverage, overlap, and RF KPI
   extraction. RF summaries include averages and nearest-rank P10/P50/P90 values
   for RSRP, SINR, and throughput; reusable threshold-area calculations support

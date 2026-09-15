@@ -219,7 +219,7 @@ class NetworkCoverageOptimizationRequest(BaseModel):
 
     objectives: List[OptimizationObjective] = Field(
         min_length=1,
-        max_length=2,
+        max_length=4,
     )
 
     variables: List[OptimizationVariable] = Field(
