@@ -99,7 +99,10 @@ authority; verify them before making behavior changes.
   why each alternative ranked below the recommendation. It also compares the
   baseline and recommended RF grids for RSRP, SINR, or throughput, including a
   cell-level improvement/regression view. Only the baseline and winning grids are
-  retained; grids for every tested candidate are not stored.
+  retained; grids for every tested candidate are not stored. Completed results
+  can be downloaded as a self-contained HTML engineering report with the decision,
+  targets, antenna changes, guardrails, RSRP comparison maps, search efficiency,
+  and alternative summaries.
 - Core behavior and result shape live in
   `backend/services/optimization_service.py` and its targeted tests.
 

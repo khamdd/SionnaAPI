@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getSimulationJob, getSimulationJobResult, runNetworkCoverageOptimization, saveSimulationJobResult } from "../api";
+import { downloadOptimizationReport } from "../utils/optimizationReport";
 
 const AGGREGATE_METRICS = [
   { id: "uncovered_area_percent", label: "Uncovered area", unit: "%", operator: "<=", target: 2 },
@@ -486,6 +487,7 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
         {stale && !applied && <p className="error-text">Your antenna settings changed. Run optimization again before applying.</p>}
         <div className="panel-actions">
           <button className="primary-button" disabled={busy || stale || applied || !selectedCandidate.changes.length} onClick={() => { onApply(selectedCandidate.settings || selectedCandidate.tilts); setApplied(true); }}>{applied ? "Settings applied" : "Apply selected settings"}</button>
+          <button className="ghost-button" type="button" onClick={() => downloadOptimizationReport(result, activeScene)}>Download engineering report</button>
           {jobId && <button className="ghost-button" disabled={saved || saving || busy} onClick={save}>{saved ? "Saved to history" : saving ? "Saving..." : "Save recommendation to history"}</button>}
         </div>
       </section>}
