@@ -20,3 +20,11 @@ export function normalizeRoute(pathname) {
 export function isWorkSceneRequiredRoute(pathname) {
   return ![SCENE_SELECTION_ROUTE, SCENE_CREATION_ROUTE].includes(pathname);
 }
+
+export function shouldRedirectToSceneSelection({
+  hasWorkScene,
+  isSceneListLoading,
+  pathname,
+}) {
+  return !isSceneListLoading && !hasWorkScene && isWorkSceneRequiredRoute(pathname);
+}

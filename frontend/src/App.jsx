@@ -50,6 +50,7 @@ import {
   SIMULATION_ENTRY_ROUTE,
   isWorkSceneRequiredRoute,
   normalizeRoute,
+  shouldRedirectToSceneSelection,
 } from "./utils/routes";
 import useSceneAntennaDraft from "./hooks/useSceneAntennaDraft";
 import {
@@ -341,7 +342,7 @@ export default function App() {
   }, []);
 
   const loadScenes = useCallback(async (options = {}) => {
-    const syncActiveScene = options.syncActiveScene ?? hasWorkScene;
+    const syncActiveScene = options.syncActiveScene ?? false;
     setIsSceneListLoading(true);
 
     try {
@@ -352,10 +353,8 @@ export default function App() {
       setScenes(nextScenes);
       if (syncActiveScene) {
         setActiveScene(nextActiveScene);
+        setHasWorkScene(Boolean(nextActiveScene));
         setLatestSolver(nextActiveScene ? solverForScene(nextActiveScene) : clone(DEFAULT_SOLVER));
-        if (!nextActiveScene) {
-          setHasWorkScene(false);
-        }
       }
       return {
         ...result,
@@ -365,7 +364,7 @@ export default function App() {
     } finally {
       setIsSceneListLoading(false);
     }
-  }, [hasWorkScene]);
+  }, []);
 
   useEffect(() => {
     function handlePopState() {
@@ -381,7 +380,7 @@ export default function App() {
       return;
     }
 
-    if (!hasWorkScene && isWorkSceneRequiredRoute(route)) {
+    if (shouldRedirectToSceneSelection({ hasWorkScene, isSceneListLoading, pathname: route })) {
       setSceneNotice("Select or create a work scene before opening simulations.", true);
       navigate(SCENE_SELECTION_ROUTE, { replace: true });
       return;
@@ -394,7 +393,7 @@ export default function App() {
     if (route === "/queue") {
       loadJobs();
     }
-  }, [authStatus, hasWorkScene, route, loadHistory, loadJobs]);
+  }, [authStatus, hasWorkScene, isSceneListLoading, route, loadHistory, loadJobs]);
 
   useEffect(() => {
     if (authStatus !== "authenticated" || route !== "/queue") {
@@ -421,10 +420,10 @@ export default function App() {
       return;
     }
 
-    loadScenes().catch((error) => {
+    loadScenes({ syncActiveScene: true }).catch((error) => {
       setSceneNotice(`Failed to load scenes: ${error.message}`, true);
     });
-  }, [authStatus, hasWorkScene, loadScenes]);
+  }, [authStatus, loadScenes]);
 
   useEffect(() => {
     if (!activeScene) {

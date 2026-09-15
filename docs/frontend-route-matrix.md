@@ -35,6 +35,7 @@ separate task.
 | No stored token | Any | Show Login without loading protected page data |
 | Invalid/expired token | Any | Remove token and stored user, then show Login |
 | Login succeeds | Any | Store token/user and navigate to `/scenes` |
+| Reload with a valid stored session and active scene | Any known route | Restore the active scene before route gating and keep the requested route |
 | Authenticated, no work scene | `/scenes` or `/choose-scene` | Allow route |
 | Authenticated, no work scene | Any simulation/result route | Replace with `/scenes` and show a scene-required notice |
 | Work scene selected | `/network` | Allow route and use selected scene context |

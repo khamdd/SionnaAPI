@@ -8,6 +8,7 @@ import {
   SIMULATION_ENTRY_ROUTE,
   isWorkSceneRequiredRoute,
   normalizeRoute,
+  shouldRedirectToSceneSelection,
 } from "./routes";
 
 describe("route constants", () => {
@@ -67,5 +68,28 @@ describe("isWorkSceneRequiredRoute", () => {
   it("requires a work scene for unknown and root paths", () => {
     expect(isWorkSceneRequiredRoute("/")).toBe(true);
     expect(isWorkSceneRequiredRoute("/unknown")).toBe(true);
+  });
+});
+
+describe("shouldRedirectToSceneSelection", () => {
+  it("waits for startup scene restoration before gating a reloaded route", () => {
+    expect(shouldRedirectToSceneSelection({
+      hasWorkScene: false,
+      isSceneListLoading: true,
+      pathname: "/history",
+    })).toBe(false);
+  });
+
+  it("redirects protected routes only after loading confirms there is no work scene", () => {
+    expect(shouldRedirectToSceneSelection({
+      hasWorkScene: false,
+      isSceneListLoading: false,
+      pathname: "/history",
+    })).toBe(true);
+    expect(shouldRedirectToSceneSelection({
+      hasWorkScene: true,
+      isSceneListLoading: false,
+      pathname: "/history",
+    })).toBe(false);
   });
 });
