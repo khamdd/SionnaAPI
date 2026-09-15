@@ -861,6 +861,10 @@ button.hidden,
   grid-template-rows: auto minmax(0, 1fr);
 }
 
+.rsrp-page > .api-workspace-controls {
+  contain: size;
+}
+
 .api-workspace-form {
   min-height: 0;
   overflow: auto;
@@ -1686,6 +1690,18 @@ textarea:disabled {
   height: calc(100vh - 91px);
   overflow: auto;
   padding: 12px;
+}
+
+.network-page > .control-panel {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.network-page > .control-panel > .antenna-list {
+  flex: 1 1 0;
+  height: auto;
+  min-height: 0;
 }
 
 .embedded-antenna-panel .antenna-list {
