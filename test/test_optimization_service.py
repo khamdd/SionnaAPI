@@ -9,9 +9,12 @@ from backend.schemas.requests import (
 from backend.services.optimization_service import (
     build_network_coverage_candidate_request,
     candidate_change_cost,
+    candidate_settings_allowed,
+    evaluate_guardrails,
     evaluate_network_coverage_objectives,
     evaluate_objective,
     extract_network_coverage_kpis,
+    optimization_dimensions,
     run_network_coverage_optimization,
 )
 
@@ -314,6 +317,48 @@ def test_change_cost_counts_antennas_and_uses_short_azimuth_rotation():
     assert cost["normalized_magnitude"] == pytest.approx(
         (2 / 20) + (10 / 180) + (4 / 20), abs=1e-6,
     )
+
+
+def test_safety_constraints_limit_scope_ranges_changed_count_and_power():
+    payload = optimization_request().model_dump()
+    payload["base_request"]["antennas"].append({
+        "id": "A2", "longitude": 105.81, "latitude": 21.01, "height_m": 30,
+        "tilt": {"min": 0, "current": 5, "max": 10}, "azimuth": 90,
+        "tx_power": {"min": 20, "current": 30, "max": 40},
+    })
+    payload.update({
+        "eligible_antenna_ids": ["A1"],
+        "max_tilt_change": 2,
+        "max_changed_antennas": 1,
+        "prevent_total_power_increase": True,
+        "variables": [{"field": "tilt", "scope": "enabled_antennas"}],
+    })
+    req = NetworkCoverageOptimizationRequest(**payload)
+    dimensions = optimization_dimensions(req)
+
+    assert {(antenna_id, field) for antenna_id, field, _ in dimensions} == {("A1", "tilt")}
+    assert all(abs(value - 5) <= 2 for _, _, values in dimensions for value in values)
+
+    baseline = {"A1": {"tilt": 5, "tx_power": 30, "azimuth": 45}, "A2": {"tilt": 5, "tx_power": 30, "azimuth": 90}}
+    increased = {antenna_id: dict(values) for antenna_id, values in baseline.items()}
+    increased["A1"]["tx_power"] = 32
+    assert candidate_settings_allowed(increased, baseline, req) is False
+
+
+def test_guardrail_detects_candidate_regression():
+    evaluations = evaluate_guardrails(
+        {"covered_area_percent": 92, "overlap_area_percent": 24},
+        [
+            {"metric": "covered_area_percent", "max_regression": 2},
+            {"metric": "overlap_area_percent", "max_regression": 3},
+        ],
+        {"covered_area_percent": 95, "overlap_area_percent": 20},
+    )
+
+    assert evaluations[0]["regression"] == 3
+    assert evaluations[0]["passed"] is False
+    assert evaluations[1]["regression"] == 4
+    assert evaluations[1]["passed"] is False
 
 
 def test_search_strict_target_equality_is_not_success():

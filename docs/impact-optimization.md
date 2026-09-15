@@ -23,6 +23,16 @@ Add `optimization_policy` when creating a study:
       {"field": "tilt", "scope": "enabled_antennas"},
       {"field": "tx_power", "scope": "enabled_antennas"},
       {"field": "azimuth", "scope": "enabled_antennas"}
+    ],
+    "eligible_antenna_ids": ["antenna-id"],
+    "max_tilt_change": 10,
+    "max_power_change": 6,
+    "max_azimuth_change": 60,
+    "max_changed_antennas": 3,
+    "prevent_total_power_increase": false,
+    "guardrails": [
+      {"metric": "covered_area_percent", "max_regression": 2},
+      {"metric": "rsrp_dbm_p10", "max_regression": 1.5}
     ]
   }
 }
@@ -71,6 +81,26 @@ An optimization request accepts up to four objectives. It searches the available
 budget instead of stopping at the first passing setup, then returns the
 lowest-change recommendation and up to three ranked alternatives. The legacy
 `best` and `best_request` fields continue to identify the recommendation.
+
+## Allowed changes and guardrails
+
+All policy fields are optional. `eligible_antenna_ids` limits the search to the
+listed antenna IDs from the candidate request. `max_tilt_change`,
+`max_power_change`, and `max_azimuth_change` (degrees/dBm from the starting
+value) trim the legal values per antenna; `max_changed_antennas` caps how many
+antennas one setup may change; `prevent_total_power_increase` rejects setups
+whose summed transmit power exceeds the starting setup.
+
+`guardrails` accepts up to four entries. Supported metrics are
+`covered_area_percent`, `uncovered_area_percent`, `overlap_area_percent`,
+`average_overlap_count`, `rsrp_dbm_p10`, `sinr_db_p10`, and
+`throughput_mbps_p10` — the same KPI keys used by objectives. Each guardrail
+measures how far a candidate regresses from the optimization's starting setup
+(for lower-is-better metrics such as overlap, an increase; for higher-is-better
+metrics such as P10 RSRP, a decrease). `max_regression` bounds that regression;
+`0` forbids any regression. The baseline always passes its own guardrails.
+Candidate evaluations include per-guardrail pass/regression details, and ranking
+treats a guardrail violation as worse than an objective shortfall.
 
 ## Create a suggested draft
 

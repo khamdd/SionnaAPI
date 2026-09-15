@@ -53,6 +53,20 @@ def run_network_coverage_optimization(req, simulate, progress=None):
             if result.get("status") != "success" or not result.get("grid", {}).get("cells"):
                 raise ValueError(result.get("error") or "Simulation returned no coverage cells")
             evaluation = evaluate_network_coverage_objectives(result, req.objectives)
+            baseline_kpis = (
+                baseline["evaluation"]["kpis"] if baseline is not None else evaluation["kpis"]
+            )
+            guardrail_evaluations = evaluate_guardrails(
+                evaluation["kpis"], req.guardrails, baseline_kpis,
+            )
+            evaluation["guardrails"] = guardrail_evaluations
+            evaluation["objectives_passed"] = evaluation["passed"]
+            evaluation["guardrails_passed"] = all(
+                item["passed"] for item in guardrail_evaluations
+            )
+            evaluation["passed"] = (
+                evaluation["objectives_passed"] and evaluation["guardrails_passed"]
+            )
         except Exception as exc:
             if candidate["id"] == "baseline":
                 raise ValueError(f"Starting setup failed: {exc}") from exc
@@ -78,7 +92,7 @@ def run_network_coverage_optimization(req, simulate, progress=None):
         if exhaustive:
             global_limit = planned_total - len(trials)
             global_candidates = exhaustive_parameter_candidates(
-                dimensions, baseline_settings, seen, global_limit,
+                dimensions, baseline_settings, seen, global_limit, req,
             )
         else:
             global_total = max(
@@ -90,7 +104,7 @@ def run_network_coverage_optimization(req, simulate, progress=None):
                 global_total - len(trials),
             )
             global_candidates = deterministic_global_candidates(
-                dimensions, baseline_settings, seen, global_limit,
+                dimensions, baseline_settings, seen, global_limit, req,
             )
 
         for candidate in global_candidates:
@@ -164,6 +178,7 @@ def run_network_coverage_optimization(req, simulate, progress=None):
             "best_request": best_request.model_dump(mode="json"),
             "base_request": req.base_request.model_dump(mode="json"),
             "objectives": [objective.model_dump() for objective in req.objectives],
+            "guardrails": [guardrail.model_dump() for guardrail in req.guardrails],
         },
     }
 
@@ -179,7 +194,8 @@ def optimization_rank(evaluation, candidate=None):
         "normalized_magnitude": 0.0,
     }
     return (
-        not evaluation["passed"],
+        not evaluation.get("guardrails_passed", True),
+        not evaluation.get("objectives_passed", evaluation["passed"]),
         normalized_gap,
         sum(not item["passed"] for item in evaluation["evaluations"]),
         change_cost["changed_antennas"],
@@ -215,10 +231,47 @@ def recommendation_reason(candidate):
             "This setup meets every target and ranked best after preferring fewer "
             "changed antennas and smaller setting adjustments."
         )
+    if not candidate["evaluation"].get("guardrails_passed", True):
+        return (
+            "No tested setup satisfied every safety guardrail. This is the "
+            "highest-ranked result, but it should not be applied without review."
+        )
     return (
         "No tested setup met every target. This setup has the smallest combined "
         "target shortfall, then the lowest change cost."
     )
+
+
+def evaluate_guardrails(kpis, guardrails, baseline_kpis):
+    lower_is_better = {
+        "uncovered_area_percent",
+        "overlap_area_percent",
+        "average_overlap_count",
+    }
+    evaluations = []
+    for guardrail in guardrails:
+        metric = objective_value(guardrail, "metric")
+        maximum = numeric_value(objective_value(guardrail, "max_regression"))
+        baseline = numeric_value(baseline_kpis.get(metric))
+        actual = numeric_value(kpis.get(metric))
+        if baseline is None or actual is None:
+            regression = None
+            passed = False
+        else:
+            regression = max(
+                0.0,
+                actual - baseline if metric in lower_is_better else baseline - actual,
+            )
+            passed = regression <= maximum
+        evaluations.append({
+            "metric": metric,
+            "baseline": baseline,
+            "actual": actual,
+            "max_regression": maximum,
+            "regression": regression,
+            "passed": passed,
+        })
+    return evaluations
 
 
 def evaluate_network_coverage_objectives(result_or_grid, objectives):
@@ -242,8 +295,11 @@ def evaluate_network_coverage_objectives(result_or_grid, objectives):
 
 def optimization_dimensions(req):
     variables = {variable.field for variable in getattr(req, "variables", [])}
+    eligible = set(req.eligible_antenna_ids or [])
     dimensions = []
     for antenna in list(getattr(req.base_request, "antennas", []) or []):
+        if eligible and antenna.id not in eligible:
+            continue
         for field in ("tilt", "tx_power", "azimuth"):
             if field not in variables:
                 continue
@@ -257,6 +313,7 @@ def exhaustive_parameter_candidates(
     baseline_settings,
     seen,
     limit,
+    req=None,
 ):
     candidates = []
     value_lists = [dimension[2] for dimension in dimensions]
@@ -266,6 +323,8 @@ def exhaustive_parameter_candidates(
             settings[antenna_id][field] = value
         signature = settings_signature(settings)
         if signature in seen:
+            continue
+        if req is not None and not candidate_settings_allowed(settings, baseline_settings, req):
             continue
         seen.add(signature)
         candidates.append(parameter_candidate(
@@ -284,6 +343,7 @@ def deterministic_global_candidates(
     baseline_settings,
     seen,
     limit,
+    req=None,
 ):
     """Create space-filling full configurations without random sampling."""
     candidates = []
@@ -294,6 +354,8 @@ def deterministic_global_candidates(
             settings[antenna_id][field] = value
         signature = settings_signature(settings)
         if signature in seen:
+            return
+        if req is not None and not candidate_settings_allowed(settings, baseline_settings, req):
             return
         seen.add(signature)
         candidates.append(parameter_candidate(
@@ -429,6 +491,8 @@ def interleaved_beam_candidates(
             signature = settings_signature(settings)
             if signature in seen:
                 continue
+            if not candidate_settings_allowed(settings, baseline_settings, req):
+                continue
             seen.add(signature)
             candidate_number += 1
             candidates.append(parameter_candidate(
@@ -445,9 +509,12 @@ def interleaved_beam_candidates(
 def parameter_mutations(settings, req, local_radius=2):
     """Yield deterministic, near-to-far mutations interleaved across all dimensions."""
     variables = {variable.field for variable in getattr(req, "variables", [])}
+    eligible = set(req.eligible_antenna_ids or [])
     antennas = list(getattr(req.base_request, "antennas", []) or [])
     dimensions = []
     for antenna in antennas:
+        if eligible and antenna.id not in eligible:
+            continue
         for field in ("tilt", "tx_power", "azimuth"):
             if field not in variables:
                 continue
@@ -637,12 +704,47 @@ def copy_settings(settings):
 
 def candidate_values_for_field(antenna, field, req):
     if field == "tilt":
-        return ranged_values(antenna.tilt.min, antenna.tilt.max, req.tilt_step, antenna.tilt.current)
+        values = ranged_values(antenna.tilt.min, antenna.tilt.max, req.tilt_step, antenna.tilt.current)
+        return limit_parameter_change(values, antenna.tilt.current, req.max_tilt_change)
     if field == "tx_power":
-        return ranged_values(antenna.tx_power.min, antenna.tx_power.max, req.power_step, antenna.tx_power.current)
+        values = ranged_values(antenna.tx_power.min, antenna.tx_power.max, req.power_step, antenna.tx_power.current)
+        return limit_parameter_change(values, antenna.tx_power.current, req.max_power_change)
     if field == "azimuth":
-        return ranged_values(0.0, 360.0, req.azimuth_step, antenna.azimuth, include_upper=False)
+        values = ranged_values(0.0, 360.0, req.azimuth_step, antenna.azimuth, include_upper=False)
+        return limit_parameter_change(values, antenna.azimuth, req.max_azimuth_change, circular=True)
     return []
+
+
+def limit_parameter_change(values, current, maximum, circular=False):
+    if maximum is None:
+        return values
+    kept = []
+    for value in values:
+        distance = abs(float(value) - float(current))
+        if circular:
+            distance = min(distance, 360.0 - distance)
+        if distance <= maximum:
+            kept.append(value)
+    return kept
+
+
+def candidate_settings_allowed(settings, baseline_settings, req):
+    changed = {
+        antenna_id
+        for antenna_id, values in settings.items()
+        if any(
+            not math.isclose(values[field], baseline_settings[antenna_id][field])
+            for field in ("tilt", "tx_power", "azimuth")
+        )
+    }
+    if req.max_changed_antennas is not None and len(changed) > req.max_changed_antennas:
+        return False
+    if req.prevent_total_power_increase:
+        candidate_power = sum(values["tx_power"] for values in settings.values())
+        baseline_power = sum(values["tx_power"] for values in baseline_settings.values())
+        if candidate_power > baseline_power and not math.isclose(candidate_power, baseline_power):
+            return False
+    return True
 
 
 def ranged_values(minimum, maximum, step, current, include_upper=True):

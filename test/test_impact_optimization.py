@@ -1,6 +1,9 @@
 from contextlib import contextmanager
 from types import SimpleNamespace
 
+import pytest
+from pydantic import ValidationError
+
 from backend.schemas.impact_studies import ImpactStudyCreateRequest
 from backend.services import impact_study_service
 
@@ -110,6 +113,76 @@ def test_optimization_policy_defaults_to_disabled_and_validates_duplicates():
     )
 
     assert request.optimization_policy.mode == "disabled"
+
+
+def test_optimization_policy_rejects_duplicate_guardrails():
+    with pytest.raises(ValidationError):
+        ImpactStudyCreateRequest(
+            baseline_configuration_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            candidate_configuration_id=CANDIDATE_ID,
+            optimization_policy={
+                "guardrails": [
+                    {"metric": "covered_area_percent", "max_regression": 2},
+                    {"metric": "covered_area_percent", "max_regression": 5},
+                ],
+            },
+        )
+
+
+def test_policy_guardrails_and_limits_reach_queued_optimization(monkeypatch):
+    plan = execution_plan()
+    plan["optimization_policy"].update({
+        "eligible_antenna_ids": ["A1"],
+        "max_tilt_change": 3,
+        "max_power_change": 4,
+        "max_azimuth_change": 60,
+        "max_changed_antennas": 1,
+        "prevent_total_power_increase": True,
+        "guardrails": [
+            {"metric": "covered_area_percent", "max_regression": 2},
+        ],
+    })
+    study = SimpleNamespace(
+        id=STUDY_ID,
+        scene_id="scene-1",
+        candidate_configuration_id=CANDIDATE_ID,
+        policy_version="impact-policy-v1",
+        execution_plan_json=plan,
+        created_by=USER_ID,
+    )
+    captured = {}
+
+    monkeypatch.setattr(
+        impact_study_service,
+        "build_impact_comparison",
+        failed_candidate_comparison,
+    )
+
+    def fake_add(current_session, simulation_type, request, scene, **kwargs):
+        captured["request"] = request
+        job_id = "queued-job"
+        current_session.jobs[job_id] = SimpleNamespace(id=job_id, status="queued")
+        return job_id
+
+    monkeypatch.setattr(impact_study_service, "add_simulation_job", fake_add)
+
+    queued = impact_study_service._queue_required_optimization_jobs(
+        QueueSession(),
+        study,
+        [child_job("baseline"), child_job("candidate")],
+    )
+
+    assert [job.id for job in queued] == ["queued-job"]
+    request = captured["request"]
+    assert request.eligible_antenna_ids == ["A1"]
+    assert request.max_tilt_change == 3
+    assert request.max_power_change == 4
+    assert request.max_azimuth_change == 60
+    assert request.max_changed_antennas == 1
+    assert request.prevent_total_power_increase is True
+    assert [guardrail.metric for guardrail in request.guardrails] == [
+        "covered_area_percent",
+    ]
 
 
 def test_failed_candidate_queues_existing_resumable_optimization(monkeypatch):

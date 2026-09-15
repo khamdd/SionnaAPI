@@ -625,6 +625,15 @@ def _queue_required_optimization_jobs(session, study, jobs):
             max_candidates=policy.get("max_candidates", 300),
             objectives=objectives,
             variables=policy.get("variables"),
+            eligible_antenna_ids=policy.get("eligible_antenna_ids"),
+            max_tilt_change=policy.get("max_tilt_change"),
+            max_power_change=policy.get("max_power_change"),
+            max_azimuth_change=policy.get("max_azimuth_change"),
+            max_changed_antennas=policy.get("max_changed_antennas"),
+            prevent_total_power_increase=policy.get(
+                "prevent_total_power_increase", False,
+            ),
+            guardrails=policy.get("guardrails") or [],
         )
         candidate_identity = execution_plan.get("candidate") or {}
         input_signature = calculate_input_signature(

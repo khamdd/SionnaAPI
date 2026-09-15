@@ -277,7 +277,7 @@ def test_network_coverage_optimization_request_accepts_two_objectives():
     assert request.variables[0].scope == "enabled_antennas"
 
 
-def test_network_coverage_optimization_request_rejects_more_than_two_objectives():
+def test_network_coverage_optimization_request_rejects_more_than_four_objectives():
     base_request = {
         "antennas": [
             {
@@ -318,6 +318,18 @@ def test_network_coverage_optimization_request_rejects_more_than_two_objectives(
                     "metric": "overlap_area_percent",
                     "operator": "<=",
                     "target": 25.0,
+                },
+                {
+                    "metric": "average_overlap_count",
+                    "operator": "<=",
+                    "target": 3.0,
+                },
+                {
+                    "kind": "percentile",
+                    "measurement": "sinr_db",
+                    "percentile": 10,
+                    "operator": ">=",
+                    "target": 5.0,
                 },
             ],
         )
@@ -362,6 +374,132 @@ def test_network_coverage_optimization_request_rejects_duplicate_objectives():
                 },
             ],
         )
+
+
+def optimization_base_request():
+    return {
+        "antennas": [
+            {
+                "id": "A1",
+                "longitude": 105.8,
+                "latitude": 21.0,
+                "height_m": 30.0,
+                "tilt": {
+                    "min": 0.0,
+                    "current": 8.0,
+                    "max": 20.0,
+                },
+                "azimuth": 45.0,
+                "tx_power": {
+                    "min": 20.0,
+                    "current": 30.0,
+                    "max": 40.0,
+                },
+            }
+        ],
+    }
+
+
+def test_network_coverage_optimization_request_accepts_guardrails_and_limits():
+    request = NetworkCoverageOptimizationRequest(
+        base_request=optimization_base_request(),
+        objectives=[
+            {
+                "metric": "uncovered_area_percent",
+                "operator": "<=",
+                "target": 2.0,
+            },
+        ],
+        eligible_antenna_ids=["A1"],
+        max_tilt_change=4.0,
+        max_power_change=6.0,
+        max_azimuth_change=45.0,
+        max_changed_antennas=1,
+        prevent_total_power_increase=True,
+        guardrails=[
+            {
+                "metric": "covered_area_percent",
+                "max_regression": 2.0,
+            },
+            {
+                "metric": "average_overlap_count",
+            },
+        ],
+    )
+
+    assert request.eligible_antenna_ids == ["A1"]
+    assert request.max_changed_antennas == 1
+    assert request.prevent_total_power_increase is True
+    assert [guardrail.metric for guardrail in request.guardrails] == [
+        "covered_area_percent",
+        "average_overlap_count",
+    ]
+    assert request.guardrails[1].max_regression == 0.0
+
+
+def test_network_coverage_optimization_request_rejects_duplicate_guardrails():
+    with pytest.raises(ValidationError):
+        NetworkCoverageOptimizationRequest(
+            base_request=optimization_base_request(),
+            objectives=[
+                {
+                    "metric": "uncovered_area_percent",
+                    "operator": "<=",
+                    "target": 2.0,
+                },
+            ],
+            guardrails=[
+                {
+                    "metric": "covered_area_percent",
+                    "max_regression": 2.0,
+                },
+                {
+                    "metric": "covered_area_percent",
+                    "max_regression": 5.0,
+                },
+            ],
+        )
+
+
+def test_network_coverage_optimization_request_rejects_unknown_eligible_antennas():
+    with pytest.raises(ValidationError):
+        NetworkCoverageOptimizationRequest(
+            base_request=optimization_base_request(),
+            objectives=[
+                {
+                    "metric": "uncovered_area_percent",
+                    "operator": "<=",
+                    "target": 2.0,
+                },
+            ],
+            eligible_antenna_ids=["A1", "A2"],
+        )
+
+
+def test_network_coverage_optimization_request_serialization_omits_default_guardrails():
+    request = NetworkCoverageOptimizationRequest(
+        base_request=optimization_base_request(),
+        objectives=[
+            {
+                "metric": "uncovered_area_percent",
+                "operator": "<=",
+                "target": 2.0,
+            },
+        ],
+    )
+
+    data = request.model_dump(mode="json")
+
+    for key in (
+        "eligible_antenna_ids",
+        "max_tilt_change",
+        "max_power_change",
+        "max_azimuth_change",
+        "max_changed_antennas",
+        "prevent_total_power_increase",
+        "guardrails",
+    ):
+        assert key not in data
 
 
 def test_range_value_accepts_current_inside_bounds():

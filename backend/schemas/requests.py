@@ -203,6 +203,21 @@ class OptimizationVariable(BaseModel):
     scope: Literal["enabled_antennas"] = "enabled_antennas"
 
 
+class OptimizationGuardrail(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    metric: Literal[
+        "covered_area_percent",
+        "uncovered_area_percent",
+        "overlap_area_percent",
+        "average_overlap_count",
+        "rsrp_dbm_p10",
+        "sinr_db_p10",
+        "throughput_mbps_p10",
+    ]
+    max_regression: float = Field(default=0.0, ge=0, allow_inf_nan=False)
+
+
 class NetworkCoverageOptimizationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -216,6 +231,12 @@ class NetworkCoverageOptimizationRequest(BaseModel):
     power_step: float = Field(default=2.0, gt=0, le=20, allow_inf_nan=False)
     azimuth_step: float = Field(default=30.0, gt=0, le=180, allow_inf_nan=False)
     max_candidates: int = Field(default=300, ge=1, le=5000)
+    eligible_antenna_ids: List[str] | None = Field(default=None, min_length=1)
+    max_tilt_change: float | None = Field(default=None, gt=0, le=20, allow_inf_nan=False)
+    max_power_change: float | None = Field(default=None, gt=0, le=20, allow_inf_nan=False)
+    max_azimuth_change: float | None = Field(default=None, gt=0, le=180, allow_inf_nan=False)
+    max_changed_antennas: int | None = Field(default=None, ge=1, le=10)
+    prevent_total_power_increase: bool = False
 
     objectives: List[OptimizationObjective] = Field(
         min_length=1,
@@ -231,16 +252,44 @@ class NetworkCoverageOptimizationRequest(BaseModel):
         min_length=1,
         max_length=3,
     )
+    guardrails: List[OptimizationGuardrail] = Field(default_factory=list, max_length=4)
 
     @model_validator(mode="after")
     def validate_unique_objective_metrics(self):
         antenna_ids = [antenna.id for antenna in self.base_request.antennas]
         if len(antenna_ids) != len(set(antenna_ids)):
             raise ValueError("Optimization antennas must have unique IDs")
+        if self.eligible_antenna_ids is not None:
+            if len(self.eligible_antenna_ids) != len(set(self.eligible_antenna_ids)):
+                raise ValueError("eligible antenna IDs must be unique")
+            unknown = set(self.eligible_antenna_ids).difference(antenna_ids)
+            if unknown:
+                raise ValueError("eligible antenna IDs must belong to the base request")
         objective_keys = [objective.identity_key() for objective in self.objectives]
         if len(objective_keys) != len(set(objective_keys)):
             raise ValueError("optimization objectives must be unique")
+        guardrail_metrics = [guardrail.metric for guardrail in self.guardrails]
+        if len(guardrail_metrics) != len(set(guardrail_metrics)):
+            raise ValueError("optimization guardrails must use unique metrics")
         return self
+
+    @model_serializer(mode="wrap")
+    def serialize_request(self, handler):
+        data = handler(self)
+        for key in (
+            "eligible_antenna_ids",
+            "max_tilt_change",
+            "max_power_change",
+            "max_azimuth_change",
+            "max_changed_antennas",
+        ):
+            if data.get(key) is None:
+                data.pop(key, None)
+        if not data.get("prevent_total_power_increase"):
+            data.pop("prevent_total_power_increase", None)
+        if not data.get("guardrails"):
+            data.pop("guardrails", None)
+        return data
 
 
 class RSRPRequest(BaseModel):

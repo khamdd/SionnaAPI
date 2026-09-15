@@ -76,9 +76,16 @@ authority; verify them before making behavior changes.
 - Small discrete spaces are exhaustive. Larger spaces use deterministic
   space-filling candidates, diverse beam selection, and local refinement.
 - The search uses its available candidate budget even after finding a passing
-  setup. Ranking favors satisfying all objectives, normalized total shortfall,
-  fewer failed objectives, fewer changed antennas, and smaller adjustments, in
-  that order. Results include one recommendation and up to three alternatives.
+  setup. Ranking favors satisfying guardrails, satisfying all objectives,
+  normalized total shortfall, fewer failed objectives, fewer changed antennas,
+  and smaller adjustments, in that order. Results include one recommendation and
+  up to three alternatives.
+- Runs may restrict the search with allowed-change limits: an eligible-antenna
+  subset, per-antenna maximum tilt/power/azimuth change, a cap on how many
+  antennas may change, and an option to forbid increasing total transmit power.
+  Optional guardrails compare each candidate's coverage/overlap KPIs or P10 RF
+  values against the starting setup and reject regressions beyond a configured
+  maximum. A setup must satisfy every objective and every guardrail to pass.
 - Network Coverage and Impact comparison share coverage, overlap, and RF KPI
   extraction. RF summaries include averages and nearest-rank P10/P50/P90 values
   for RSRP, SINR, and throughput; reusable threshold-area calculations support

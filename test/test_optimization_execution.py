@@ -5,9 +5,30 @@ import pytest
 from fastapi import HTTPException
 
 from backend.api import sinr as api
+from backend.schemas.requests import (
+    NetworkCoverageOptimizationRequest,
+    NetworkCoverageRequest,
+)
 from backend.services import simulation_job_store as store
 from backend.services import simulation_worker as worker
-from test.test_optimization_service import coverage_result, optimization_request
+
+
+def optimization_request(**kwargs):
+    return NetworkCoverageOptimizationRequest(
+        base_request=NetworkCoverageRequest(antennas=[{
+            "id": "A1", "longitude": 105.8, "latitude": 21.0, "height_m": 30,
+            "tilt": {"min": 0, "current": 5, "max": 10}, "azimuth": 45,
+            "tx_power": {"min": 20, "current": 30, "max": 40},
+        }]),
+        objectives=[{"metric": "uncovered_area_percent", "operator": "<=", "target": 0}],
+        **kwargs,
+    )
+
+
+def coverage_result(covered):
+    return {"status": "success", "grid": {"cells": [
+        {"overlap_count": 1 if index < covered else 0} for index in range(10)
+    ]}}
 
 
 def scene_info():

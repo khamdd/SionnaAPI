@@ -578,7 +578,7 @@ def test_preview_schema_rejects_duplicate_pairs():
 
 
 def test_preview_schema_rejects_duplicate_objective_metrics():
-    with pytest.raises(ValidationError, match="objective metrics must be unique"):
+    with pytest.raises(ValidationError, match="profile-pair objectives must be unique"):
         ConfigurationImpactPreviewRequest(
             baseline_configuration_id=BASELINE_ID,
             candidate_configuration_id=CANDIDATE_ID,

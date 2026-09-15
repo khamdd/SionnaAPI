@@ -4,6 +4,7 @@ import {
   normalizeObjective,
   objectiveLabel,
   objectiveTarget,
+  optimizationDisabledReason,
   serializeObjective,
 } from "./OptimizationObjectivePage";
 
@@ -62,5 +63,24 @@ describe("optimization RF objectives", () => {
     });
     expect(objectiveLabel(objective)).toBe("P10 SINR");
     expect(objectiveTarget(objective)).toBe(">= 5 dB");
+  });
+
+  it("explains why optimization cannot start", () => {
+    const common = {
+      busy: false,
+      saving: false,
+      baseRequest: { antennas: [{ id: "A1" }] },
+      objectiveValid: true,
+      changeFields: ["tilt"],
+      eligibleAntennaIds: ["A1"],
+    };
+
+    expect(optimizationDisabledReason({ ...common, changeFields: [] })).toBe(
+      "Allow at least one setting: tilt, power, or azimuth.",
+    );
+    expect(optimizationDisabledReason({ ...common, eligibleAntennaIds: [] })).toBe(
+      "Allow at least one antenna to change.",
+    );
+    expect(optimizationDisabledReason(common)).toBe("");
   });
 });
