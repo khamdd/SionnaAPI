@@ -92,7 +92,9 @@ authority; verify them before making behavior changes.
   future RF objectives without changing the current optimization objective API.
 - Progress is persisted between simulations. The frontend remembers the latest
   job per scene, resumes polling, rejects applying results to a changed draft, and
-  saves the winning request/result as normal Network Coverage History.
+  saves the winning request/result as normal Network Coverage History. The result
+  view explains target movement, grouped antenna changes, guardrail effects, and
+  why each alternative ranked below the recommendation.
 - Core behavior and result shape live in
   `backend/services/optimization_service.py` and its targeted tests.
 

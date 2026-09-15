@@ -5115,6 +5115,100 @@ textarea:hover:not(:disabled) {
   background: #eef5f9;
 }
 
+.optimization-outcome {
+  overflow: hidden;
+  border: 1px solid #b9ceda;
+  border-left: 4px solid var(--accent);
+  border-radius: 6px;
+  background: #f7fafb;
+}
+
+.optimization-outcome > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid #d7e3e9;
+  padding: 12px 14px;
+}
+
+.optimization-outcome h3,
+.optimization-outcome h4,
+.optimization-outcome p,
+.optimization-outcome ul {
+  margin: 0;
+}
+
+.optimization-outcome > header p {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.optimization-outcome-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.optimization-outcome-grid article {
+  min-width: 0;
+  padding: 13px 14px;
+}
+
+.optimization-outcome-grid article:nth-child(odd) {
+  border-right: 1px solid #d7e3e9;
+}
+
+.optimization-outcome-grid article:nth-child(n + 3) {
+  border-top: 1px solid #d7e3e9;
+}
+
+.optimization-outcome h4 {
+  margin-bottom: 8px;
+  color: #344653;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.optimization-outcome ul {
+  display: grid;
+  gap: 7px;
+  padding: 0;
+  list-style: none;
+}
+
+.optimization-outcome li {
+  display: grid;
+  grid-template-columns: minmax(92px, auto) minmax(0, 1fr);
+  gap: 8px;
+  color: #52616d;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.optimization-outcome li strong {
+  color: #344653;
+  font-size: 11px;
+}
+
+.optimization-outcome .passed {
+  color: var(--success);
+}
+
+.optimization-outcome .warning {
+  color: #8a5a12;
+}
+
+.optimization-outcome .violated {
+  color: var(--danger);
+}
+
+.optimization-outcome article > p {
+  color: #52616d;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 @media (max-width: 760px) {
   .optimization-config-header,
   .optimization-form-heading,
@@ -5170,6 +5264,18 @@ textarea:hover:not(:disabled) {
   .optimization-objective-fields.threshold-area-fields,
   .optimization-objective-fields.percentile-fields {
     grid-template-columns: 1fr;
+  }
+
+  .optimization-outcome-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .optimization-outcome-grid article:nth-child(odd) {
+    border-right: 0;
+  }
+
+  .optimization-outcome-grid article:nth-child(n + 2) {
+    border-top: 1px solid #d7e3e9;
   }
 
   .optimization-target-index,

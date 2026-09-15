@@ -212,6 +212,9 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
   const recommendedCandidate = optimization?.recommended_candidate || optimization?.best;
   const candidateOptions = optimization ? [recommendedCandidate, ...(optimization.alternatives || [])].filter(Boolean) : [];
   const selectedCandidate = candidateOptions.find((candidate) => candidate.id === selectedCandidateId) || recommendedCandidate;
+  const outcome = optimization && selectedCandidate
+    ? buildOptimizationOutcome(optimization, selectedCandidate)
+    : null;
   const stale = sourceSignature !== signature;
   const objectiveValid = objectives.length > 0 && objectives.every(objectiveIsValid) && new Set(objectives.map(objectiveKey)).size === objectives.length;
   const allowedChangesError = allowedChangesValidationError({
@@ -401,6 +404,34 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
         <p>{optimizationResultSummary(optimization)}</p>
         <p>{optimization.recommendation_reason || "This setup ranked highest against the configured targets."}</p>
         {Number.isFinite(Number(optimization.global_tested)) && <p>Global exploration: {formatInteger(optimization.global_tested)} setups. Local refinement: {formatInteger(optimization.local_tested)} setups.</p>}
+        {outcome && <section className="optimization-outcome" aria-labelledby="optimization-outcome-title">
+          <header>
+            <h3 id="optimization-outcome-title">Why this setup</h3>
+            <p>{selectedCandidate.id === recommendedCandidate.id ? "Recommended option" : "Selected alternative"}</p>
+          </header>
+          <div className="optimization-outcome-grid">
+            <article>
+              <h4>Target result</h4>
+              <ul>{outcome.targets.map((target) => <li key={target.key} className={target.tone}><strong>{target.status}</strong><span>{target.text}</span></li>)}</ul>
+            </article>
+            <article>
+              <h4>Antenna changes</h4>
+              {outcome.changes.length
+                ? <ul>{outcome.changes.map((change) => <li key={change.antennaId}><strong>{change.antennaId}</strong><span>{change.text}</span></li>)}</ul>
+                : <p>No antenna settings change.</p>}
+            </article>
+            <article>
+              <h4>Safety check</h4>
+              <p className={outcome.safety.tone}>{outcome.safety.text}</p>
+            </article>
+            <article>
+              <h4>Why it ranks first</h4>
+              {outcome.alternatives.length
+                ? <ul>{outcome.alternatives.map((item) => <li key={item.id}><strong>{item.label}</strong><span>{item.reason}</span></li>)}</ul>
+                : <p>No other successful setup was available for comparison.</p>}
+            </article>
+          </div>
+        </section>}
         <table className="optimization-results-table optimization-candidate-table"><thead><tr><th>Use</th><th>Option</th><th>Goals met</th><th>Guardrails</th><th>Antennas changed</th><th>Adjustments</th></tr></thead>
           <tbody>{candidateOptions.map((candidate, index) => {
             const evaluations = candidate.evaluation?.evaluations || [];
@@ -709,8 +740,112 @@ function optimizationResultSummary(optimization) {
   return `Targets not fully met. The search exhausted its remaining unique candidates after ${tested} of up to ${limit} simulations. Showing the closest setup found.`;
 }
 
+function buildOptimizationOutcome(optimization, selectedCandidate) {
+  const baseline = optimization.baseline;
+  const targets = (optimization.objectives || []).map((objective, index) => {
+    const before = baseline?.evaluation?.evaluations?.[index];
+    const after = selectedCandidate?.evaluation?.evaluations?.[index];
+    const beforeScore = Number(before?.score);
+    const afterScore = Number(after?.score);
+    let status = "Unchanged";
+    let tone = "neutral";
+    if (after?.passed && !before?.passed) {
+      status = "Improved, target met";
+      tone = "passed";
+    } else if (after?.passed) {
+      status = "Target maintained";
+      tone = "passed";
+    } else if (Number.isFinite(beforeScore) && Number.isFinite(afterScore) && afterScore < beforeScore) {
+      status = "Improved, target missed";
+      tone = "warning";
+    } else if (Number.isFinite(beforeScore) && Number.isFinite(afterScore) && afterScore > beforeScore) {
+      status = "Regressed";
+      tone = "violated";
+    } else if (!after?.passed) {
+      status = "Target missed";
+      tone = "warning";
+    }
+    return {
+      key: objectiveKey(objective),
+      status,
+      tone,
+      text: `${objectiveLabel(objective)}: ${formatObjectiveActual(before, objective)} → ${formatObjectiveActual(after, objective)}; target ${objectiveTarget(objective)}.`,
+    };
+  });
+
+  const changesByAntenna = new Map();
+  for (const change of selectedCandidate.changes || []) {
+    const items = changesByAntenna.get(change.antenna_id) || [];
+    items.push(`${formatField(change.field)} ${formatMetric(change.from)} → ${formatMetric(change.to)}`);
+    changesByAntenna.set(change.antenna_id, items);
+  }
+  const changes = [...changesByAntenna.entries()].map(([antennaId, items]) => ({
+    antennaId,
+    text: items.join("; "),
+  }));
+
+  const selectedGuardrails = selectedCandidate.evaluation?.guardrails || [];
+  const unsafeCompetitiveCount = (optimization.trials || []).filter((trial) =>
+    trial.evaluation
+    && !trial.evaluation.guardrails_passed
+    && (trial.evaluation.objectives_passed || compareObjectivePerformance(trial, selectedCandidate) < 0)
+  ).length;
+  let safety = { tone: "neutral", text: "No safety guardrails were configured." };
+  if (selectedGuardrails.length && selectedCandidate.evaluation.guardrails_passed) {
+    safety = {
+      tone: "passed",
+      text: unsafeCompetitiveCount
+        ? `All ${selectedGuardrails.length} guardrails pass. ${unsafeCompetitiveCount} other setup${unsafeCompetitiveCount === 1 ? "" : "s"} met the targets or scored better, but ${unsafeCompetitiveCount === 1 ? "was" : "were"} rejected for unsafe regression.`
+        : `All ${selectedGuardrails.length} guardrails pass. No better target result was rejected by a guardrail.`,
+    };
+  } else if (selectedGuardrails.length) {
+    const failed = selectedGuardrails.filter((guardrail) => !guardrail.passed).map((guardrail) => guardrailLabel(guardrail.metric));
+    safety = { tone: "violated", text: `Guardrail violation: ${failed.join(", ")}. Review this setup before applying it.` };
+  }
+
+  const recommended = optimization.recommended_candidate || optimization.best;
+  const alternatives = (optimization.alternatives || []).map((alternative, index) => ({
+    id: alternative.id,
+    label: `Alternative ${index + 1}`,
+    reason: explainLowerRank(recommended, alternative),
+  }));
+  return { targets, changes, safety, alternatives };
+}
+
+function objectivePerformance(candidate) {
+  const evaluation = candidate?.evaluation || {};
+  const items = evaluation.evaluations || [];
+  const gap = items.reduce((total, item) => total + (Number(item.score) / Number(item.normalization_scale || 100)), 0);
+  return [evaluation.objectives_passed === false ? 1 : 0, gap, items.filter((item) => !item.passed).length];
+}
+
+function compareObjectivePerformance(left, right) {
+  const a = objectivePerformance(left);
+  const b = objectivePerformance(right);
+  for (let index = 0; index < a.length; index += 1) {
+    if (a[index] !== b[index]) return a[index] < b[index] ? -1 : 1;
+  }
+  return 0;
+}
+
+function explainLowerRank(recommended, alternative) {
+  if (recommended?.evaluation?.guardrails_passed && !alternative?.evaluation?.guardrails_passed) return "Rejected because it violates a safety guardrail.";
+  if (recommended?.evaluation?.objectives_passed && !alternative?.evaluation?.objectives_passed) return "It misses at least one target that the recommendation meets.";
+  const objectiveComparison = compareObjectivePerformance(recommended, alternative);
+  if (objectiveComparison < 0) return "It has a larger combined target shortfall.";
+  const recommendedChanges = recommended?.change_cost?.changed_antennas ?? 0;
+  const alternativeChanges = alternative?.change_cost?.changed_antennas ?? 0;
+  if (alternativeChanges > recommendedChanges) return `It changes more antennas (${alternativeChanges} instead of ${recommendedChanges}).`;
+  const recommendedMagnitude = Number(recommended?.change_cost?.normalized_magnitude || 0);
+  const alternativeMagnitude = Number(alternative?.change_cost?.normalized_magnitude || 0);
+  if (alternativeMagnitude > recommendedMagnitude) return "It requires a larger total adjustment.";
+  return "It ranked lower after applying the same target, safety, and change-cost rules.";
+}
+
 export {
     allowedChangesValidationError,
+    buildOptimizationOutcome,
+    explainLowerRank,
     normalizeObjective,
     objectiveLabel,
     objectiveTarget,
