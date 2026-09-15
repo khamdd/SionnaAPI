@@ -345,6 +345,34 @@ def test_safety_constraints_limit_scope_ranges_changed_count_and_power():
     assert candidate_settings_allowed(increased, baseline, req) is False
 
 
+@pytest.mark.parametrize(
+    ("candidate_powers", "allowed"),
+    [
+        ((30, 30), True),
+        ((29, 29), True),
+        ((33, 27), False),
+        ((30, 30.000001), False),
+    ],
+)
+def test_total_power_limit_compares_linear_power(candidate_powers, allowed):
+    payload = optimization_request().model_dump()
+    payload["base_request"]["antennas"].append({
+        "id": "A2", "longitude": 105.81, "latitude": 21.01, "height_m": 30,
+        "tilt": {"min": 0, "current": 5, "max": 10}, "azimuth": 90,
+        "tx_power": {"min": 20, "current": 30, "max": 40},
+    })
+    payload["prevent_total_power_increase"] = True
+    req = NetworkCoverageOptimizationRequest(**payload)
+    baseline = {
+        "A1": {"tilt": 5, "tx_power": 30, "azimuth": 45},
+        "A2": {"tilt": 5, "tx_power": 30, "azimuth": 90},
+    }
+    candidate = {antenna_id: dict(values) for antenna_id, values in baseline.items()}
+    candidate["A1"]["tx_power"], candidate["A2"]["tx_power"] = candidate_powers
+
+    assert candidate_settings_allowed(candidate, baseline, req) is allowed
+
+
 def test_guardrail_detects_candidate_regression():
     evaluations = evaluate_guardrails(
         {"covered_area_percent": 92, "overlap_area_percent": 24},

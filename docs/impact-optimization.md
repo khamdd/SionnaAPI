@@ -89,7 +89,8 @@ listed antenna IDs from the candidate request. `max_tilt_change`,
 `max_power_change`, and `max_azimuth_change` (degrees/dBm from the starting
 value) trim the legal values per antenna; `max_changed_antennas` caps how many
 antennas one setup may change; `prevent_total_power_increase` rejects setups
-whose summed transmit power exceeds the starting setup.
+whose aggregate transmit power exceeds the starting setup. Individual dBm
+values are converted to linear milliwatts before the aggregate is compared.
 
 `guardrails` accepts up to four entries. Supported metrics are
 `covered_area_percent`, `uncovered_area_percent`, `overlap_area_percent`,

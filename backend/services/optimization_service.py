@@ -740,11 +740,21 @@ def candidate_settings_allowed(settings, baseline_settings, req):
     if req.max_changed_antennas is not None and len(changed) > req.max_changed_antennas:
         return False
     if req.prevent_total_power_increase:
-        candidate_power = sum(values["tx_power"] for values in settings.values())
-        baseline_power = sum(values["tx_power"] for values in baseline_settings.values())
-        if candidate_power > baseline_power and not math.isclose(candidate_power, baseline_power):
+        candidate_power = total_transmit_power_mw(settings)
+        baseline_power = total_transmit_power_mw(baseline_settings)
+        if candidate_power > baseline_power and not math.isclose(
+            candidate_power, baseline_power, rel_tol=1e-9, abs_tol=1e-12,
+        ):
             return False
     return True
+
+
+def total_transmit_power_mw(settings):
+    """Return aggregate configured transmit power after converting dBm to mW."""
+    return math.fsum(
+        10 ** (float(values["tx_power"]) / 10.0)
+        for values in settings.values()
+    )
 
 
 def ranged_values(minimum, maximum, step, current, include_upper=True):

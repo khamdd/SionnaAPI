@@ -214,7 +214,16 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
   const selectedCandidate = candidateOptions.find((candidate) => candidate.id === selectedCandidateId) || recommendedCandidate;
   const stale = sourceSignature !== signature;
   const objectiveValid = objectives.length > 0 && objectives.every(objectiveIsValid) && new Set(objectives.map(objectiveKey)).size === objectives.length;
-  const allowedChangesValid = !showAllowedChanges || (changeFields.length > 0 && eligibleAntennaIds.length > 0);
+  const allowedChangesError = allowedChangesValidationError({
+    active: showAllowedChanges,
+    changeFields,
+    maxTiltChange,
+    maxPowerChange,
+    maxAzimuthChange,
+    maxChangedAntennas,
+    antennaCount: baseRequest?.antennas?.length || 0,
+  });
+  const allowedChangesValid = !showAllowedChanges || (changeFields.length > 0 && eligibleAntennaIds.length > 0 && !allowedChangesError);
   const guardrailsValid = !showGuardrails || guardrails.every((guardrail) => Boolean(guardrail.metric) && Number.isFinite(Number(guardrail.max_regression)) && Number(guardrail.max_regression) >= 0);
   const valid = objectiveValid && allowedChangesValid && guardrailsValid;
   const disabledReason = optimizationDisabledReason({
@@ -225,6 +234,7 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
     allowedChangesActive: showAllowedChanges,
     changeFields,
     eligibleAntennaIds,
+    allowedChangesError,
     guardrailsActive: showGuardrails,
     guardrailsValid,
   });
@@ -608,6 +618,7 @@ function optimizationDisabledReason({
   allowedChangesActive,
   changeFields,
   eligibleAntennaIds,
+  allowedChangesError,
   guardrailsActive,
   guardrailsValid,
 }) {
@@ -618,7 +629,39 @@ function optimizationDisabledReason({
   if (!objectiveValid) return "Complete every target and remove duplicate targets.";
   if (allowedChangesActive && !changeFields.length) return "Allow at least one setting: tilt, power, or azimuth.";
   if (allowedChangesActive && !eligibleAntennaIds.length) return "Allow at least one antenna to change.";
+  if (allowedChangesActive && allowedChangesError) return allowedChangesError;
   if (guardrailsActive && !guardrailsValid) return "Set a maximum regression of 0 or more for every guardrail.";
+  return "";
+}
+
+function allowedChangesValidationError({
+  active,
+  changeFields,
+  maxTiltChange,
+  maxPowerChange,
+  maxAzimuthChange,
+  maxChangedAntennas,
+  antennaCount,
+}) {
+  if (!active) return "";
+  const limits = [
+    ["tilt", maxTiltChange, 20, "Maximum tilt change must be greater than 0 and at most 20°."],
+    ["tx_power", maxPowerChange, 20, "Maximum power change must be greater than 0 and at most 20 dB."],
+    ["azimuth", maxAzimuthChange, 180, "Maximum azimuth change must be greater than 0 and at most 180°."],
+  ];
+  for (const [field, value, maximum, message] of limits) {
+    const number = Number(value);
+    if (changeFields.includes(field) && (!Number.isFinite(number) || value === "" || number <= 0 || number > maximum)) return message;
+  }
+  const changedCount = Number(maxChangedAntennas);
+  if (
+    maxChangedAntennas === ""
+    || !Number.isInteger(changedCount)
+    || changedCount < 1
+    || changedCount > antennaCount
+  ) {
+    return `Maximum antennas changed must be a whole number between 1 and ${antennaCount}.`;
+  }
   return "";
 }
 
@@ -667,6 +710,7 @@ function optimizationResultSummary(optimization) {
 }
 
 export {
+    allowedChangesValidationError,
     normalizeObjective,
     objectiveLabel,
     objectiveTarget,

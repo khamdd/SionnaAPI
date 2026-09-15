@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  allowedChangesValidationError,
   normalizeObjective,
   objectiveLabel,
   objectiveTarget,
@@ -74,6 +75,7 @@ describe("optimization RF objectives", () => {
       allowedChangesActive: true,
       changeFields: ["tilt"],
       eligibleAntennaIds: ["A1"],
+      allowedChangesError: "",
       guardrailsActive: false,
       guardrailsValid: true,
     };
@@ -84,10 +86,50 @@ describe("optimization RF objectives", () => {
     expect(optimizationDisabledReason({ ...common, eligibleAntennaIds: [] })).toBe(
       "Allow at least one antenna to change.",
     );
+    expect(optimizationDisabledReason({ ...common, allowedChangesError: "Invalid safety limit." })).toBe(
+      "Invalid safety limit.",
+    );
     expect(optimizationDisabledReason({ ...common, allowedChangesActive: false })).toBe("");
     expect(
       optimizationDisabledReason({ ...common, guardrailsActive: true, guardrailsValid: false }),
     ).toBe("Set a maximum regression of 0 or more for every guardrail.");
     expect(optimizationDisabledReason(common)).toBe("");
+  });
+});
+
+describe("optimization safety limits", () => {
+  const valid = {
+    active: true,
+    changeFields: ["tilt", "tx_power", "azimuth"],
+    maxTiltChange: 10,
+    maxPowerChange: 6,
+    maxAzimuthChange: 60,
+    maxChangedAntennas: 2,
+    antennaCount: 3,
+  };
+
+  it.each([
+    [{ maxTiltChange: "" }, "Maximum tilt change must be greater than 0 and at most 20°."],
+    [{ maxTiltChange: 0 }, "Maximum tilt change must be greater than 0 and at most 20°."],
+    [{ maxPowerChange: -1 }, "Maximum power change must be greater than 0 and at most 20 dB."],
+    [{ maxAzimuthChange: 181 }, "Maximum azimuth change must be greater than 0 and at most 180°."],
+    [{ maxChangedAntennas: 1.5 }, "Maximum antennas changed must be a whole number between 1 and 3."],
+    [{ maxChangedAntennas: 4 }, "Maximum antennas changed must be a whole number between 1 and 3."],
+  ])("rejects an invalid safety limit", (override, message) => {
+    expect(allowedChangesValidationError({ ...valid, ...override })).toBe(message);
+  });
+
+  it("ignores limits for parameters that are not selected", () => {
+    expect(allowedChangesValidationError({
+      ...valid,
+      changeFields: ["tilt"],
+      maxPowerChange: "",
+      maxAzimuthChange: 999,
+    })).toBe("");
+  });
+
+  it("accepts valid limits and disables validation when safety controls are off", () => {
+    expect(allowedChangesValidationError(valid)).toBe("");
+    expect(allowedChangesValidationError({ ...valid, active: false, maxTiltChange: "" })).toBe("");
   });
 });
