@@ -274,7 +274,7 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
             }}>Add another target</button>}
           </section>
 
-          <section className="optimization-form-section optimization-safety-section">
+          <section className={`optimization-form-section optimization-safety-section${showAllowedChanges ? " optimization-section-active" : ""}`}>
             <div className="optimization-disclosure">
               <h3 className="optimization-disclosure-title">
                 <button
@@ -305,7 +305,7 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
             </>}
           </section>
 
-          <section className="optimization-form-section">
+          <section className={`optimization-form-section${showGuardrails ? " optimization-section-active" : ""}`}>
             <div className="optimization-disclosure">
               <h3 className="optimization-disclosure-title">
                 <button

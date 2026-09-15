@@ -4764,6 +4764,23 @@ textarea:hover:not(:disabled) {
   transform: rotate(0deg);
 }
 
+.optimization-form-section {
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.optimization-form-section.optimization-section-active {
+  background: #f2f8f7;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.optimization-section-active .optimization-disclosure-title button {
+  color: var(--accent-dark);
+}
+
+.optimization-section-active .optimization-disclosure p {
+  color: #476b64;
+}
+
 .optimization-objective-list {
   display: grid;
   gap: 8px;
