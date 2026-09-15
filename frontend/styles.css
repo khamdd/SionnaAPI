@@ -4716,6 +4716,54 @@ textarea:hover:not(:disabled) {
   font-size: 14px;
 }
 
+.optimization-disclosure-title {
+  margin: 0;
+}
+
+.optimization-disclosure-title button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: none;
+  margin: 0;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.optimization-disclosure-title button:hover {
+  color: var(--accent-dark);
+}
+
+.optimization-disclosure p {
+  max-width: 70ch;
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.optimization-disclosure-caret {
+  flex: 0 0 auto;
+  width: 0;
+  height: 0;
+  border-top: 5px solid currentcolor;
+  border-right: 4px solid transparent;
+  border-left: 4px solid transparent;
+  transform: rotate(-90deg);
+  transition: transform 0.15s ease;
+}
+
+.optimization-disclosure-title button[aria-expanded="true"] .optimization-disclosure-caret {
+  transform: rotate(0deg);
+}
+
 .optimization-objective-list {
   display: grid;
   gap: 8px;

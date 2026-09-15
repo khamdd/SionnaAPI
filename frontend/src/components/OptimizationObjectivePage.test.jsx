@@ -71,8 +71,11 @@ describe("optimization RF objectives", () => {
       saving: false,
       baseRequest: { antennas: [{ id: "A1" }] },
       objectiveValid: true,
+      allowedChangesActive: true,
       changeFields: ["tilt"],
       eligibleAntennaIds: ["A1"],
+      guardrailsActive: false,
+      guardrailsValid: true,
     };
 
     expect(optimizationDisabledReason({ ...common, changeFields: [] })).toBe(
@@ -81,6 +84,10 @@ describe("optimization RF objectives", () => {
     expect(optimizationDisabledReason({ ...common, eligibleAntennaIds: [] })).toBe(
       "Allow at least one antenna to change.",
     );
+    expect(optimizationDisabledReason({ ...common, allowedChangesActive: false })).toBe("");
+    expect(
+      optimizationDisabledReason({ ...common, guardrailsActive: true, guardrailsValid: false }),
+    ).toBe("Set a maximum regression of 0 or more for every guardrail.");
     expect(optimizationDisabledReason(common)).toBe("");
   });
 });

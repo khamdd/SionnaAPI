@@ -65,6 +65,8 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
   const [maxChangedAntennas, setMaxChangedAntennas] = useState(Math.min(3, baseRequest?.antennas?.length || 1));
   const [preventPowerIncrease, setPreventPowerIncrease] = useState(false);
   const [guardrails, setGuardrails] = useState([]);
+  const [showAllowedChanges, setShowAllowedChanges] = useState(false);
+  const [showGuardrails, setShowGuardrails] = useState(false);
   const signature = JSON.stringify(baseRequest);
 
   useEffect(() => {
@@ -167,14 +169,18 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
         power_step: Number(powerStep),
         azimuth_step: Number(azimuthStep),
         max_candidates: Number(limit),
-        variables: changeFields.map((field) => ({ field, scope: "enabled_antennas" })),
-        eligible_antenna_ids: eligibleAntennaIds,
-        max_tilt_change: changeFields.includes("tilt") ? Number(maxTiltChange) : undefined,
-        max_power_change: changeFields.includes("tx_power") ? Number(maxPowerChange) : undefined,
-        max_azimuth_change: changeFields.includes("azimuth") ? Number(maxAzimuthChange) : undefined,
-        max_changed_antennas: Number(maxChangedAntennas),
-        prevent_total_power_increase: preventPowerIncrease,
-        guardrails: guardrails.map((guardrail) => ({ ...guardrail, max_regression: Number(guardrail.max_regression) })),
+        ...(showAllowedChanges ? {
+          variables: changeFields.map((field) => ({ field, scope: "enabled_antennas" })),
+          eligible_antenna_ids: eligibleAntennaIds,
+          max_tilt_change: changeFields.includes("tilt") ? Number(maxTiltChange) : undefined,
+          max_power_change: changeFields.includes("tx_power") ? Number(maxPowerChange) : undefined,
+          max_azimuth_change: changeFields.includes("azimuth") ? Number(maxAzimuthChange) : undefined,
+          max_changed_antennas: Number(maxChangedAntennas),
+          prevent_total_power_increase: preventPowerIncrease,
+        } : {}),
+        ...(showGuardrails ? {
+          guardrails: guardrails.map((guardrail) => ({ ...guardrail, max_regression: Number(guardrail.max_regression) })),
+        } : {}),
       });
       if (response.job_id) {
         write(runKey, { jobId: response.job_id, signature });
@@ -208,8 +214,20 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
   const selectedCandidate = candidateOptions.find((candidate) => candidate.id === selectedCandidateId) || recommendedCandidate;
   const stale = sourceSignature !== signature;
   const objectiveValid = objectives.length > 0 && objectives.every(objectiveIsValid) && new Set(objectives.map(objectiveKey)).size === objectives.length;
-  const valid = objectiveValid && changeFields.length > 0 && eligibleAntennaIds.length > 0;
-  const disabledReason = optimizationDisabledReason({ busy, saving, baseRequest, objectiveValid, changeFields, eligibleAntennaIds });
+  const allowedChangesValid = !showAllowedChanges || (changeFields.length > 0 && eligibleAntennaIds.length > 0);
+  const guardrailsValid = !showGuardrails || guardrails.every((guardrail) => Boolean(guardrail.metric) && Number.isFinite(Number(guardrail.max_regression)) && Number(guardrail.max_regression) >= 0);
+  const valid = objectiveValid && allowedChangesValid && guardrailsValid;
+  const disabledReason = optimizationDisabledReason({
+    busy,
+    saving,
+    baseRequest,
+    objectiveValid,
+    allowedChangesActive: showAllowedChanges,
+    changeFields,
+    eligibleAntennaIds,
+    guardrailsActive: showGuardrails,
+    guardrailsValid,
+  });
   return (
     <main className="route-page optimization-page">
       <div className="page-title with-action">
@@ -257,31 +275,63 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
           </section>
 
           <section className="optimization-form-section optimization-safety-section">
-            <div className="optimization-form-heading"><div><h3>Allowed changes</h3><p>Choose what the optimizer may touch and keep adjustments inside safe limits.</p></div></div>
-            <div className="optimization-choice-row">
-              {CHANGE_FIELDS.map(([field, label]) => <label key={field}><input type="checkbox" checked={changeFields.includes(field)} onChange={() => setChangeFields((current) => current.includes(field) ? current.filter((item) => item !== field) : [...current, field])} />{label}</label>)}
-              <label><input type="checkbox" checked={preventPowerIncrease} onChange={(event) => setPreventPowerIncrease(event.target.checked)} />Do not increase total power</label>
+            <div className="optimization-disclosure">
+              <h3 className="optimization-disclosure-title">
+                <button
+                  type="button"
+                  aria-expanded={showAllowedChanges}
+                  onClick={() => setShowAllowedChanges((current) => !current)}
+                >
+                  <span>Allowed changes</span>
+                  <span aria-hidden="true" className="optimization-disclosure-caret" />
+                </button>
+              </h3>
+              <p>{showAllowedChanges
+                ? "Choose what the optimizer may touch and keep adjustments inside safe limits."
+                : "Optional. Off — the optimizer may adjust tilt, power, and azimuth on every active antenna."}</p>
             </div>
-            <div className="optimization-parameter-grid">
-              <NumberWithUnit label="Maximum tilt change" unit="deg" value={maxTiltChange} min="0.1" max="20" onChange={setMaxTiltChange} />
-              <NumberWithUnit label="Maximum power change" unit="dBm" value={maxPowerChange} min="0.1" max="20" onChange={setMaxPowerChange} />
-              <NumberWithUnit label="Maximum azimuth change" unit="deg" value={maxAzimuthChange} min="1" max="180" onChange={setMaxAzimuthChange} />
-              <NumberWithUnit label="Maximum antennas changed" unit="sites" value={maxChangedAntennas} min="1" max={String(baseRequest?.antennas?.length || 1)} step="1" onChange={setMaxChangedAntennas} />
-            </div>
-            <div className="optimization-antenna-scope"><span>Antennas allowed to change</span><div>{baseRequest?.antennas?.map((antenna) => <label key={antenna.id}><input type="checkbox" checked={eligibleAntennaIds.includes(antenna.id)} onChange={() => setEligibleAntennaIds((current) => current.includes(antenna.id) ? current.filter((id) => id !== antenna.id) : [...current, antenna.id])} />{antenna.id}</label>)}</div></div>
+            {showAllowedChanges && <>
+              <div className="optimization-choice-row">
+                {CHANGE_FIELDS.map(([field, label]) => <label key={field}><input type="checkbox" checked={changeFields.includes(field)} onChange={() => setChangeFields((current) => current.includes(field) ? current.filter((item) => item !== field) : [...current, field])} />{label}</label>)}
+                <label><input type="checkbox" checked={preventPowerIncrease} onChange={(event) => setPreventPowerIncrease(event.target.checked)} />Do not increase total power</label>
+              </div>
+              <div className="optimization-parameter-grid">
+                <NumberWithUnit label="Maximum tilt change" unit="deg" value={maxTiltChange} min="0.1" max="20" onChange={setMaxTiltChange} />
+                <NumberWithUnit label="Maximum power change" unit="dBm" value={maxPowerChange} min="0.1" max="20" onChange={setMaxPowerChange} />
+                <NumberWithUnit label="Maximum azimuth change" unit="deg" value={maxAzimuthChange} min="1" max="180" onChange={setMaxAzimuthChange} />
+                <NumberWithUnit label="Maximum antennas changed" unit="sites" value={maxChangedAntennas} min="1" max={String(baseRequest?.antennas?.length || 1)} step="1" onChange={setMaxChangedAntennas} />
+              </div>
+              <div className="optimization-antenna-scope"><span>Antennas allowed to change</span><div>{baseRequest?.antennas?.map((antenna) => <label key={antenna.id}><input type="checkbox" checked={eligibleAntennaIds.includes(antenna.id)} onChange={() => setEligibleAntennaIds((current) => current.includes(antenna.id) ? current.filter((id) => id !== antenna.id) : [...current, antenna.id])} />{antenna.id}</label>)}</div></div>
+            </>}
           </section>
 
           <section className="optimization-form-section">
-            <div className="optimization-form-heading"><div><h3>Protect existing performance</h3><p>Optional guardrails reject setups that regress too far from the starting result.</p></div><span>{guardrails.length} of 4 configured</span></div>
-            <div className="optimization-guardrail-list">{guardrails.map((guardrail, index) => {
-              const spec = GUARDRAIL_METRICS.find(([metric]) => metric === guardrail.metric) || GUARDRAIL_METRICS[0];
-              return <div className="optimization-guardrail-row" key={guardrail.metric}>
-                <label><span>Protected KPI</span><select value={guardrail.metric} onChange={(event) => setGuardrails((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, metric: event.target.value } : item))}>{GUARDRAIL_METRICS.map(([metric, label]) => <option key={metric} value={metric} disabled={guardrails.some((item, itemIndex) => itemIndex !== index && item.metric === metric)}>{label}</option>)}</select></label>
-                <NumberWithUnit label="Maximum regression" unit={spec[2]} value={guardrail.max_regression} min="0" onChange={(value) => setGuardrails((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, max_regression: value } : item))} />
-                <button type="button" className="ghost-button optimization-remove-target" onClick={() => setGuardrails((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remove</button>
-              </div>;
-            })}</div>
-            {guardrails.length < 4 && <button type="button" className="ghost-button optimization-add-target" onClick={() => { const metric = GUARDRAIL_METRICS.find(([id]) => !guardrails.some((item) => item.metric === id)); setGuardrails([...guardrails, { metric: metric[0], max_regression: 0 }]); }}>Add guardrail</button>}
+            <div className="optimization-disclosure">
+              <h3 className="optimization-disclosure-title">
+                <button
+                  type="button"
+                  aria-expanded={showGuardrails}
+                  onClick={() => setShowGuardrails((current) => !current)}
+                >
+                  <span>Protect existing performance</span>
+                  <span aria-hidden="true" className="optimization-disclosure-caret" />
+                </button>
+              </h3>
+              <p>{showGuardrails
+                ? `Optional guardrails reject setups that regress too far from the starting result. ${guardrails.length} of 4 configured.`
+                : "Optional. Off — only the configured targets decide which setups pass."}</p>
+            </div>
+            {showGuardrails && <>
+              <div className="optimization-guardrail-list">{guardrails.map((guardrail, index) => {
+                const spec = GUARDRAIL_METRICS.find(([metric]) => metric === guardrail.metric) || GUARDRAIL_METRICS[0];
+                return <div className="optimization-guardrail-row" key={guardrail.metric}>
+                  <label><span>Protected KPI</span><select value={guardrail.metric} onChange={(event) => setGuardrails((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, metric: event.target.value } : item))}>{GUARDRAIL_METRICS.map(([metric, label]) => <option key={metric} value={metric} disabled={guardrails.some((item, itemIndex) => itemIndex !== index && item.metric === metric)}>{label}</option>)}</select></label>
+                  <NumberWithUnit label="Maximum regression" unit={spec[2]} value={guardrail.max_regression} min="0" onChange={(value) => setGuardrails((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, max_regression: value } : item))} />
+                  <button type="button" className="ghost-button optimization-remove-target" onClick={() => setGuardrails((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remove</button>
+                </div>;
+              })}</div>
+              {guardrails.length < 4 && <button type="button" className="ghost-button optimization-add-target" onClick={() => { const metric = GUARDRAIL_METRICS.find(([id]) => !guardrails.some((item) => item.metric === id)); setGuardrails([...guardrails, { metric: metric[0], max_regression: 0 }]); }}>Add guardrail</button>}
+            </>}
           </section>
 
           <section className="optimization-form-section optimization-search-section">
@@ -544,14 +594,25 @@ function formatObjectiveActual(evaluation, objective) {
   return formatMetric(evaluation?.actual, unit);
 }
 
-function optimizationDisabledReason({ busy, saving, baseRequest, objectiveValid, changeFields, eligibleAntennaIds }) {
+function optimizationDisabledReason({
+  busy,
+  saving,
+  baseRequest,
+  objectiveValid,
+  allowedChangesActive,
+  changeFields,
+  eligibleAntennaIds,
+  guardrailsActive,
+  guardrailsValid,
+}) {
   if (busy) return "An optimization run is already in progress.";
   if (saving) return "Wait for the current result to finish saving.";
   if (!baseRequest?.antennas?.length) return "Select at least one active antenna on Network Coverage.";
   if (baseRequest.antennas.length > 10) return "Network Coverage optimization supports at most 10 active antennas.";
   if (!objectiveValid) return "Complete every target and remove duplicate targets.";
-  if (!changeFields.length) return "Allow at least one setting: tilt, power, or azimuth.";
-  if (!eligibleAntennaIds.length) return "Allow at least one antenna to change.";
+  if (allowedChangesActive && !changeFields.length) return "Allow at least one setting: tilt, power, or azimuth.";
+  if (allowedChangesActive && !eligibleAntennaIds.length) return "Allow at least one antenna to change.";
+  if (guardrailsActive && !guardrailsValid) return "Set a maximum regression of 0 or more for every guardrail.";
   return "";
 }
 
