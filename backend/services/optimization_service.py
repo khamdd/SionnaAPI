@@ -1,8 +1,18 @@
 import itertools
 import math
 
-NO_COVERAGE_LEVEL = "no_coverage"
-OVERLAP_MIN_COUNT = 2
+from backend.services.network_coverage_kpis import (
+    extract_network_coverage_kpis as extract_network_coverage_kpis,
+)
+from backend.services.network_coverage_kpis import (
+    is_no_coverage_cell as is_no_coverage_cell,
+)
+from backend.services.network_coverage_kpis import (
+    network_coverage_grid as network_coverage_grid,
+)
+from backend.services.network_coverage_kpis import (
+    numeric_value as numeric_value,
+)
 
 
 def run_network_coverage_optimization(req, simulate, progress=None):
@@ -155,37 +165,6 @@ def optimization_rank(evaluation):
         normalized_gap,
         sum(not item["passed"] for item in evaluation["evaluations"]),
     )
-
-
-def extract_network_coverage_kpis(result_or_grid):
-    grid = network_coverage_grid(result_or_grid)
-    cells = grid.get("cells") if isinstance(grid, dict) else None
-
-    if not isinstance(cells, list):
-        cells = []
-
-    total_cells = len(cells)
-    no_coverage_cells = [
-        cell
-        for cell in cells
-        if is_no_coverage_cell(cell)
-    ]
-    covered_cells = [
-        cell
-        for cell in cells
-        if not is_no_coverage_cell(cell)
-    ]
-    overlap_summary = grid.get("overlap_summary") if isinstance(grid, dict) else {}
-
-    return {
-        "total_cells": total_cells,
-        "covered_cells": len(covered_cells),
-        "uncovered_cells": len(no_coverage_cells),
-        "uncovered_area_percent": percent(len(no_coverage_cells), total_cells),
-        "covered_area_percent": percent(len(covered_cells), total_cells),
-        "overlap_area_percent": overlap_percent(cells, overlap_summary, total_cells),
-        "average_overlap_count": average_overlap_count(cells, overlap_summary, covered_cells),
-    }
 
 
 def evaluate_network_coverage_objectives(result_or_grid, objectives):
@@ -705,80 +684,6 @@ def objective_score(actual, operator, target):
     if operator == "=":
         return abs(actual - target)
     raise ValueError(f"Unsupported optimization operator: {operator}")
-
-
-def network_coverage_grid(result_or_grid):
-    if not isinstance(result_or_grid, dict):
-        return {}
-
-    grid = result_or_grid.get("grid")
-    if isinstance(grid, dict):
-        return grid
-
-    return result_or_grid
-
-
-def is_no_coverage_cell(cell):
-    if not isinstance(cell, dict):
-        return True
-
-    if cell.get("overlap_level") == NO_COVERAGE_LEVEL:
-        return True
-
-    overlap_count = numeric_value(cell.get("overlap_count"))
-    if overlap_count is not None:
-        return overlap_count <= 0
-
-    return numeric_value(cell.get("sinr_db")) is None
-
-
-def overlap_percent(cells, overlap_summary, total_cells):
-    overlap_cells = [
-        cell
-        for cell in cells
-        if numeric_value(cell.get("overlap_count")) is not None
-        and numeric_value(cell.get("overlap_count")) >= OVERLAP_MIN_COUNT
-    ]
-    if cells:
-        return percent(len(overlap_cells), total_cells)
-
-    summary_value = numeric_value((overlap_summary or {}).get("overlap_percent"))
-    return summary_value if summary_value is not None else 0.0
-
-
-def average_overlap_count(cells, overlap_summary, covered_cells):
-    counts = [
-        numeric_value(cell.get("overlap_count"))
-        for cell in covered_cells
-    ]
-    counts = [
-        count
-        for count in counts
-        if count is not None and count > 0
-    ]
-    if counts:
-        return sum(counts) / len(counts)
-
-    summary_value = numeric_value((overlap_summary or {}).get("average_overlap_count"))
-    return summary_value if summary_value is not None else 0.0
-
-
-def percent(part, total):
-    if total <= 0:
-        return 0.0
-    return (part / total) * 100.0
-
-
-def numeric_value(value):
-    try:
-        value = float(value)
-    except (TypeError, ValueError):
-        return None
-
-    if not math.isfinite(value):
-        return None
-
-    return value
 
 
 def objective_value(objective, field):

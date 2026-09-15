@@ -2,12 +2,12 @@ import math
 from collections import Counter, defaultdict
 from typing import Any, Callable, Iterable
 
-from backend.services.optimization_service import (
-    compare_metric,
+from backend.services.network_coverage_kpis import (
     extract_network_coverage_kpis,
     is_no_coverage_cell,
     numeric_value,
 )
+from backend.services.optimization_service import compare_metric
 from backend.services.simulation_job_store import load_simulation_job_result
 
 METRIC_SPECS = {
@@ -23,6 +23,15 @@ METRIC_SPECS = {
         "higher",
         True,
     ),
+    "rsrp_dbm_p10": ("RSRP P10", "dBm", "higher", False),
+    "rsrp_dbm_p50": ("RSRP P50", "dBm", "higher", False),
+    "rsrp_dbm_p90": ("RSRP P90", "dBm", "higher", False),
+    "sinr_db_p10": ("SINR P10", "dB", "higher", False),
+    "sinr_db_p50": ("SINR P50", "dB", "higher", False),
+    "sinr_db_p90": ("SINR P90", "dB", "higher", False),
+    "throughput_mbps_p10": ("Throughput P10", "Mbps", "higher", True),
+    "throughput_mbps_p50": ("Throughput P50", "Mbps", "higher", True),
+    "throughput_mbps_p90": ("Throughput P90", "Mbps", "higher", True),
     "coverage_percent": ("Covered users", "%", "higher", False),
     "average_best_rsrp_dbm": ("Average best RSRP", "dBm", "higher", False),
     "sinr_db": ("SINR", "dB", "higher", False),
@@ -225,21 +234,11 @@ def extract_kpis(simulation_type, result):
     if simulation_type in GRID_SIMULATION_TYPES:
         grid = result.get("grid") or {}
         coverage = extract_network_coverage_kpis(grid)
-        cells = grid.get("cells") if isinstance(grid, dict) else []
-        return {
-            **{
-                key: value
-                for key, value in coverage.items()
-                if key
-                in {
-                    "covered_area_percent",
-                    "uncovered_area_percent",
-                    "overlap_area_percent",
-                    "average_overlap_count",
-                }
-            },
-            **_grid_averages(cells or []),
-        }
+        return _numeric_items({
+            key: coverage.get(key)
+            for key in METRIC_SPECS
+            if key in coverage
+        })
 
     if simulation_type == "rsrp_simulation":
         summary = result.get("summary") or {}
@@ -506,20 +505,6 @@ def summarize_profile_objectives(profile):
             }
         )
     return results
-
-
-def _grid_averages(cells):
-    values = {}
-    for metric, field in (
-        ("average_sinr_db", "sinr_db"),
-        ("average_signal_dbm", "signal_dbm"),
-        ("average_throughput_mbps", "throughput_mbps"),
-    ):
-        samples = [numeric_value(cell.get(field)) for cell in cells]
-        samples = [sample for sample in samples if sample is not None]
-        if samples:
-            values[metric] = sum(samples) / len(samples)
-    return values
 
 
 def _numeric_items(values):

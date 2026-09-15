@@ -74,6 +74,10 @@ authority; verify them before making behavior changes.
 - Ranking first favors satisfying all objectives, then normalized total shortfall,
   then fewer failed objectives. It uses unrounded KPI values and preserves the
   earlier setup on exact ties.
+- Network Coverage and Impact comparison share coverage, overlap, and RF KPI
+  extraction. RF summaries include averages and nearest-rank P10/P50/P90 values
+  for RSRP, SINR, and throughput; reusable threshold-area calculations support
+  future RF objectives without changing the current optimization objective API.
 - Progress is persisted between simulations. The frontend remembers the latest
   job per scene, resumes polling, rejects applying results to a changed draft, and
   saves the winning request/result as normal Network Coverage History.

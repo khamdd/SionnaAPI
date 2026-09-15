@@ -119,6 +119,42 @@ def test_grid_comparison_reports_kpi_deltas_objective_and_spatial_changes():
     }
 
 
+def test_grid_comparison_reports_rf_averages_and_percentiles():
+    baseline_cells = [
+        coverage_cell(index, covered=True, sinr=float(index), throughput=index * 10.0)
+        for index in range(1, 11)
+    ]
+    candidate_cells = [
+        coverage_cell(index, covered=True, sinr=float(index + 2), throughput=index * 12.0)
+        for index in range(1, 11)
+    ]
+    for index, current_cell in enumerate(baseline_cells):
+        current_cell["signal_dbm"] = -121.0 + index
+    for index, current_cell in enumerate(candidate_cells):
+        current_cell["signal_dbm"] = -119.0 + index
+
+    comparison = build_impact_comparison(
+        [
+            job("base", "baseline", grid_result(baseline_cells)),
+            job("next", "candidate", grid_result(candidate_cells)),
+        ],
+        plan(),
+        result_loader=load_result,
+    )
+
+    kpis = {item["metric"]: item for item in comparison["profiles"][0]["kpis"]}
+    assert kpis["average_signal_dbm"]["baseline"] == -116.5
+    assert kpis["average_sinr_db"]["baseline"] == 5.5
+    assert kpis["average_throughput_mbps"]["baseline"] == 55.0
+    assert kpis["rsrp_dbm_p10"]["baseline"] == -121.0
+    assert kpis["rsrp_dbm_p10"]["candidate"] == -119.0
+    assert kpis["sinr_db_p50"]["baseline"] == 5.0
+    assert kpis["sinr_db_p50"]["candidate"] == 7.0
+    assert kpis["throughput_mbps_p90"]["baseline"] == 90.0
+    assert kpis["throughput_mbps_p90"]["candidate"] == 108.0
+    assert kpis["rsrp_dbm_p10"]["direction"] == "improved"
+
+
 def test_identical_sinr_results_are_unchanged():
     result = {"propagation_model": "friis", "sinr_db": 12.5, "signal_power": -72.0, "noise_power": -95.0}
 
