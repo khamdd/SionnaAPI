@@ -40,6 +40,8 @@ def run_network_coverage_optimization(req, simulate, progress=None):
     frontier = []
     rounds_completed = 0
     global_tested = 0
+    pruned_branches = 0
+    refinement_stalled = False
 
     def run_candidate(candidate):
         nonlocal baseline, baseline_result, best, best_result, best_request, best_rank
@@ -125,13 +127,17 @@ def run_network_coverage_optimization(req, simulate, progress=None):
     while frontier and len(trials) < req.max_candidates:
         rounds_completed += 1
         layer = []
+        round_limit = min(
+            req.max_candidates - len(trials),
+            beam_width * 3,
+        )
         candidates = interleaved_beam_candidates(
             frontier,
             req,
             baseline_settings,
             seen,
             round_number=rounds_completed,
-            limit=req.max_candidates - len(trials),
+            limit=round_limit,
             local_radius=min(3, rounds_completed + 1),
         )
         if not candidates:
@@ -142,12 +148,35 @@ def run_network_coverage_optimization(req, simulate, progress=None):
                 layer.append(node)
             if len(trials) >= req.max_candidates:
                 break
-        frontier = select_diverse_beam(layer, beam_width, dimensions)
+        parent_refinement_ranks = {
+            node["trial"]["id"]: refinement_rank(node["trial"])
+            for node in frontier
+        }
+        improving_nodes = [
+            node for node in layer
+            if refinement_rank(node["trial"]) < parent_refinement_ranks.get(
+                node["trial"].get("parent_id"), refinement_rank(node["trial"]),
+            )
+        ]
+        improving_parent_ids = {
+            node["trial"].get("parent_id")
+            for node in improving_nodes
+        }
+        pruned_branches += sum(
+            node["trial"]["id"] not in improving_parent_ids
+            for node in frontier
+        )
+        if not improving_nodes:
+            refinement_stalled = True
+            break
+        frontier = select_diverse_beam(improving_nodes, beam_width, dimensions)
 
     if best["evaluation"]["passed"]:
         stop_reason = "targets_met"
     elif len(trials) >= req.max_candidates:
         stop_reason = "budget_exhausted"
+    elif refinement_stalled:
+        stop_reason = "refinement_stalled"
     successful_trials = [trial for trial in trials if "evaluation" in trial]
     ranked_trials = sorted(
         successful_trials,
@@ -176,6 +205,8 @@ def run_network_coverage_optimization(req, simulate, progress=None):
             "local_tested": len(trials) - global_tested,
             "beam_width": beam_width,
             "rounds_completed": rounds_completed,
+            "pruned_branches": pruned_branches,
+            "budget_saved": max(0, req.max_candidates - len(trials)),
             "best_request": best_request.model_dump(mode="json"),
             "base_request": req.base_request.model_dump(mode="json"),
             "objectives": [objective.model_dump() for objective in req.objectives],
@@ -205,6 +236,11 @@ def optimization_rank(evaluation, candidate=None):
         change_cost["changed_antennas"],
         change_cost["normalized_magnitude"],
     )
+
+
+def refinement_rank(candidate):
+    """Rank branch progress without operational-change tie breakers."""
+    return optimization_rank(candidate["evaluation"], candidate)[:4]
 
 
 def candidate_change_cost(candidate):
@@ -505,6 +541,7 @@ def interleaved_beam_candidates(
                 settings,
                 baseline_settings,
             ))
+            candidates[-1]["parent_id"] = frontier[parent_index]["trial"]["id"]
             if len(candidates) >= limit:
                 return candidates
     return candidates

@@ -403,7 +403,7 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
         <h2>Recommended setup</h2>
         <p>{optimizationResultSummary(optimization)}</p>
         <p>{optimization.recommendation_reason || "This setup ranked highest against the configured targets."}</p>
-        {Number.isFinite(Number(optimization.global_tested)) && <p>Global exploration: {formatInteger(optimization.global_tested)} setups. Local refinement: {formatInteger(optimization.local_tested)} setups.</p>}
+        {Number.isFinite(Number(optimization.global_tested)) && <p>Global exploration: {formatInteger(optimization.global_tested)} setups. Local refinement: {formatInteger(optimization.local_tested)} setups.{Number(optimization.budget_saved) > 0 ? ` Adaptive pruning saved ${formatInteger(optimization.budget_saved)} simulations.` : ""}</p>}
         {outcome && <section className="optimization-outcome" aria-labelledby="optimization-outcome-title">
           <header>
             <h3 id="optimization-outcome-title">Why this setup</h3>
@@ -858,6 +858,9 @@ function optimizationResultSummary(optimization) {
   }
   if (optimization.stop_reason === "budget_exhausted") {
     return `Targets not fully met after using the full ${limit}-simulation budget. Showing the closest setup found.`;
+  }
+  if (optimization.stop_reason === "refinement_stalled") {
+    return `Targets not fully met. Local refinement stopped after no active branch improved, saving ${formatInteger(optimization.budget_saved)} simulations. Showing the closest setup found.`;
   }
   return `Targets not fully met. The search exhausted its remaining unique candidates after ${tested} of up to ${limit} simulations. Showing the closest setup found.`;
 }

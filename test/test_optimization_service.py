@@ -258,6 +258,22 @@ def test_beam_search_uses_full_budget_when_combinations_remain():
     )
 
 
+def test_beam_search_stops_when_local_branches_do_not_improve():
+    req = optimization_request(max_candidates=100)
+
+    first = run_network_coverage_optimization(req, lambda _: coverage_result(5))
+    second = run_network_coverage_optimization(req, lambda _: coverage_result(5))
+
+    optimization = first["optimization"]
+    assert optimization["stop_reason"] == "refinement_stalled"
+    assert optimization["tested_count"] < optimization["budget_limit"]
+    assert optimization["budget_saved"] == 100 - optimization["tested_count"]
+    assert optimization["pruned_branches"] > 0
+    assert [trial["settings"] for trial in optimization["trials"]] == [
+        trial["settings"] for trial in second["optimization"]["trials"]
+    ]
+
+
 def test_global_exploration_finds_distant_mixed_range_combination():
     payload = optimization_request(max_candidates=30).model_dump()
     payload["power_step"] = 5

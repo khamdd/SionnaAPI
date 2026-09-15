@@ -75,8 +75,10 @@ authority; verify them before making behavior changes.
   payloads remain valid.
 - Small discrete spaces are exhaustive. Larger spaces use deterministic
   space-filling candidates, diverse beam selection, and local refinement.
-- The search uses its available candidate budget even after finding a passing
-  setup. Ranking favors satisfying guardrails, satisfying all objectives,
+- The search continues after finding a passing setup while local branches keep
+  improving. Local refinement evaluates bounded batches, prunes branches whose
+  children do not outrank their parent, and stops when no active branch improves,
+  reporting pruned branches and unused budget. Ranking favors satisfying guardrails, satisfying all objectives,
   normalized total shortfall, fewer failed objectives, fewer changed antennas,
   and smaller adjustments, in that order. Results include one recommendation and
   up to three alternatives.
