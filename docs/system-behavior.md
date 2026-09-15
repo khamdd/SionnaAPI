@@ -94,7 +94,10 @@ authority; verify them before making behavior changes.
   job per scene, resumes polling, rejects applying results to a changed draft, and
   saves the winning request/result as normal Network Coverage History. The result
   view explains target movement, grouped antenna changes, guardrail effects, and
-  why each alternative ranked below the recommendation.
+  why each alternative ranked below the recommendation. It also compares the
+  baseline and recommended RF grids for RSRP, SINR, or throughput, including a
+  cell-level improvement/regression view. Only the baseline and winning grids are
+  retained; grids for every tested candidate are not stored.
 - Core behavior and result shape live in
   `backend/services/optimization_service.py` and its targeted tests.
 

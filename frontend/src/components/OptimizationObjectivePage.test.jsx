@@ -4,6 +4,7 @@ import {
   allowedChangesValidationError,
   buildOptimizationOutcome,
   explainLowerRank,
+  summarizeGridChange,
   normalizeObjective,
   objectiveLabel,
   objectiveTarget,
@@ -187,5 +188,29 @@ describe("optimization outcome explanation", () => {
 
     expect(explainLowerRank(recommended, unsafe)).toBe("Rejected because it violates a safety guardrail.");
     expect(explainLowerRank(recommended, largerChange)).toContain("changes more antennas");
+  });
+});
+
+describe("optimization grid comparison", () => {
+  it("matches cells by grid position and summarizes RF changes", () => {
+    const baseline = { cells: [
+      { row: 0, col: 0, signal_dbm: -100 },
+      { row: 0, col: 1, signal_dbm: -90 },
+      { row: 1, col: 0, signal_dbm: -80 },
+      { row: 1, col: 1, signal_dbm: null },
+    ] };
+    const candidate = { cells: [
+      { row: 1, col: 0, signal_dbm: -82 },
+      { row: 0, col: 0, signal_dbm: -95 },
+      { row: 0, col: 1, signal_dbm: -90.05 },
+      { row: 1, col: 1, signal_dbm: -70 },
+    ] };
+
+    expect(summarizeGridChange(baseline, candidate, "signal_dbm")).toEqual({
+      improved: 1,
+      unchanged: 1,
+      regressed: 1,
+      compared: 3,
+    });
   });
 });

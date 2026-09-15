@@ -53,6 +53,8 @@ def test_search_runs_fresh_baseline_uses_budget_and_preserves_request():
     assert calls[1].antennas[0].azimuth == 0
     assert req.model_dump() == original
     assert result["optimization"]["stop_reason"] == "targets_met"
+    assert result["optimization"]["comparison"]["baseline_grid"] == coverage_result(5)["grid"]
+    assert result["grid"] == coverage_result(10)["grid"]
     assert result["optimization"]["best"]["settings"]["A1"]["tilt"] == 0
     assert result["optimization"]["recommended_candidate"] == result["optimization"]["best"]
     assert len(result["optimization"]["alternatives"]) == 2

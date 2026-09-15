@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getSimulationJob, getSimulationJobResult, runNetworkCoverageOptimization, saveSimulationJobResult } from "../api";
 
 const AGGREGATE_METRICS = [
@@ -432,6 +432,10 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
             </article>
           </div>
         </section>}
+        <OptimizationMapComparison
+          baselineGrid={optimization.comparison?.baseline_grid}
+          candidateGrid={result.grid}
+        />
         <table className="optimization-results-table optimization-candidate-table"><thead><tr><th>Use</th><th>Option</th><th>Goals met</th><th>Guardrails</th><th>Antennas changed</th><th>Adjustments</th></tr></thead>
           <tbody>{candidateOptions.map((candidate, index) => {
             const evaluations = candidate.evaluation?.evaluations || [];
@@ -542,6 +546,124 @@ function ObjectiveFields({ objective, index, update }) {
     </label>
     <NumberWithUnit label="Target" unit={metric.unit} value={objective.target} min="0" max={objective.metric === "average_overlap_count" ? "10" : "100"} onChange={(value) => update(index, "target", value)} />
   </div>;
+}
+
+const COMPARISON_MEASUREMENTS = {
+  signal_dbm: { label: "RSRP", unit: "dBm", unchanged: 0.1 },
+  sinr_db: { label: "SINR", unit: "dB", unchanged: 0.1 },
+  throughput_mbps: { label: "Throughput", unit: "Mbps", unchanged: 0.1 },
+};
+
+function OptimizationMapComparison({ baselineGrid, candidateGrid }) {
+  const [measurement, setMeasurement] = useState("signal_dbm");
+  if (!baselineGrid?.cells?.length || !candidateGrid?.cells?.length) {
+    return <section className="optimization-map-comparison unavailable" aria-labelledby="optimization-map-title">
+      <header><div><h3 id="optimization-map-title">Where performance changed</h3><p>Start a new optimization after restarting the backend to generate the baseline and recommended RF grids.</p></div></header>
+    </section>;
+  }
+  const summary = summarizeGridChange(baselineGrid, candidateGrid, measurement);
+  return <section className="optimization-map-comparison" aria-labelledby="optimization-map-title">
+    <header>
+      <div><h3 id="optimization-map-title">Where performance changed</h3><p>Compare the recommendation with the starting radio grid.</p></div>
+      <label><span>Measurement</span><select value={measurement} onChange={(event) => setMeasurement(event.target.value)}>{Object.entries(COMPARISON_MEASUREMENTS).map(([id, item]) => <option key={id} value={id}>{item.label}</option>)}</select></label>
+    </header>
+    <div className="optimization-map-grid">
+      <ComparisonHeatmap title="Starting setup" grid={baselineGrid} measurement={measurement} />
+      <ComparisonHeatmap title="Recommended setup" grid={candidateGrid} measurement={measurement} />
+      <ComparisonHeatmap title="Change" grid={candidateGrid} baselineGrid={baselineGrid} measurement={measurement} delta />
+    </div>
+    <div className="optimization-change-legend">
+      <span className="improved">Improved {summary.improved}</span>
+      <span className="unchanged">Unchanged {summary.unchanged}</span>
+      <span className="regressed">Regressed {summary.regressed}</span>
+      <small>{summary.compared} matched cells · change threshold ±{COMPARISON_MEASUREMENTS[measurement].unchanged} {COMPARISON_MEASUREMENTS[measurement].unit}</small>
+    </div>
+  </section>;
+}
+
+function ComparisonHeatmap({ title, grid, baselineGrid, measurement, delta = false }) {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    drawComparisonHeatmap(canvasRef.current, grid, measurement, baselineGrid, delta);
+  }, [grid, baselineGrid, measurement, delta]);
+  return <figure><figcaption>{title}</figcaption><canvas ref={canvasRef} aria-label={`${title} ${COMPARISON_MEASUREMENTS[measurement].label} heatmap`} /></figure>;
+}
+
+function gridShape(grid) {
+  const cells = grid?.cells || [];
+  return {
+    rows: Number(grid?.rows) || Math.max(1, ...cells.map((cell) => Number(cell.row) + 1 || 1)),
+    cols: Number(grid?.cols) || Math.max(1, ...cells.map((cell) => Number(cell.col) + 1 || 1)),
+  };
+}
+
+function cellKey(cell, index) {
+  return Number.isFinite(Number(cell?.row)) && Number.isFinite(Number(cell?.col))
+    ? `${cell.row}:${cell.col}`
+    : String(index);
+}
+
+function matchedGridCells(baselineGrid, candidateGrid) {
+  const baseline = new Map((baselineGrid?.cells || []).map((cell, index) => [cellKey(cell, index), cell]));
+  return (candidateGrid?.cells || []).map((cell, index) => ({ cell, baseline: baseline.get(cellKey(cell, index)) })).filter((item) => item.baseline);
+}
+
+function summarizeGridChange(baselineGrid, candidateGrid, measurement) {
+  const threshold = COMPARISON_MEASUREMENTS[measurement]?.unchanged || 0.1;
+  const summary = { improved: 0, unchanged: 0, regressed: 0, compared: 0 };
+  for (const { cell, baseline } of matchedGridCells(baselineGrid, candidateGrid)) {
+    const before = finiteMeasurement(baseline[measurement]);
+    const after = finiteMeasurement(cell[measurement]);
+    if (before === null || after === null) continue;
+    const delta = after - before;
+    summary.compared += 1;
+    if (delta > threshold) summary.improved += 1;
+    else if (delta < -threshold) summary.regressed += 1;
+    else summary.unchanged += 1;
+  }
+  return summary;
+}
+
+function drawComparisonHeatmap(canvas, grid, measurement, baselineGrid, delta) {
+  if (!canvas) return;
+  const { rows, cols } = gridShape(grid);
+  const scale = Math.min(4, window.devicePixelRatio || 1);
+  canvas.width = Math.max(1, cols * scale);
+  canvas.height = Math.max(1, rows * scale);
+  const context = canvas.getContext("2d");
+  context.imageSmoothingEnabled = false;
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  const baseline = new Map((baselineGrid?.cells || []).map((cell, index) => [cellKey(cell, index), cell]));
+  (grid.cells || []).forEach((cell, index) => {
+    const row = Number.isFinite(Number(cell.row)) ? Number(cell.row) : Math.floor(index / cols);
+    const col = Number.isFinite(Number(cell.col)) ? Number(cell.col) : index % cols;
+    const value = finiteMeasurement(cell[measurement]);
+    let color = measurementColor(measurement, value);
+    if (delta) {
+      const before = finiteMeasurement(baseline.get(cellKey(cell, index))?.[measurement]);
+      color = deltaColor(value !== null && before !== null ? value - before : null, COMPARISON_MEASUREMENTS[measurement].unchanged);
+    }
+    context.fillStyle = color;
+    context.fillRect(col * scale, canvas.height - ((row + 1) * scale), scale, scale);
+  });
+}
+
+function finiteMeasurement(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function measurementColor(measurement, value) {
+  if (!Number.isFinite(value)) return "#d7dde1";
+  if (measurement === "signal_dbm") return value < -110 ? "#b84a4a" : value < -95 ? "#d9a441" : value < -80 ? "#6eaa78" : "#267da8";
+  if (measurement === "sinr_db") return value < 0 ? "#b84a4a" : value < 8 ? "#d9a441" : value < 18 ? "#6eaa78" : "#267da8";
+  return value < 20 ? "#b84a4a" : value < 100 ? "#d9a441" : value < 500 ? "#6eaa78" : "#267da8";
+}
+
+function deltaColor(value, threshold) {
+  if (!Number.isFinite(value)) return "#d7dde1";
+  if (value > threshold) return "#267da8";
+  if (value < -threshold) return "#c35b54";
+  return "#c5ccd1";
 }
 
 function MeasurementField({ objective, index, update }) {
@@ -846,6 +968,7 @@ export {
     allowedChangesValidationError,
     buildOptimizationOutcome,
     explainLowerRank,
+    summarizeGridChange,
     normalizeObjective,
     objectiveLabel,
     objectiveTarget,

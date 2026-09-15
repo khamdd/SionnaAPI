@@ -22,7 +22,7 @@ from backend.services.network_coverage_kpis import (
 def run_network_coverage_optimization(req, simulate, progress=None):
     """Deterministic global exploration followed by diverse beam refinement."""
     trials = []
-    baseline = best = best_result = best_request = best_rank = None
+    baseline = baseline_result = best = best_result = best_request = best_rank = None
     stop_reason = "search_space_exhausted"
     beam_width = min(12, max(2, math.ceil(math.sqrt(req.max_candidates))))
     baseline_settings = {
@@ -42,7 +42,7 @@ def run_network_coverage_optimization(req, simulate, progress=None):
     global_tested = 0
 
     def run_candidate(candidate):
-        nonlocal baseline, best, best_result, best_request, best_rank
+        nonlocal baseline, baseline_result, best, best_result, best_request, best_rank
         candidate_request = build_network_coverage_candidate_request(
             req.base_request, candidate.get("settings") or candidate["tilts"],
         )["request"]
@@ -80,6 +80,7 @@ def run_network_coverage_optimization(req, simulate, progress=None):
         trials.append(trial)
         if baseline is None:
             baseline = trial
+            baseline_result = result
         rank = optimization_rank(evaluation, trial)
         if best_rank is None or rank < best_rank:
             best, best_result, best_request, best_rank = trial, result, candidate_request, rank
@@ -179,6 +180,9 @@ def run_network_coverage_optimization(req, simulate, progress=None):
             "base_request": req.base_request.model_dump(mode="json"),
             "objectives": [objective.model_dump() for objective in req.objectives],
             "guardrails": [guardrail.model_dump() for guardrail in req.guardrails],
+            "comparison": {
+                "baseline_grid": baseline_result.get("grid"),
+            },
         },
     }
 

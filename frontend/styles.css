@@ -5209,6 +5209,112 @@ textarea:hover:not(:disabled) {
   line-height: 1.5;
 }
 
+.optimization-map-comparison {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f8fafb;
+  padding: 14px;
+}
+
+.optimization-map-comparison.unavailable {
+  border-style: dashed;
+  background: #fbfcfd;
+}
+
+.optimization-map-comparison > header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.optimization-map-comparison h3,
+.optimization-map-comparison p,
+.optimization-map-comparison figure {
+  margin: 0;
+}
+
+.optimization-map-comparison header p {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.optimization-map-comparison header label {
+  display: grid;
+  min-width: 150px;
+  gap: 4px;
+  color: #4d5d6b;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.optimization-map-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.optimization-map-grid figure {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.optimization-map-grid figcaption {
+  color: #43525e;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.optimization-map-grid canvas {
+  width: 100%;
+  height: auto;
+  min-height: 130px;
+  max-height: 260px;
+  border: 1px solid #cbd6dc;
+  background: #e8ecef;
+  image-rendering: pixelated;
+}
+
+.optimization-change-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  color: #52616d;
+  font-size: 11px;
+}
+
+.optimization-change-legend span::before {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 5px;
+  content: "";
+}
+
+.optimization-change-legend .improved::before {
+  background: #267da8;
+}
+
+.optimization-change-legend .unchanged::before {
+  background: #c5ccd1;
+}
+
+.optimization-change-legend .regressed::before {
+  background: #c35b54;
+}
+
+.optimization-change-legend small {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 10px;
+}
+
 @media (max-width: 760px) {
   .optimization-config-header,
   .optimization-form-heading,
@@ -5268,6 +5374,20 @@ textarea:hover:not(:disabled) {
 
   .optimization-outcome-grid {
     grid-template-columns: 1fr;
+  }
+
+  .optimization-map-comparison > header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .optimization-map-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .optimization-change-legend small {
+    width: 100%;
+    margin-left: 0;
   }
 
   .optimization-outcome-grid article:nth-child(odd) {
