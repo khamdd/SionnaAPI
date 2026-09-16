@@ -7,7 +7,6 @@ import {
   getSimulationJobResult,
   getSimulationRun,
   listSimulationRuns,
-  listSimulationJobs,
   runNetworkCoverage,
   saveSimulationJobResult,
 } from "./api";
@@ -47,6 +46,7 @@ import {
 import useSceneAntennaDraft from "./hooks/useSceneAntennaDraft";
 import useAntennaInventory from "./hooks/useAntennaInventory";
 import useAuthSession from "./hooks/useAuthSession";
+import useSimulationQueue from "./hooks/useSimulationQueue";
 import AppRouteContent from "./components/AppRouteContent";
 import ComparisonResult from "./components/ComparisonResult";
 import GlobalProgress from "./components/GlobalProgress";
@@ -66,7 +66,6 @@ import { drawHeatmap, summarizeGrid } from "./utils/map";
 import { lngLatInsideBounds, solverForScene } from "./utils/scene";
 
 const HISTORY_PAGE_LIMIT = 200;
-const JOB_PAGE_LIMIT = 200;
 const MAX_RSRP_SIMULATION_ANTENNAS = 10;
 
 export default function App() {
@@ -80,6 +79,25 @@ export default function App() {
   const [route, setRoute] = useState(() =>
     normalizeRoute(window.location.pathname),
   );
+  const queue = useSimulationQueue({
+    enabled: authStatus === "authenticated",
+    route,
+  });
+  const {
+    error: jobError,
+    jobs: simulationJobs,
+    load: loadJobs,
+    progressLabel: jobProgressLabel,
+    selectedDeleteIds: selectedJobDeleteIds,
+    selectedJobId,
+    setError: setJobError,
+    setProgressLabel: setJobProgressLabel,
+    setSelectedJobId,
+    setStatus: setJobStatus,
+    status: jobStatus,
+    toggleAllDeleteSelection: toggleAllJobDeleteSelection,
+    toggleDeleteSelection: toggleJobDeleteSelection,
+  } = queue;
   const [latestGrid, setLatestGrid] = useState(null);
   const [latestSolver, setLatestSolver] = useState(() => clone(DEFAULT_SOLVER));
   const [networkSolverDraft, setNetworkSolverDraft] = useState(() =>
@@ -91,14 +109,6 @@ export default function App() {
   const [isRunning, setIsRunning] = useState(false);
   const [historyStatus, setHistoryStatus] = useState("No history loaded.");
   const [historyError, setHistoryError] = useState(false);
-  const [jobStatus, setJobStatus] = useState("No queue loaded.");
-  const [jobError, setJobError] = useState(false);
-  const [jobProgressLabel, setJobProgressLabel] = useState("");
-  const [simulationJobs, setSimulationJobs] = useState([]);
-  const [selectedJobId, setSelectedJobId] = useState(null);
-  const [selectedJobDeleteIds, setSelectedJobDeleteIds] = useState(
-    () => new Set(),
-  );
   const [queuedPrompt, setQueuedPrompt] = useState(null);
   const [apiProgressLabel, setApiProgressLabel] = useState("");
   const [historyProgressLabel, setHistoryProgressLabel] = useState("");
@@ -276,59 +286,6 @@ export default function App() {
     }
   }, [activeScene?.id, activeScene?.name, comparisonSceneId, comparisonType]);
 
-  const loadJobs = useCallback(async () => {
-    setJobProgressLabel("Loading queue...");
-    setJobStatus("Loading simulation queue...");
-    setJobError(false);
-
-    try {
-      const result = await listSimulationJobs(JOB_PAGE_LIMIT);
-
-      if (!result.database_configured) {
-        setSimulationJobs([]);
-        setSelectedJobId(null);
-        setSelectedJobDeleteIds(new Set());
-        setJobStatus(
-          "Database is not configured. Set DATABASE_URL to use the simulation queue.",
-        );
-        setJobError(true);
-        return;
-      }
-
-      if (result.error) {
-        throw new Error(result.error);
-      }
-
-      const items = result.items || [];
-      setSimulationJobs(items);
-      setSelectedJobId((current) =>
-        items.some((item) => item.id === current) ? current : null,
-      );
-      setSelectedJobDeleteIds(
-        (current) =>
-          new Set(
-            [...current].filter((id) =>
-              items.some(
-                (item) =>
-                  item.id === id &&
-                  String(item.status || "").toLowerCase() !== "running",
-              ),
-            ),
-          ),
-      );
-      setJobStatus(
-        items.length
-          ? `${items.length} simulation jobs recorded.`
-          : "No simulation jobs recorded.",
-      );
-    } catch (error) {
-      setJobStatus(`Queue failed: ${error.message}`);
-      setJobError(true);
-    } finally {
-      setJobProgressLabel("");
-    }
-  }, []);
-
   const loadScenes = useCallback(async (options = {}) => {
     const syncActiveScene = options.syncActiveScene ?? false;
     setIsSceneListLoading(true);
@@ -402,26 +359,6 @@ export default function App() {
     loadHistory,
     loadJobs,
   ]);
-
-  useEffect(() => {
-    if (authStatus !== "authenticated" || route !== "/queue") {
-      return undefined;
-    }
-
-    const hasPendingJob = simulationJobs.some(
-      (job) => job.status === "queued" || job.status === "running",
-    );
-
-    if (!hasPendingJob) {
-      return undefined;
-    }
-
-    const timerId = window.setInterval(() => {
-      loadJobs();
-    }, 5000);
-
-    return () => window.clearInterval(timerId);
-  }, [authStatus, loadJobs, route, simulationJobs]);
 
   useEffect(() => {
     if (authStatus !== "authenticated") {
@@ -1190,73 +1127,10 @@ export default function App() {
     }
   }
 
-  function toggleJobDeleteSelection(jobId) {
-    const job = simulationJobs.find((item) => item.id === jobId);
-    if (!job || String(job.status || "").toLowerCase() === "running") {
-      return;
-    }
-    setSelectedJobDeleteIds((current) => toggleSetValue(current, jobId));
-  }
-
-  function toggleAllJobDeleteSelection() {
-    const deletableIds = simulationJobs
-      .filter((job) => String(job.status || "").toLowerCase() !== "running")
-      .map((job) => job.id);
-    setSelectedJobDeleteIds((current) =>
-      deletableIds.length > 0 && deletableIds.every((id) => current.has(id))
-        ? new Set()
-        : new Set(deletableIds),
-    );
-  }
-
   async function deleteSelectedJobs() {
-    if (jobProgressLabel || selectedJobDeleteIds.size === 0) {
-      return;
-    }
-
-    const selectedIds = [...selectedJobDeleteIds];
-    const confirmed = window.confirm(
-      `Delete ${selectedIds.length} selected simulation queue entries? Saved History results will remain.`,
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    setJobProgressLabel("Deleting selected queue entries...");
-    setJobStatus(`Deleting ${selectedIds.length} selected queue entries...`);
-    setJobError(false);
-
-    try {
-      const results = await Promise.allSettled(
-        selectedIds.map((jobId) => deleteSimulationJob(jobId)),
-      );
-      const deletedIds = new Set(
-        selectedIds.filter(
-          (id, index) =>
-            results[index].status === "fulfilled" &&
-            results[index].value?.deleted,
-        ),
-      );
-      const failedIds = selectedIds.filter((id) => !deletedIds.has(id));
-
-      if (selectedJobId && deletedIds.has(selectedJobId)) {
-        closeModal();
-      }
-
-      setSelectedJobDeleteIds(new Set(failedIds));
-      await loadJobs();
-
-      if (failedIds.length > 0) {
-        setJobStatus(
-          `Deleted ${deletedIds.size}; ${failedIds.length} failed or started running.`,
-        );
-        setJobError(true);
-      } else {
-        setJobStatus(`Deleted ${deletedIds.size} selected queue entries.`);
-      }
-    } finally {
-      setJobProgressLabel("");
+    const result = await queue.deleteSelected();
+    if (result && selectedJobId && result.deletedIds.has(selectedJobId)) {
+      closeModal();
     }
   }
 
