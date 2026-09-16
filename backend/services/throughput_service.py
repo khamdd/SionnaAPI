@@ -26,6 +26,7 @@ def compare_throughput_service(req: ThroughputRequest, scene):
             req.base_tilt,
             req.tx_power,
             pattern=req.transmitter_pattern,
+            azimuth_deg=getattr(req, "azimuth", 0.0),
         )
 
         if req.interferer_position is not None:
@@ -36,6 +37,7 @@ def compare_throughput_service(req: ThroughputRequest, scene):
                 req.interferer_tilt,
                 interferer_power(req),
                 pattern=req.transmitter_pattern,
+                azimuth_deg=getattr(req, "interferer_azimuth", 0.0),
             )
 
         rm_base = execute_radio_map(
@@ -175,10 +177,18 @@ def compare_analytical_throughput_service(req: ThroughputRequest):
 
 def result_antennas(req):
     antennas = [
-        {"id": "TX", "position": req.transmitter_position, "azimuth": 0},
+        {
+            "id": "TX",
+            "position": req.transmitter_position,
+            "azimuth": getattr(req, "azimuth", 0.0),
+        },
     ]
     if req.interferer_position is not None:
-        antennas.append({"id": "INT", "position": req.interferer_position, "azimuth": 0})
+        antennas.append({
+            "id": "INT",
+            "position": req.interferer_position,
+            "azimuth": getattr(req, "interferer_azimuth", 0.0),
+        })
     antennas.append({"id": "RX", "position": req.receiver_position, "kind": "receiver-point"})
     return antennas
 

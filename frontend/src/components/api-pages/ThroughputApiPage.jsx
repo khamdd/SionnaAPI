@@ -206,6 +206,7 @@ export function ThroughputApiPage({
 
     const payload = {
       ...form,
+      azimuth: selectedRoles.transmitter.azimuth,
       transmitter_position: rolePositions.transmitter_position,
       receiver_position: rolePositions.receiver_position,
       tx_power: selectedRoles.transmitter.tx_power.current,
@@ -214,6 +215,7 @@ export function ThroughputApiPage({
       ...(selectedRoles.interferer ? {
         interferer_position: rolePositions.interferer_position,
         interferer_tilt: selectedRoles.interferer.tilt.current,
+        interferer_azimuth: selectedRoles.interferer.azimuth,
         interferer_tx_power: selectedRoles.interferer.tx_power.current,
       } : {}),
     };

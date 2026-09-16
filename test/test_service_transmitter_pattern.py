@@ -10,7 +10,9 @@ class FakeSINRRequest:
     receiver_position = (10.0, 10.0, 1.5)
     interferer_position = (20.0, 20.0, 30.0)
     tilt = 8.0
+    azimuth = 45.0
     interferer_tilt = 12.0
+    interferer_azimuth = 135.0
     tx_power = 30.0
     transmitter_pattern = "iso"
     solver = FakeSolver()
@@ -22,7 +24,9 @@ class FakeThroughputRequest:
     interferer_position = (20.0, 20.0, 30.0)
     base_tilt = 8.0
     target_tilt = 12.0
+    azimuth = 45.0
     interferer_tilt = 12.0
+    interferer_azimuth = 135.0
     tx_power = 30.0
     transmitter_pattern = "iso"
     bandwidth_mhz = 100.0
@@ -71,6 +75,7 @@ def test_sinr_service_passes_request_pattern_to_transmitters(monkeypatch):
         call_kwargs["pattern"] == "iso"
         for _, call_kwargs in sync_calls
     )
+    assert [call_kwargs["azimuth_deg"] for _, call_kwargs in sync_calls] == [45.0, 135.0]
 
 
 def test_throughput_service_passes_request_pattern_to_transmitters(monkeypatch):
@@ -109,3 +114,4 @@ def test_throughput_service_passes_request_pattern_to_transmitters(monkeypatch):
         call_kwargs["pattern"] == "iso"
         for _, call_kwargs in sync_calls
     )
+    assert [call_kwargs["azimuth_deg"] for _, call_kwargs in sync_calls] == [45.0, 135.0, 45.0]

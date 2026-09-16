@@ -333,6 +333,8 @@ class SINRRequest(BaseModel):
 
     tilt: float
 
+    azimuth: float = Field(default=0.0, ge=0.0, le=360.0)
+
     transmitter_position: Tuple[
         float,
         float,
@@ -348,6 +350,8 @@ class SINRRequest(BaseModel):
     interferer_position: Tuple[float, float, float] | None = None
 
     interferer_tilt: float = 12.0
+
+    interferer_azimuth: float = Field(default=0.0, ge=0.0, le=360.0)
 
     tx_power: float = 30.0
 
@@ -371,6 +375,8 @@ class ThroughputRequest(BaseModel):
 
     target_tilt: float
 
+    azimuth: float = Field(default=0.0, ge=0.0, le=360.0)
+
     transmitter_position: Tuple[
         float,
         float,
@@ -386,6 +392,8 @@ class ThroughputRequest(BaseModel):
     interferer_position: Tuple[float, float, float] | None = None
 
     interferer_tilt: float = 12.0
+
+    interferer_azimuth: float = Field(default=0.0, ge=0.0, le=360.0)
 
     tx_power: float = 30.0
 

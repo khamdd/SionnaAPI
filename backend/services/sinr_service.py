@@ -30,6 +30,7 @@ def calculate_sinr_service(req: SINRRequest, scene):
             req.tilt,
             req.tx_power,
             pattern=req.transmitter_pattern,
+            azimuth_deg=getattr(req, "azimuth", 0.0),
         )
 
         if req.interferer_position is not None:
@@ -40,6 +41,7 @@ def calculate_sinr_service(req: SINRRequest, scene):
                 req.interferer_tilt,
                 interferer_power(req),
                 pattern=req.transmitter_pattern,
+                azimuth_deg=getattr(req, "interferer_azimuth", 0.0),
             )
 
         rm = execute_radio_map(
@@ -137,10 +139,18 @@ def calculate_analytical_sinr_service(req: SINRRequest):
 
 def result_antennas(req):
     antennas = [
-        {"id": "TX", "position": req.transmitter_position, "azimuth": 0},
+        {
+            "id": "TX",
+            "position": req.transmitter_position,
+            "azimuth": getattr(req, "azimuth", 0.0),
+        },
     ]
     if req.interferer_position is not None:
-        antennas.append({"id": "INT", "position": req.interferer_position, "azimuth": 0})
+        antennas.append({
+            "id": "INT",
+            "position": req.interferer_position,
+            "azimuth": getattr(req, "interferer_azimuth", 0.0),
+        })
     antennas.append({"id": "RX", "position": req.receiver_position, "kind": "receiver-point"})
     return antennas
 

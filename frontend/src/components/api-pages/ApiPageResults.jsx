@@ -218,6 +218,7 @@ function SinrResultDetails({ result }) {
       <h3>Serving transmitter</h3>
       <dl className="detail-grid">
         <dt>Position</dt><dd>{formatPositionValue(request.transmitter_position)}</dd>
+        <dt>Azimuth</dt><dd>{formatMaybeNumber(request.azimuth)} deg</dd>
         <dt>Tilt</dt><dd>{formatMaybeNumber(request.tilt)} deg</dd>
         <dt>Power</dt><dd>{formatMaybeNumber(request.tx_power)} dBm</dd>
         <dt>Interferer power</dt><dd>{request.interferer_position ? `${formatMaybeNumber(request.interferer_tx_power ?? request.tx_power)} dBm` : "None"}</dd>
@@ -237,6 +238,7 @@ function SinrResultDetails({ result }) {
           <h3>Interferer</h3>
           <dl className="detail-grid">
             <dt>Position</dt><dd>{formatPositionValue(request.interferer_position)}</dd>
+            <dt>Azimuth</dt><dd>{formatMaybeNumber(request.interferer_azimuth)} deg</dd>
             <dt>Tilt</dt><dd>{formatMaybeNumber(request.interferer_tilt)} deg</dd>
           </dl>
         </>
@@ -255,8 +257,9 @@ function ThroughputResultDetails({ result }) {
       <h3>Radio link</h3>
       <dl className="detail-grid">
         <dt>Transmitter</dt><dd>{formatPositionValue(request.transmitter_position)}</dd>
+        <dt>Azimuth</dt><dd>{formatMaybeNumber(request.azimuth)} deg</dd>
         <dt>Receiver</dt><dd>{formatPositionValue(result.receiver_position || request.receiver_position)}</dd>
-        <dt>Interferer</dt><dd>{request.interferer_position ? formatPositionValue(request.interferer_position) : "None"}</dd>
+        <dt>Interferer</dt><dd>{request.interferer_position ? `${formatPositionValue(request.interferer_position)} (${formatMaybeNumber(request.interferer_azimuth)} deg)` : "None"}</dd>
         <dt>Power</dt><dd>{formatMaybeNumber(request.tx_power)} dBm</dd>
         <dt>Bandwidth</dt><dd>{formatMaybeNumber(request.bandwidth_mhz)} MHz</dd>
         <dt>Interferer power</dt><dd>{request.interferer_position ? `${formatMaybeNumber(request.interferer_tx_power ?? request.tx_power)} dBm` : "None"}</dd>
