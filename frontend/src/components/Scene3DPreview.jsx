@@ -13,6 +13,8 @@ import { projectWardBoundaryRings } from "../utils/wardBoundary";
 
 const SCENE_MODEL_CACHE_LIMIT = 3;
 const sceneModelCache = new Map();
+const SCENE_SESSION_CACHE_LIMIT = 3;
+const sceneSessionCache = new Map();
 
 export function hasCachedSceneModel(bounds) {
   if (!bounds) {
@@ -139,16 +141,42 @@ function Scene3DPreview({
       return undefined;
     }
 
-    const state = createSceneState(host, model, viewMode);
+    const sessionKey = `${boundsKey}|${viewMode}`;
+    let state = sceneSessionCache.get(sessionKey);
+    let isCachedSession = false;
+
+    if (state && !state.isAttached()) {
+      sceneSessionCache.delete(sessionKey);
+      sceneSessionCache.set(sessionKey, state);
+      state.attach(host);
+      isCachedSession = true;
+    } else {
+      state = createSceneState(host, model, viewMode);
+      if (!sceneSessionCache.has(sessionKey)) {
+        sceneSessionCache.set(sessionKey, state);
+        while (sceneSessionCache.size > SCENE_SESSION_CACHE_LIMIT) {
+          const oldestKey = sceneSessionCache.keys().next().value;
+          const oldestState = sceneSessionCache.get(oldestKey);
+          sceneSessionCache.delete(oldestKey);
+          oldestState?.dispose();
+        }
+        isCachedSession = true;
+      }
+    }
+
     sceneStateRef.current = state;
 
     return () => {
       if (sceneStateRef.current === state) {
         sceneStateRef.current = null;
       }
-      state.dispose();
+      if (isCachedSession) {
+        state.detach();
+      } else {
+        state.dispose();
+      }
     };
-  }, [model, viewMode]);
+  }, [boundsKey, model, viewMode]);
 
   useEffect(() => {
     const state = sceneStateRef.current;
@@ -494,8 +522,6 @@ function createSceneState(host, model, viewMode) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(width, height);
   renderer.shadowMap.enabled = true;
-  host.appendChild(renderer.domElement);
-
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(0, 0, 0);
   controls.enableDamping = true;
@@ -569,15 +595,18 @@ function createSceneState(host, model, viewMode) {
     }
   });
 
-  const observer = new ResizeObserver(() => {
-    const nextWidth = host.clientWidth || width;
-    const nextHeight = host.clientHeight || height;
+  let resizeObserver = null;
+  let animationId = 0;
+  let isAttached = false;
+
+  function resizeToHost(nextHost) {
+    const nextWidth = nextHost.clientWidth || width;
+    const nextHeight = nextHost.clientHeight || height;
     updateCameraForSize(camera, viewMode, nextWidth, nextHeight, maxSide);
     camera.updateProjectionMatrix();
     renderer.setSize(nextWidth, nextHeight);
     state.needsRender = true;
-  });
-  observer.observe(host);
+  }
 
   const raycaster = state.raycaster;
   const pointer = state.pointer;
@@ -696,12 +725,6 @@ function createSceneState(host, model, viewMode) {
     }
   }
 
-  renderer.domElement.addEventListener("pointerdown", handlePointerDown);
-  renderer.domElement.addEventListener("pointermove", handlePointerMove);
-  renderer.domElement.addEventListener("pointerleave", handlePointerLeave);
-  renderer.domElement.addEventListener("pointerup", handlePointerUp);
-
-  let animationId = 0;
   function animate() {
     animationId = window.requestAnimationFrame(animate);
     controls.update();
@@ -734,11 +757,44 @@ function createSceneState(host, model, viewMode) {
       renderer.render(scene, camera);
     }
   }
-  animate();
+
+  function attach(nextHost) {
+    if (isAttached) {
+      return;
+    }
+
+    state.host = nextHost;
+    nextHost.innerHTML = "";
+    nextHost.appendChild(renderer.domElement);
+    resizeToHost(nextHost);
+    resizeObserver = new ResizeObserver(() => resizeToHost(nextHost));
+    resizeObserver.observe(nextHost);
+    renderer.domElement.addEventListener("pointerdown", handlePointerDown);
+    renderer.domElement.addEventListener("pointermove", handlePointerMove);
+    renderer.domElement.addEventListener("pointerleave", handlePointerLeave);
+    renderer.domElement.addEventListener("pointerup", handlePointerUp);
+    isAttached = true;
+    animate();
+  }
+
+  function detach() {
+    if (!isAttached) {
+      return;
+    }
+
+    resizeObserver?.disconnect();
+    resizeObserver = null;
+    window.cancelAnimationFrame(animationId);
+    renderer.domElement.removeEventListener("pointerdown", handlePointerDown);
+    renderer.domElement.removeEventListener("pointermove", handlePointerMove);
+    renderer.domElement.removeEventListener("pointerleave", handlePointerLeave);
+    renderer.domElement.removeEventListener("pointerup", handlePointerUp);
+    renderer.domElement.remove();
+    isAttached = false;
+  }
 
   function dispose() {
-    window.cancelAnimationFrame(animationId);
-    observer.disconnect();
+    detach();
     controls.dispose();
     renderer.domElement.removeEventListener("pointerdown", handlePointerDown);
     renderer.domElement.removeEventListener("pointermove", handlePointerMove);
@@ -760,7 +816,11 @@ function createSceneState(host, model, viewMode) {
     host.innerHTML = "";
   }
 
+  state.attach = attach;
+  state.detach = detach;
+  state.isAttached = () => isAttached;
   state.dispose = dispose;
+  attach(host);
   return state;
 }
 
