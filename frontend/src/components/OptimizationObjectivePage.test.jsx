@@ -174,8 +174,8 @@ describe("optimization outcome explanation", () => {
       trials: [baseline, recommended, unsafe, alternative],
     }, recommended);
 
+    expect(outcome.targets[0].label).toBe("Covered area");
     expect(outcome.targets[0].status).toBe("Improved, target met");
-    expect(outcome.targets[0].text).toContain("70 % → 92 %");
     expect(outcome.changes).toEqual([{ antennaId: "A1", text: "tilt 5 → 7; power 30 → 31" }]);
     expect(outcome.safety.text).toContain("1 other setup met the targets or scored better, but was rejected");
     expect(outcome.alternatives[0].reason).toContain("misses at least one target");

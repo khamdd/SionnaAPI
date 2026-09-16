@@ -57,6 +57,7 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
   const [saving, setSaving] = useState(false);
   const [applied, setApplied] = useState(false);
   const [showTestedSetups, setShowTestedSetups] = useState(false);
+  const [showOutcome, setShowOutcome] = useState(false);
   const [selectedCandidateId, setSelectedCandidateId] = useState(null);
   const [changeFields, setChangeFields] = useState(() => CHANGE_FIELDS.map(([field]) => field));
   const [eligibleAntennaIds, setEligibleAntennaIds] = useState(() => baseRequest?.antennas?.map((antenna) => antenna.id) || []);
@@ -106,6 +107,7 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
             return;
           }
           setShowTestedSetups(false);
+          setShowOutcome(false);
           setResult(full);
           setSelectedCandidateId((full.optimization.recommended_candidate || full.optimization.best)?.id);
           setSaved(Boolean(job.result_run_id));
@@ -156,6 +158,7 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
     setSaved(false);
     setApplied(false);
     setShowTestedSetups(false);
+    setShowOutcome(false);
     setSelectedCandidateId(null);
     setSourceSignature(signature);
     write(runKey, null);
@@ -405,39 +408,45 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
         <p>{optimizationResultSummary(optimization)}</p>
         <p>{optimization.recommendation_reason || "This setup ranked highest against the configured targets."}</p>
         {Number.isFinite(Number(optimization.global_tested)) && <p>Global exploration: {formatInteger(optimization.global_tested)} setups. Local refinement: {formatInteger(optimization.local_tested)} setups.{Number(optimization.budget_saved) > 0 ? ` Adaptive pruning saved ${formatInteger(optimization.budget_saved)} simulations.` : ""}</p>}
-        {outcome && <section className="optimization-outcome" aria-labelledby="optimization-outcome-title">
-          <header>
-            <h3 id="optimization-outcome-title">Why this setup</h3>
-            <p>{selectedCandidate.id === recommendedCandidate.id ? "Recommended option" : "Selected alternative"}</p>
-          </header>
-          <div className="optimization-outcome-grid">
-            <article>
-              <h4>Target result</h4>
-              <ul>{outcome.targets.map((target) => <li key={target.key} className={target.tone}><strong>{target.status}</strong><span>{target.text}</span></li>)}</ul>
-            </article>
-            <article>
-              <h4>Antenna changes</h4>
-              {outcome.changes.length
-                ? <ul>{outcome.changes.map((change) => <li key={change.antennaId}><strong>{change.antennaId}</strong><span>{change.text}</span></li>)}</ul>
-                : <p>No antenna settings change.</p>}
-            </article>
-            <article>
-              <h4>Safety check</h4>
-              <p className={outcome.safety.tone}>{outcome.safety.text}</p>
-            </article>
-            <article>
-              <h4>Why it ranks first</h4>
-              {outcome.alternatives.length
-                ? <ul>{outcome.alternatives.map((item) => <li key={item.id}><strong>{item.label}</strong><span>{item.reason}</span></li>)}</ul>
-                : <p>No other successful setup was available for comparison.</p>}
-            </article>
-          </div>
-        </section>}
-        <OptimizationMapComparison
-          baselineGrid={optimization.comparison?.baseline_grid}
-          candidateGrid={result.grid}
-        />
-        <table className="optimization-results-table optimization-candidate-table"><thead><tr><th>Use</th><th>Option</th><th>Goals met</th><th>Guardrails</th><th>Antennas changed</th><th>Adjustments</th></tr></thead>
+        {outcome && <>
+          <button
+            type="button"
+            className="ghost-button"
+            aria-expanded={showOutcome}
+            onClick={() => setShowOutcome((current) => !current)}
+          >
+            {showOutcome ? "Minimize setup explanation" : "Expand setup explanation"}
+          </button>
+          {showOutcome && <section className="optimization-outcome" aria-labelledby="optimization-outcome-title">
+            <header>
+              <h3 id="optimization-outcome-title">Why this setup</h3>
+              <p>{selectedCandidate.id === recommendedCandidate.id ? "Recommended option" : "Selected alternative"}</p>
+            </header>
+            <div className="optimization-outcome-grid">
+              <article>
+                <h4>Target result</h4>
+                <ul>{outcome.targets.map((target) => <li key={target.key} className={target.tone}><strong>{target.label}</strong><span>{target.status}</span></li>)}</ul>
+              </article>
+              <article>
+                <h4>Antenna changes</h4>
+                {outcome.changes.length
+                  ? <ul>{outcome.changes.map((change) => <li key={change.antennaId}><strong>{change.antennaId}</strong><span>{change.text}</span></li>)}</ul>
+                  : <p>No antenna settings change.</p>}
+              </article>
+              <article>
+                <h4>Safety check</h4>
+                <p className={outcome.safety.tone}>{outcome.safety.text}</p>
+              </article>
+              <article>
+                <h4>Why it ranks first</h4>
+                {outcome.alternatives.length
+                  ? <ul>{outcome.alternatives.map((item) => <li key={item.id}><strong>{item.label}</strong><span>{item.reason}</span></li>)}</ul>
+                  : <p>No other successful setup was available for comparison.</p>}
+              </article>
+            </div>
+          </section>}
+        </>}
+        <table className="optimization-results-table optimization-candidate-table"><thead><tr><th>Use</th><th title="Setups are ranked by target results first, then by fewer changed antennas and smaller adjustments.">Option</th><th>Goals met</th><th>Guardrails</th><th>Antennas changed</th><th>Adjustments</th></tr></thead>
           <tbody>{candidateOptions.map((candidate, index) => {
             const evaluations = candidate.evaluation?.evaluations || [];
             return <tr key={candidate.id} className={candidate.id === selectedCandidate?.id ? "selected" : ""}>
@@ -460,6 +469,10 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
           })}</tbody>
         </table>
         <p>Covered cells: {formatInteger(optimization.baseline.evaluation.kpis.covered_cells)} → {formatInteger(selectedCandidate.evaluation.kpis.covered_cells)} of {formatInteger(selectedCandidate.evaluation.kpis.total_cells)}.</p>
+        <OptimizationMapComparison
+          baselineGrid={optimization.comparison?.baseline_grid}
+          candidateGrid={result.grid}
+        />
         <button
           type="button"
           className="ghost-button"
@@ -481,8 +494,6 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
             ))}</tbody>
           </table>
         </>}
-        <p>Setups are ranked by target results first, then by fewer changed antennas and smaller adjustments.</p>
-        {selectedCandidate.changes.length ? <ul>{selectedCandidate.changes.map((change) => <li key={`${change.antenna_id}-${change.field || "tilt"}`}>{change.antenna_id} {formatField(change.field)}: {formatMetric(change.from)} → {formatMetric(change.to)}</li>)}</ul> : <p>This option keeps the starting antenna settings.</p>}
         {optimization.trials.some((trial) => trial.error) && <p className="error-text">Some setups failed: {optimization.trials.filter((trial) => trial.error).map((trial) => `${trial.label}: ${trial.error}`).join("; ")}</p>}
         {stale && !applied && <p className="error-text">Your antenna settings changed. Run optimization again before applying.</p>}
         <div className="panel-actions">
@@ -894,9 +905,9 @@ function buildOptimizationOutcome(optimization, selectedCandidate) {
     }
     return {
       key: objectiveKey(objective),
+      label: objectiveLabel(objective),
       status,
       tone,
-      text: `${objectiveLabel(objective)}: ${formatObjectiveActual(before, objective)} → ${formatObjectiveActual(after, objective)}; target ${objectiveTarget(objective)}.`,
     };
   });
 
