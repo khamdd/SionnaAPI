@@ -28,6 +28,19 @@ function baseAntenna(overrides = {}) {
 }
 
 describe("buildNetworkCoveragePayload", () => {
+  it("uses the configured throughput assumptions", () => {
+    const payload = buildNetworkCoveragePayload(
+      [baseAntenna()],
+      SCENE,
+      undefined,
+      40,
+      2,
+    );
+
+    expect(payload.bandwidth_mhz).toBe(40);
+    expect(payload.mimo_layers).toBe(2);
+  });
+
   it("builds the canonical network coverage request", () => {
     const payload = buildNetworkCoveragePayload(
       [baseAntenna(), { ...baseAntenna(), id: "A2", enabled: false, position: [1, 2, 3] }],

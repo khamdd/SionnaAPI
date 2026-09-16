@@ -1,15 +1,25 @@
-import { TRANSMITTER_PATTERN } from "../constants";
+import {
+  DEFAULT_COVERAGE_BANDWIDTH_MHZ,
+  DEFAULT_COVERAGE_MIMO_LAYERS,
+  TRANSMITTER_PATTERN,
+} from "../constants";
 import { formatText } from "./format";
 import { lngLatToScenePosition, solverForScene } from "./scene";
 import { toAntennaRequest } from "./antennas";
 
-export function buildNetworkCoveragePayload(antennas, activeScene, solverBase) {
+export function buildNetworkCoveragePayload(
+  antennas,
+  activeScene,
+  solverBase,
+  bandwidthMhz = DEFAULT_COVERAGE_BANDWIDTH_MHZ,
+  mimoLayers = DEFAULT_COVERAGE_MIMO_LAYERS,
+) {
   return {
     antennas: antennas.map(toAntennaRequest),
     transmitter_pattern: TRANSMITTER_PATTERN,
     solver: solverForScene(activeScene, solverBase),
-    bandwidth_mhz: 100,
-    mimo_layers: 4,
+    bandwidth_mhz: bandwidthMhz,
+    mimo_layers: mimoLayers,
   };
 }
 

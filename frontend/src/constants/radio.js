@@ -7,6 +7,8 @@ export const DEFAULT_SOLVER = {
 };
 
 export const TRANSMITTER_PATTERN = "tr38901";
+export const DEFAULT_COVERAGE_BANDWIDTH_MHZ = 100;
+export const DEFAULT_COVERAGE_MIMO_LAYERS = 4;
 export const DEFAULT_RSRP_USER_COUNT = 1000;
 export const MAX_RSRP_USER_COUNT = 5000;
 export const DEFAULT_USER_HEIGHT_M = 1.5;

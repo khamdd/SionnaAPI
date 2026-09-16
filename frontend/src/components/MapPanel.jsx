@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
 import {
+  DEFAULT_COVERAGE_BANDWIDTH_MHZ,
+  DEFAULT_COVERAGE_MIMO_LAYERS,
+} from "../constants";
+import { parseAntennaNumericInput } from "../utils/antennas";
+import {
   formatMaybeNumber,
   formatNeighborDelta,
   formatPosition,
@@ -13,12 +18,13 @@ import {
   CoverageColorLegend,
   CoverageMapControls,
 } from "./CoverageMapPresentation";
-import { SolverFields } from "./ApiPages";
+import { FormSection, SolverFields } from "./ApiPages";
 import Scene3DPreview from "./Scene3DPreview";
 
 export default function MapPanel({
   activeScene,
   antennas,
+  bandwidthMhz,
   coverageImageUrl,
   canvasRef,
   hover,
@@ -27,12 +33,15 @@ export default function MapPanel({
   latestGrid,
   latestSolver,
   mapStageRef,
+  mimoLayers,
   onHover,
   onHoverEnd,
   onOptimize,
   onRun,
   onSceneLoadingChange,
   onSolverChange,
+  onBandwidthChange,
+  onMimoLayersChange,
   runError,
   runStatus,
   solver,
@@ -155,6 +164,47 @@ export default function MapPanel({
           <strong>{summary.averageOverlap}</strong>
         </div>
       </div>
+
+      <form className="api-form api-scene-setup-form network-solver-form" onSubmit={(event) => event.preventDefault()}>
+        <fieldset className="api-form-lock" disabled={isBusy}>
+          <FormSection title="Throughput assumptions">
+            <label className="form-field">
+              <span>Bandwidth</span>
+              <div>
+                <div className="input-with-unit">
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="any"
+                    required
+                    value={bandwidthMhz ?? DEFAULT_COVERAGE_BANDWIDTH_MHZ}
+                    onChange={(event) => onBandwidthChange(parseAntennaNumericInput(event.target.value))}
+                  />
+                  <small className="input-unit">MHz</small>
+                </div>
+                <small className="input-hint">Cell throughput capacity.</small>
+              </div>
+            </label>
+            <label className="form-field">
+              <span>MIMO layers</span>
+              <div>
+                <div className="input-with-unit">
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    required
+                    value={mimoLayers ?? DEFAULT_COVERAGE_MIMO_LAYERS}
+                    onChange={(event) => onMimoLayersChange(parseAntennaNumericInput(event.target.value))}
+                  />
+                  <small className="input-unit">layers</small>
+                </div>
+                <small className="input-hint">Spatial streams.</small>
+              </div>
+            </label>
+          </FormSection>
+        </fieldset>
+      </form>
 
       {solver && onSolverChange && (
         <form

@@ -44,6 +44,7 @@ export default function AppRouteContent({
           activeScene={activeScene}
           antennaPool={fixedSceneAntennas}
           antennas={network.antennas}
+          bandwidthMhz={network.bandwidthMhz}
           displayAntennas={network.activeAntennas}
           canvasRef={network.canvasRef}
           coverageImageUrl={network.coverageImageUrl}
@@ -53,6 +54,7 @@ export default function AppRouteContent({
           latestGrid={network.latestGrid}
           latestSolver={network.latestSolver}
           mapStageRef={network.mapStageRef}
+          mimoLayers={network.mimoLayers}
           onHover={network.onHover}
           onHoverEnd={network.onHoverEnd}
           onResetAntennas={network.onResetAntennas}
@@ -68,6 +70,8 @@ export default function AppRouteContent({
           runStatus={network.runStatus}
           solver={network.solver}
           onSolverChange={network.onSolverChange}
+          onBandwidthChange={network.setBandwidthMhz}
+          onMimoLayersChange={network.setMimoLayers}
           summary={network.summary}
         />
       )}
@@ -75,7 +79,13 @@ export default function AppRouteContent({
         <OptimizationObjectivePage
           key={activeScene.id}
           activeScene={activeScene}
-          baseRequest={buildNetworkCoveragePayload(network.activeAntennas, activeScene)}
+          baseRequest={buildNetworkCoveragePayload(
+            network.activeAntennas,
+            activeScene,
+            undefined,
+            network.bandwidthMhz,
+            network.mimoLayers,
+          )}
           storageKey={network.optimizationStorageKey}
           onBack={() => navigate(SIMULATION_ENTRY_ROUTE)}
           onApply={network.onApplyOptimization}

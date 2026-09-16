@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { runNetworkCoverage } from "../api";
-import { DEFAULT_SOLVER } from "../constants";
+import {
+  DEFAULT_COVERAGE_BANDWIDTH_MHZ,
+  DEFAULT_COVERAGE_MIMO_LAYERS,
+  DEFAULT_SOLVER,
+} from "../constants";
 import { validateNetworkCoverageSimulationAntennas } from "../utils/antennas";
 import { clone } from "../utils/collections";
 import { buildNetworkCoveragePayload } from "../utils/jobAdapters";
@@ -19,10 +23,12 @@ export default function useNetworkCoverage({
   route,
 }) {
   const [coverageImageUrl, setCoverageImageUrl] = useState("");
+  const [bandwidthMhz, setBandwidthMhz] = useState(DEFAULT_COVERAGE_BANDWIDTH_MHZ);
   const [hover, setHover] = useState(null);
   const [isRunning, setIsRunning] = useState(false);
   const [latestGrid, setLatestGrid] = useState(null);
   const [latestSolver, setLatestSolver] = useState(() => clone(DEFAULT_SOLVER));
+  const [mimoLayers, setMimoLayers] = useState(DEFAULT_COVERAGE_MIMO_LAYERS);
   const [runError, setRunError] = useState(false);
   const [runStatus, setRunStatus] = useState("Ready");
   const [solverDraft, setSolverDraft] = useState(() => clone(DEFAULT_SOLVER));
@@ -111,8 +117,22 @@ export default function useNetworkCoverage({
         throw new Error(validationError);
       }
 
+      if (!Number.isFinite(Number(bandwidthMhz)) || Number(bandwidthMhz) <= 0) {
+        throw new Error("Bandwidth must be greater than 0 MHz.");
+      }
+
+      if (!Number.isInteger(Number(mimoLayers)) || Number(mimoLayers) <= 0) {
+        throw new Error("MIMO layers must be a positive whole number.");
+      }
+
       const result = await runNetworkCoverage(
-        buildNetworkCoveragePayload(activeAntennas, activeScene, solverDraft),
+        buildNetworkCoveragePayload(
+          activeAntennas,
+          activeScene,
+          solverDraft,
+          Number(bandwidthMhz),
+          Number(mimoLayers),
+        ),
       );
       if (result.status === "queued") {
         onJobQueued({ ...result, scene_name: activeScene.name });
@@ -141,10 +161,12 @@ export default function useNetworkCoverage({
   }, [
     activeAntennas,
     activeScene,
+    bandwidthMhz,
     isRunning,
     isSceneListLoading,
     isSceneLoading,
     loadJobs,
+    mimoLayers,
     onJobQueued,
     solverDraft,
   ]);
@@ -245,18 +267,22 @@ export default function useNetworkCoverage({
     canvasRef,
     clearResult,
     coverageImageUrl,
+    bandwidthMhz,
     handleHover,
     hover,
     isRunning,
     latestGrid,
     latestSolver,
     mapStageRef,
+    mimoLayers,
     removeType2Antenna,
     resetAntennas,
     run,
     runError,
     runStatus,
     setHover,
+    setBandwidthMhz,
+    setMimoLayers,
     setSolverDraft,
     solver,
     summary,

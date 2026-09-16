@@ -5,6 +5,7 @@ export default function NetworkCoveragePage({
   activeScene,
   antennaPool,
   antennas,
+  bandwidthMhz,
   canvasRef,
   coverageImageUrl,
   displayAntennas = antennas,
@@ -14,6 +15,7 @@ export default function NetworkCoveragePage({
   latestGrid,
   latestSolver,
   mapStageRef,
+  mimoLayers,
   maxAntennas,
   onAddType2Antenna,
   onCreateAntenna,
@@ -25,6 +27,8 @@ export default function NetworkCoveragePage({
   onRun,
   onSceneLoadingChange,
   onSolverChange,
+  onBandwidthChange,
+  onMimoLayersChange,
   onUpdateAntenna,
   runError,
   runStatus,
@@ -50,6 +54,10 @@ export default function NetworkCoveragePage({
         onRun={onRun}
         onSceneLoadingChange={onSceneLoadingChange}
         onSolverChange={onSolverChange}
+        onBandwidthChange={onBandwidthChange}
+        onMimoLayersChange={onMimoLayersChange}
+        bandwidthMhz={bandwidthMhz}
+        mimoLayers={mimoLayers}
         runError={runError}
         runStatus={runStatus}
         solver={solver}
