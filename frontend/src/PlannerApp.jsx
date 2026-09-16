@@ -38,6 +38,7 @@ import AppOverlays from "./components/AppOverlays";
 import AppRouteContent from "./components/AppRouteContent";
 import GlobalProgress from "./components/GlobalProgress";
 import JobResultDetail from "./components/JobResultDetail";
+import { HistoryModalBody } from "./components/HistoryModal";
 import Navbar from "./components/Navbar";
 import { formatSimulationType } from "./utils/format";
 import { lngLatInsideBounds } from "./utils/scene";
