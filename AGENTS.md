@@ -10,8 +10,12 @@ the nearest nested `AGENTS.md` before changing `backend/` or `frontend/`.
 - Do not reread unchanged files or repeat tool output. Prefer targeted line ranges.
 - For ordinary work, use the fewest useful tool calls and concise progress/final
   messages. Stop investigating once evidence is sufficient to implement or answer.
-- Read feature docs only when the task touches that feature. `docs/system-behavior.md`
-  is the behavior overview; `docs/refactor-contract.md` is the compatibility source.
+- Read feature docs only when the task touches that feature. The focused feature
+  document is authoritative; `docs/system-behavior.md` is orientation, not a
+  detailed contract.
+- Do not copy feature detail across documents. Update `README.md` only for user
+  or operator instructions and compatibility docs only when their stated
+  boundary changes. Recorded baselines remain historical snapshots.
 - Run targeted checks first; broaden validation only when change risk warrants it.
 
 ## Invariants
@@ -38,12 +42,28 @@ the nearest nested `AGENTS.md` before changing `backend/` or `frontend/`.
 
 ## Task Router
 
+- Documentation ownership and update triggers: see the table below.
 - Setup, Docker, migrations, commands, endpoints: `README.md`
 - Current behavior: `docs/system-behavior.md`
 - Refactor/artifact compatibility: `docs/refactor-contract.md`
 - Routes and localStorage: `docs/frontend-route-matrix.md`,
   `docs/scene-draft-compatibility.md`
 - Queue reliability: `docs/simulation-job-reliability.md`
+
+### Documentation ownership
+
+| Document | Update when |
+| --- | --- |
+| `docs/system-behavior.md` | A major user-visible flow or runtime boundary changes |
+| `docs/refactor-contract.md` | A public API, artifact, error, or logging guarantee changes |
+| `docs/frontend-route-matrix.md` | Routing or navigation behavior changes |
+| `docs/scene-draft-compatibility.md` | A persisted browser key, shape, or cleanup rule changes |
+| `docs/simulation-job-reliability.md` | Queue execution or reliability behavior changes |
+| `README.md` | Setup, deployment, operator workflow, or headline API entry points change |
+| `docs/database-baseline.md`, `docs/refactor-baseline.md` | Historical evidence only; do not update for normal features |
+
+Update the authoritative document only. Prefer links over copied lists, tables,
+defaults, and algorithms.
 - Feature contracts: the matching file in `docs/`.
 
 High-value entry points are `backend/main.py`, `backend/models.py`,

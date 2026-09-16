@@ -309,9 +309,7 @@ npm run build
 ```
 
 Full Sionna simulations are hardware-dependent and are not part of the normal unit
-test suite. The behavior-preserving refactor contracts and smoke checklist are in
-`docs/refactor-contract.md`, `docs/frontend-route-matrix.md`,
-`docs/scene-draft-compatibility.md`, and `docs/refactor-smoke-checklist.md`.
+test suite. The documentation ownership and update rules are in `AGENTS.md`.
 
 ## Main API endpoints
 

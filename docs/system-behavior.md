@@ -1,8 +1,9 @@
 # Current System Behavior
 
-This document records high-value feature and runtime context that is too specific
-for the root `AGENTS.md`. Source code and focused contract documents remain the
-authority; verify them before making behavior changes.
+This document is a short orientation to major product flows and runtime
+boundaries. It is not a second feature specification. Source code, tests, and
+the focused documents listed in `README.md` remain authoritative. Small feature
+changes normally should not require an edit here.
 
 ## Scenes and Navigation
 
@@ -63,45 +64,12 @@ authority; verify them before making behavior changes.
 
 - `/network/optimization` runs a deterministic global-plus-local search through
   `POST /api/v1/optimizations/network-coverage/run`.
-- A run snapshots the active scene and Network Coverage request, simulates a fresh
-  baseline, holds solver settings fixed, and searches legal tilt, power, and
-  azimuth values within a user budget of 1 to 5000 simulations.
-- Objectives may use aggregate coverage/overlap KPIs, the percentage of scene
-  cells meeting an RSRP/SINR/throughput threshold, or an RF percentile from P1
-  through P99. Runs accept up to four goals, and existing aggregate objective
-  payloads remain valid.
-- Small discrete spaces are exhaustive. Larger spaces use deterministic
-  space-filling candidates, diverse beam selection, and local refinement.
-- The search continues after finding a passing setup while local branches keep
-  improving. Local refinement evaluates bounded batches, prunes branches whose
-  children do not outrank their parent, and stops when no active branch improves,
-  reporting pruned branches and unused budget. Ranking favors satisfying guardrails, satisfying all objectives,
-  normalized total shortfall, fewer failed objectives, fewer changed antennas,
-  and smaller adjustments, in that order. Results include one recommendation and
-  up to three alternatives.
-- Runs may restrict the search with allowed-change limits: an eligible-antenna
-  subset, per-antenna maximum tilt/power/azimuth change, a cap on how many
-  antennas may change, and an option to forbid increasing total transmit power.
-  Optional guardrails compare each candidate's coverage/overlap KPIs or P10 RF
-  values against the starting setup and reject regressions beyond a configured
-  maximum. A setup must satisfy every objective and every guardrail to pass.
-- Network Coverage and Impact comparison share coverage, overlap, and RF KPI
-  extraction. RF summaries include averages and nearest-rank P10/P50/P90 values
-  for RSRP, SINR, and throughput; reusable threshold-area calculations support
-  future RF objectives without changing the current optimization objective API.
-- Progress is persisted between simulations. The frontend remembers the latest
-  job per scene, resumes polling, rejects applying results to a changed draft, and
-  saves the winning request/result as normal Network Coverage History. The result
-  view explains target movement, grouped antenna changes, guardrail effects, and
-  why each alternative ranked below the recommendation. It also compares the
-  baseline and recommended RF grids for RSRP, SINR, or throughput, including a
-  cell-level improvement/regression view. Only the baseline and winning grids are
-  retained; grids for every tested candidate are not stored. Completed results
-  can be downloaded as a self-contained HTML engineering report with the decision,
-  targets, antenna changes, guardrails, RSRP comparison maps, search efficiency,
-  and alternative summaries.
-- Core behavior and result shape live in
-  `backend/services/optimization_service.py` and its targeted tests.
+- A run snapshots the active scene and request, evaluates a fresh baseline, and
+  searches legal antenna adjustments within a bounded simulation budget.
+- Objectives, guardrails, resumable progress, ranking, result comparisons, and
+  reports are part of the optimization flow. Their detailed behavior and result
+  shape are owned by `backend/services/optimization_service.py` and its targeted
+  tests; do not mirror algorithm details in this overview.
 
 ## Observability and Persistence
 
