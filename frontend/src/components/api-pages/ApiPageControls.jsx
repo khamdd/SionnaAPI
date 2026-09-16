@@ -187,9 +187,17 @@ export function SolverFields({ solver, onChange }) {
     <FormSection title="Solver">
       <NumberField hint="0 to 10." label="Max depth" value={solver.max_depth} min={0} max={10} step={1} onChange={(value) => updateObject(onChange, solver, "max_depth", value)} />
       <NumberField hint="1 to 10,000,000." label="Samples per TX" value={solver.samples_per_tx} min={1} max={10000000} step={1} onChange={(value) => updateObject(onChange, solver, "samples_per_tx", value)} />
-      <NumberField hint="0.1 to 50 m." label="Cell size" unit="m" value={solver.cell_size} min={0.1} max={50} step="any" onChange={(value) => updateObject(onChange, solver, "cell_size", value)} />
+      <NumberField hint="Integer from 2 to 50 m." label="Cell size" unit="m" value={solver.cell_size} min={2} max={50} step={1} onChange={(value) => updateObject(onChange, solver, "cell_size", normalizeCellSize(value))} />
     </FormSection>
   );
+}
+
+function normalizeCellSize(value) {
+  if (value === "") {
+    return value;
+  }
+
+  return Math.max(Math.round(Number(value)), 2);
 }
 
 function NumberField({ hint = "", label, max, min, onChange, step = "any", unit = "", value }) {

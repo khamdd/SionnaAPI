@@ -23,8 +23,9 @@ changes normally should not require an edit here.
 - Kept ward scenes retain validated GeoJSON boundary metadata for shared 3D
   previews. Manual drawing or choosing a new area clears the ward overlay and any
   untouched auto-generated scene name.
-- Imported scene bounds allow up to 5000 m in width and height. Solver workload is
-  protected by `MAX_GRID_CELLS`, which increases cell size for large scenes.
+- Imported scene bounds allow up to 5000 m in width and height. Solver cell size
+  is an integer from 2 to 50 meters and is not increased automatically for
+  large scenes.
 - Scene registry metadata is stored in `static/scenes/scenes.json`; database scene
   rows are minimal references for persisted results. Preview scenes expire and
   are cleaned up when not kept.

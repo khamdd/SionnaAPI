@@ -7,7 +7,6 @@ from backend.constants import (
     DEFAULT_RSRP_USER_COUNT,
     DEFAULT_TRANSMITTER_PATTERN,
     DEFAULT_USER_HEIGHT_M,
-    MAX_GRID_CELLS,
     MAX_RSRP_USER_COUNT,
 )
 
@@ -15,7 +14,7 @@ from backend.constants import (
 class SolverConfig(BaseModel):
     max_depth: int = Field(default=5, ge=0, le=10)
     samples_per_tx: int = Field(default=10**6, gt=0, le=10**7)
-    cell_size: float = Field(default=2.0, gt=0, le=50.0)
+    cell_size: int = Field(default=2, ge=2, le=50)
     center: Tuple[float, float, float] = (
         0.0,
         0.0,
@@ -32,9 +31,6 @@ class SolverConfig(BaseModel):
         if self.size[0] <= 0 or self.size[1] <= 0:
             raise ValueError("solver size values must be greater than 0")
 
-        cells = (self.size[0] / self.cell_size) * (self.size[1] / self.cell_size)
-        if cells > MAX_GRID_CELLS:
-            raise ValueError("simulation grid is too large")
         return self
 
 

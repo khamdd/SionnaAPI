@@ -49,6 +49,10 @@ export function sceneSizeMeters(scene) {
 }
 
 export function solverForScene(scene, baseSolver = DEFAULT_SOLVER) {
+  const requestedCellSize = Number(baseSolver.cell_size);
+  const cellSize = Number.isFinite(requestedCellSize)
+    ? Math.max(Math.round(requestedCellSize), 2)
+    : DEFAULT_SOLVER.cell_size;
   const size = sceneSizeMeters(scene);
 
   if (!size) {
@@ -56,12 +60,9 @@ export function solverForScene(scene, baseSolver = DEFAULT_SOLVER) {
       ...baseSolver,
       center: [0, 0, 0],
       size: DEFAULT_SOLVER.size,
+      cell_size: cellSize,
     };
   }
-
-  const maxGridCells = 50000;
-  const area = size.width * size.height;
-  const minimumCellSize = Math.ceil(Math.sqrt(area / maxGridCells));
 
   return {
     ...baseSolver,
@@ -70,11 +71,7 @@ export function solverForScene(scene, baseSolver = DEFAULT_SOLVER) {
       size.width,
       size.height,
     ],
-    cell_size: Math.max(
-      Number(baseSolver.cell_size) || DEFAULT_SOLVER.cell_size,
-      DEFAULT_SOLVER.cell_size,
-      minimumCellSize,
-    ),
+    cell_size: cellSize,
   };
 }
 

@@ -60,7 +60,7 @@ describe("solverForScene", () => {
     });
   });
 
-  it("centers the solver on the scene and enlarges cell size for large areas", () => {
+  it("centers the solver on the scene without enlarging cell size for large areas", () => {
     const scene = {
       metrics: { width_m: 5000, height_m: 4000 },
     };
@@ -68,7 +68,7 @@ describe("solverForScene", () => {
 
     expect(solver.center).toEqual([0, 0, 0]);
     expect(solver.size).toEqual([5000, 4000]);
-    expect(solver.cell_size).toBe(20);
+    expect(solver.cell_size).toBe(5);
   });
 
   it("keeps a requested cell size that is larger than the minimum", () => {
@@ -79,12 +79,19 @@ describe("solverForScene", () => {
     expect(solver.cell_size).toBe(9);
   });
 
-  it("uses the default cell size for small scenes", () => {
+  it("enforces the 2 m integer minimum", () => {
     const scene = { metrics: { width_m: 200, height_m: 200 } };
     const baseSolver = { ...DEFAULT_SOLVER, cell_size: 2 };
     const solver = solverForScene(scene, baseSolver);
 
-    expect(solver.cell_size).toBe(5);
+    expect(solver.cell_size).toBe(2);
+  });
+
+  it("normalizes fractional cell sizes to integers", () => {
+    const scene = { metrics: { width_m: 200, height_m: 200 } };
+    const baseSolver = { ...DEFAULT_SOLVER, cell_size: 2.5 };
+
+    expect(solverForScene(scene, baseSolver).cell_size).toBe(3);
   });
 });
 

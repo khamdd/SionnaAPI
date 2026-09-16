@@ -34,6 +34,23 @@ def test_solver_config_rejects_non_positive_cell_size():
         SolverConfig(cell_size=0.0)
 
 
+def test_solver_config_requires_integer_cell_size_at_least_two_meters():
+    with pytest.raises(ValidationError):
+        SolverConfig(cell_size=1)
+
+    with pytest.raises(ValidationError):
+        SolverConfig(cell_size=2.5)
+
+    request = SolverConfig(cell_size=3)
+    assert request.cell_size == 3
+
+
+def test_solver_config_allows_large_grids_without_cell_count_limit():
+    request = SolverConfig(size=(5000.0, 5000.0), cell_size=2)
+
+    assert request.cell_size == 2
+
+
 def test_coverage_request_uses_default_solver_without_camera_input():
     request = CoverageRequest(
         tilt=8.0,
