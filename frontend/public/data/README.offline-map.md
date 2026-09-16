@@ -1,4 +1,5 @@
-Place the offline PMTiles assets used by the scene chooser in this directory:
+Place the offline PMTiles assets used by the scene chooser and the scene
+card map previews in this directory:
 
 - `vietnam.pmtiles`
 - `building-regions.json`

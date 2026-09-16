@@ -2,11 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import {
   Map as MapLibreMap,
   NavigationControl,
-  addProtocol,
-  removeProtocol,
   setWorkerUrl,
 } from "maplibre-gl";
-import { Protocol } from "pmtiles";
 import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import {
@@ -22,6 +19,7 @@ import {
 } from "../../constants";
 import { createSceneWardBoundary } from "../../utils/wardBoundary";
 import {
+  acquirePmtilesProtocol,
   boundsFromLngLats,
   calculateMetrics,
   createBuildingRegionManager,
@@ -31,6 +29,7 @@ import {
   ensureWardLayers,
   loadWardFeature,
   offlineMapDataBaseUrl,
+  releasePmtilesProtocol,
   updateSelectionBounds,
 } from "./sceneChooserMap";
 import SceneChooserView from "./SceneChooserView";
@@ -160,8 +159,7 @@ export default function SceneChooserPage({
 
     setIsMapReady(false);
 
-    const protocol = new Protocol();
-    addProtocol("pmtiles", protocol.tile);
+    acquirePmtilesProtocol();
 
     const savedView = mapViewRef.current;
     const defaultCenter = [
@@ -239,11 +237,7 @@ export default function SceneChooserPage({
       map.remove();
       mapRef.current = null;
 
-      try {
-        removeProtocol("pmtiles");
-      } catch {
-        // MapLibre throws if the protocol was already removed by a hot reload.
-      }
+      releasePmtilesProtocol();
     };
   }, []);
 

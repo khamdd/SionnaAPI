@@ -1,6 +1,34 @@
+import { addProtocol, removeProtocol } from "maplibre-gl";
+import { Protocol } from "pmtiles";
 import { getWardBoundary } from "../../api";
 
 const WARD_BOUNDARY_CACHE_MAX_ENTRIES = 200;
+
+let pmtilesProtocolRefCount = 0;
+
+function acquirePmtilesProtocol() {
+  if (pmtilesProtocolRefCount === 0) {
+    const protocol = new Protocol();
+    addProtocol("pmtiles", protocol.tile);
+  }
+  pmtilesProtocolRefCount += 1;
+}
+
+function releasePmtilesProtocol() {
+  if (pmtilesProtocolRefCount === 0) {
+    return;
+  }
+
+  pmtilesProtocolRefCount -= 1;
+
+  if (pmtilesProtocolRefCount === 0) {
+    try {
+      removeProtocol("pmtiles");
+    } catch {
+      // MapLibre throws if the protocol was already removed by a hot reload.
+    }
+  }
+}
 
 function offlineMapDataBaseUrl() {
   return new URL(
@@ -441,6 +469,7 @@ function calculateMetrics(bounds) {
 }
 
 export {
+  acquirePmtilesProtocol,
   boundsFromLngLats,
   calculateMetrics,
   createBuildingRegionManager,
@@ -450,5 +479,6 @@ export {
   ensureWardLayers,
   loadWardFeature,
   offlineMapDataBaseUrl,
+  releasePmtilesProtocol,
   updateSelectionBounds,
 };

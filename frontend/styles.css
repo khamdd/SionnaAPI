@@ -777,10 +777,6 @@ button.hidden,
   height: 100%;
 }
 
-.scene-card-map-preview .leaflet-control-container {
-  display: none;
-}
-
 .scene-preview-placeholder {
   display: grid;
   place-items: center;
@@ -2314,23 +2310,13 @@ textarea:disabled {
   cursor: crosshair;
 }
 
-.scene-map .leaflet-tile {
-  width: 256px;
-  height: 256px;
-  max-width: none;
-  border: 0;
-  margin: 0;
-}
-
 .scene-map .maplibregl-canvas {
   outline: none;
 }
 
 .scene-map.selecting-area,
 .scene-map .selecting-area,
-.scene-map .selecting-area .maplibregl-canvas,
-.scene-map.selecting-area .leaflet-grab,
-.scene-map.selecting-area .leaflet-interactive {
+.scene-map .selecting-area .maplibregl-canvas {
   cursor: crosshair;
 }
 
@@ -2900,7 +2886,7 @@ textarea:disabled {
   text-align: right;
 }
 
-.history-detail img:not(.leaflet-tile) {
+.history-detail img {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 8px;
