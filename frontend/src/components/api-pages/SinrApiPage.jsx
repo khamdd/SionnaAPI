@@ -32,6 +32,8 @@ import {
   validateSinrRoles,
 } from "./ApiPagesShared";
 
+const DEFAULT_RECEIVER_POSITION = [0, 0, 1.5];
+
 export function SinrApiPage({
   activeScene,
   antennaPool = EMPTY_ARRAY,
@@ -77,7 +79,7 @@ export function SinrApiPage({
     () => sinrSelectedRoleAntennas(antennas, roleSelection),
     [antennas, roleSelection],
   );
-  const receiverPosition = roleSelection.receiver_position || null;
+  const receiverPosition = roleSelection.receiver_position || DEFAULT_RECEIVER_POSITION;
   const receiverInputPosition = receiverCoordinateDraft
     || receiverPositionForMode(receiverPosition, receiverCoordinateMode, activeScene?.bounds);
   const rolePositions = useMemo(

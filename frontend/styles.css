@@ -1028,6 +1028,13 @@ button.hidden,
   color: var(--muted);
 }
 
+.input-with-unit small.input-unit {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
 .result-summary img,
 .api-result-panel img {
   width: 100%;

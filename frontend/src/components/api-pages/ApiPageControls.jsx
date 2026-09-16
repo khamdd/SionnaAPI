@@ -76,9 +76,14 @@ function SinrRoleFields({
           <NumberField
             key={key}
             label={label}
-            unit="m"
+            step={receiverCoordinateMode === "latlon"
+              ? key === "height_m" ? "0.1" : oneMeterCoordinateStep(key, receiverPosition)
+              : key === "z" ? "0.1" : "1"}
+            unit={receiverCoordinateMode === "latlon"
+              ? key === "height_m" ? "m" : "°"
+              : "m"}
             value={receiverPosition?.[key] ?? ""}
-            min={key === "z" ? 0 : undefined}
+            min={key === "z" || key === "height_m" ? 0 : undefined}
             onChange={(value) => onReceiverPositionChange?.({
               ...(receiverPosition || {}),
               [key]: value,
@@ -92,6 +97,20 @@ function SinrRoleFields({
       </p>
     </>
   );
+}
+
+function oneMeterCoordinateStep(key, position) {
+  if (key === "height_m") {
+    return "0.1";
+  }
+
+  const latitude = Number(position?.latitude) || 0;
+  const latitudeFactor = key === "longitude"
+    ? Math.max(Math.cos((latitude * Math.PI) / 180), 0.01)
+    : 1;
+  const metersPerDegree = 111320 * latitudeFactor;
+
+  return (1 / metersPerDegree).toFixed(8);
 }
 
 function FormSection({ children, title }) {
@@ -188,7 +207,7 @@ function NumberField({ hint = "", label, max, min, onChange, step = "any", unit 
             required
             onChange={(event) => onChange(parseAntennaNumericInput(event.target.value))}
           />
-          {unit && <small>{unit}</small>}
+          {unit && <small className="input-unit">{unit}</small>}
         </div>
         {hint && <small className="input-hint">{hint}</small>}
       </div>

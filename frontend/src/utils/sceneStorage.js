@@ -184,14 +184,20 @@ export function normalizeStoredSinrRoles(roles) {
   }
 
   const receiverPosition = roles.receiver_position;
-  if (receiverPosition && typeof receiverPosition === "object" && !Array.isArray(receiverPosition)) {
+  const receiverValues = Array.isArray(receiverPosition)
+    ? receiverPosition
+    : receiverPosition && typeof receiverPosition === "object"
+      ? [receiverPosition.x, receiverPosition.y, receiverPosition.z]
+      : null;
+
+  if (receiverValues) {
     const normalizeCoordinate = (value) => value === "" ? "" : Number(value);
-    const x = normalizeCoordinate(receiverPosition.x);
-    const y = normalizeCoordinate(receiverPosition.y);
-    const z = normalizeCoordinate(receiverPosition.z);
+    const x = normalizeCoordinate(receiverValues[0]);
+    const y = normalizeCoordinate(receiverValues[1]);
+    const z = normalizeCoordinate(receiverValues[2]);
 
     if ([x, y, z].every((value) => value === "" || Number.isFinite(value))) {
-      normalized.receiver_position = { x, y, z };
+      normalized.receiver_position = [x, y, z];
     }
   }
 

@@ -85,7 +85,10 @@ function receiverPositionToScenePosition(position) {
     return null;
   }
 
-  const values = [position.x, position.y, position.z].map(Number);
+  const values = (Array.isArray(position)
+    ? position
+    : [position.x, position.y, position.z]
+  ).map(Number);
   return values.every(Number.isFinite) ? values : null;
 }
 
