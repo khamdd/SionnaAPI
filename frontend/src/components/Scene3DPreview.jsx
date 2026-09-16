@@ -1144,6 +1144,13 @@ function addAntennas(scene, model, antennas, solver, bounds) {
       return;
     }
 
+    if (antenna.kind === "receiver-point") {
+      const marker = createReceiverPointObject(antenna);
+      marker.position.set(position.x, position.y, position.z);
+      group.add(marker);
+      return;
+    }
+
     const mastHeight = clamp(
       (antenna.height_m || scenePosition[2] || 25) * model.scale,
       18,
@@ -1155,6 +1162,29 @@ function addAntennas(scene, model, antennas, solver, bounds) {
   });
 
   scene.add(group);
+}
+
+function createReceiverPointObject(antenna) {
+  const group = new THREE.Group();
+  const marker = new THREE.Mesh(
+    new THREE.SphereGeometry(5, 20, 20),
+    new THREE.MeshBasicMaterial({
+      color: 0x2563eb,
+      depthTest: false,
+      depthWrite: false,
+    }),
+  );
+  marker.renderOrder = 12;
+  group.add(marker);
+
+  const label = new THREE.Sprite(
+    createTextSpriteMaterial(antenna.id || "RX", 0x1d4ed8),
+  );
+  label.scale.set(42, 14, 1);
+  label.position.set(0, 14, 0);
+  label.renderOrder = 13;
+  group.add(label);
+  return group;
 }
 
 function addWardBoundary(scene, model, bounds, wardBoundary) {

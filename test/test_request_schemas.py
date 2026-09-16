@@ -21,7 +21,7 @@ def test_sinr_request_accepts_required_fields_and_defaults():
         receiver_position=(45.0, 90.0, 1.5),
     )
 
-    assert request.interferer_position == (120.0, 100.0, 25.0)
+    assert request.interferer_position is None
     assert request.tx_power == 30.0
     assert request.transmitter_pattern == DEFAULT_TRANSMITTER_PATTERN
     assert request.solver.max_depth == 5

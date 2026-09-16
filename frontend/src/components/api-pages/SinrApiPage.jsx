@@ -9,7 +9,6 @@ import {
   FormSection,
   PropagationFields,
   QueueNotice,
-  SINR_ROLES,
   SinrResultDetails,
   SinrRoleFields,
   SolverFields,
@@ -17,6 +16,8 @@ import {
   firstPositionError,
   linkResultAntennas,
   radioLinkVisuals,
+  receiverPositionForMode,
+  receiverPositionFromMode,
   runButtonLabel,
   sinrPreviewAntennas,
   sinrPreviewLinks,
@@ -54,6 +55,13 @@ export function SinrApiPage({
     noise_figure_db: 7,
     solver: DEFAULT_SOLVER,
   }));
+  const [receiverCoordinateMode, setReceiverCoordinateMode] = useState("meters");
+  const [receiverCoordinateDraft, setReceiverCoordinateDraft] = useState(null);
+
+  useEffect(() => {
+    setReceiverCoordinateDraft(null);
+    setReceiverCoordinateMode("meters");
+  }, [activeScene?.id]);
   const [resultState, setResultState] = useApiResult(
     onProgressChange,
     "Running SINR API...",
@@ -69,9 +77,12 @@ export function SinrApiPage({
     () => sinrSelectedRoleAntennas(antennas, roleSelection),
     [antennas, roleSelection],
   );
+  const receiverPosition = roleSelection.receiver_position || null;
+  const receiverInputPosition = receiverCoordinateDraft
+    || receiverPositionForMode(receiverPosition, receiverCoordinateMode, activeScene?.bounds);
   const rolePositions = useMemo(
-    () => sinrRolePositions(selectedRoles, activeScene?.bounds),
-    [selectedRoles, activeScene?.bounds],
+    () => sinrRolePositions(selectedRoles, receiverPosition, activeScene?.bounds),
+    [selectedRoles, receiverPosition, activeScene?.bounds],
   );
   const roleValidation = validateSinrRoles(
     antennas,
@@ -93,33 +104,59 @@ export function SinrApiPage({
         label: "Receiver position",
         value: rolePositions.receiver_position,
       },
-      {
+      ...(rolePositions.interferer_position ? [{
         key: "interferer_position",
         label: "Interferer position",
         value: rolePositions.interferer_position,
-      },
+      }] : []),
     ]);
   const sinrError = roleValidation || firstPositionError(positionValidation.errors);
   const isFormValid = !sinrError && positionValidation.isValid;
   const isAnalytical = form.propagation_model !== "sionna";
   const isSimulationReady = isAnalytical || sceneStatus.isSceneReady;
 
+  function handleReceiverCoordinateModeChange(nextMode) {
+    setReceiverCoordinateMode(nextMode);
+    setReceiverCoordinateDraft(receiverPositionForMode(
+      receiverPosition,
+      nextMode,
+      activeScene?.bounds,
+    ));
+  }
+
+  function handleReceiverPositionChange(nextPosition) {
+    setReceiverCoordinateDraft(nextPosition);
+    const scenePosition = receiverPositionFromMode(
+      nextPosition,
+      receiverCoordinateMode,
+      activeScene?.bounds,
+    );
+
+    if (scenePosition) {
+      onRoleSelectionChange?.({
+        ...roleSelection,
+        receiver_position: scenePosition,
+      });
+    }
+  }
+
   useEffect(() => {
     const cleanedRoles = cleanSinrRoleSelection(roleSelection, antennas);
 
-    if (sinrRoleSelectionChanged(cleanedRoles, roleSelection)) {
-      onRoleSelectionChange?.(cleanedRoles);
+    const nextRoles = {
+      ...cleanedRoles,
+      receiver_position: cleanedRoles.receiver_position || { x: 0, y: 0, z: 1.5 },
+    };
+
+    if (sinrRoleSelectionChanged(nextRoles, roleSelection)) {
+      onRoleSelectionChange?.(nextRoles);
       return;
     }
 
-    if (
-      antennas.length === 3
-      && SINR_ROLES.every((role) => !cleanedRoles[role.key])
-    ) {
+    if (!nextRoles.transmitter && antennas.length > 0) {
       onRoleSelectionChange?.({
-        transmitter: cleanedRoles.transmitter || antennas[0]?.id || "",
-        receiver: cleanedRoles.receiver || antennas[1]?.id || "",
-        interferer: cleanedRoles.interferer || antennas[2]?.id || "",
+        ...nextRoles,
+        transmitter: antennas[0]?.id || "",
       });
     }
   }, [antennas, onRoleSelectionChange, roleSelection]);
@@ -134,22 +171,23 @@ export function SinrApiPage({
       tilt: selectedRoles.transmitter.tilt.current,
       transmitter_position: rolePositions.transmitter_position,
       receiver_position: rolePositions.receiver_position,
-      interferer_position: rolePositions.interferer_position,
-      interferer_tilt: selectedRoles.interferer.tilt.current,
       tx_power: selectedRoles.transmitter.tx_power.current,
-      interferer_tx_power: selectedRoles.interferer.tx_power.current,
       propagation_model: form.propagation_model,
       carrier_frequency_ghz: form.carrier_frequency_ghz,
       bandwidth_mhz: form.bandwidth_mhz,
       noise_figure_db: form.noise_figure_db,
       solver: sceneSolver,
       transmitter_pattern: TRANSMITTER_PATTERN,
+      ...(selectedRoles.interferer ? {
+        interferer_position: rolePositions.interferer_position,
+        interferer_tilt: selectedRoles.interferer.tilt.current,
+        interferer_tx_power: selectedRoles.interferer.tx_power.current,
+      } : {}),
     };
     const displayPayload = {
       ...payload,
       antenna_roles: {
         transmitter: selectedRoles.transmitter,
-        receiver: selectedRoles.receiver,
         interferer: selectedRoles.interferer,
       },
     };
@@ -172,8 +210,8 @@ export function SinrApiPage({
     [resultRequest],
   );
   const previewAntennas = useMemo(
-    () => sinrPreviewAntennas(selectedRoles),
-    [selectedRoles],
+    () => sinrPreviewAntennas(selectedRoles, rolePositions.receiver_position),
+    [selectedRoles, rolePositions.receiver_position],
   );
   const previewLinks = useMemo(
     () => sinrPreviewLinks(rolePositions),
@@ -186,7 +224,7 @@ export function SinrApiPage({
         <div className="topbar">
           <div>
             <h1>SINR API</h1>
-            <p id="run-status">Evaluate signal quality at one receiver point with one serving transmitter and one interferer.</p>
+            <p id="run-status">Evaluate signal quality at one receiver point with one serving transmitter and an optional interferer.</p>
           </div>
           <button
             className="primary-button"
@@ -232,6 +270,10 @@ sceneBadges={resultSceneBadges}
                     error={sinrError}
                     roles={roleSelection}
                     onChange={onRoleSelectionChange}
+                    onReceiverCoordinateModeChange={handleReceiverCoordinateModeChange}
+                    onReceiverPositionChange={handleReceiverPositionChange}
+                    receiverCoordinateMode={receiverCoordinateMode}
+                    receiverPosition={receiverInputPosition}
                   />
                 </FormSection>
                 <PropagationFields form={form} onChange={setForm} includeBandwidth />

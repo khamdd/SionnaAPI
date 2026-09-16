@@ -182,6 +182,31 @@ export function lngLatInsideBounds({ longitude, latitude }, bounds) {
   return !lngLatBoundsError({ longitude, latitude }, bounds);
 }
 
+export function scenePositionToLngLat(position, bounds) {
+  const sceneBounds = normalizeLngLatBounds(bounds);
+  const x = Number(position?.[0]);
+  const y = Number(position?.[1]);
+  const z = Number(position?.[2]);
+
+  if (!sceneBounds || !Number.isFinite(x) || !Number.isFinite(y)) {
+    return null;
+  }
+
+  const centerLat = (sceneBounds.south + sceneBounds.north) / 2;
+  const centerLng = (sceneBounds.west + sceneBounds.east) / 2;
+  const metersPerDegreeLat = 111320;
+  const metersPerDegreeLng = metersPerDegreeLat * Math.max(
+    Math.cos((centerLat * Math.PI) / 180),
+    0.01,
+  );
+
+  return {
+    longitude: Number((centerLng + x / metersPerDegreeLng).toFixed(7)),
+    latitude: Number((centerLat + y / metersPerDegreeLat).toFixed(7)),
+    height_m: Number.isFinite(z) ? z : 0,
+  };
+}
+
 export function lngLatBoundsError({ longitude, latitude }, bounds, label = "Coordinates") {
   const numericLongitude = Number(longitude);
   const numericLatitude = Number(latitude);

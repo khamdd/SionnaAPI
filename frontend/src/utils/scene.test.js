@@ -5,6 +5,7 @@ import {
   lngLatBoundsError,
   lngLatInsideBounds,
   lngLatToScenePosition,
+  scenePositionToLngLat,
   sceneSizeMeters,
   solverBounds,
   solverForScene,
@@ -203,6 +204,24 @@ describe("lngLatToScenePosition", () => {
         { west: 2, east: 1, south: 0, north: 1 },
       ),
     ).toBeNull();
+  });
+});
+
+describe("scenePositionToLngLat", () => {
+  it("maps the scene origin back to the bounds center", () => {
+    expect(scenePositionToLngLat([0, 0, 1.5], EQUATOR_BOUNDS)).toEqual({
+      longitude: 0.001,
+      latitude: 0.0005,
+      height_m: 1.5,
+    });
+  });
+
+  it("converts positive scene offsets back to geographic coordinates", () => {
+    expect(scenePositionToLngLat([55.66, 0, 10], EQUATOR_BOUNDS)).toEqual({
+      longitude: 0.0015,
+      latitude: 0.0005,
+      height_m: 10,
+    });
   });
 });
 

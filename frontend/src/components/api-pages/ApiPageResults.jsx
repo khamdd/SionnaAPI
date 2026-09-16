@@ -220,7 +220,7 @@ function SinrResultDetails({ result }) {
         <dt>Position</dt><dd>{formatPositionValue(request.transmitter_position)}</dd>
         <dt>Tilt</dt><dd>{formatMaybeNumber(request.tilt)} deg</dd>
         <dt>Power</dt><dd>{formatMaybeNumber(request.tx_power)} dBm</dd>
-        <dt>Interferer power</dt><dd>{formatMaybeNumber(request.interferer_tx_power ?? request.tx_power)} dBm</dd>
+        <dt>Interferer power</dt><dd>{request.interferer_position ? `${formatMaybeNumber(request.interferer_tx_power ?? request.tx_power)} dBm` : "None"}</dd>
         <dt>Propagation</dt><dd>{formatPropagationModel(result.propagation_model)}</dd>
         {isAnalytical && <><dt>Frequency</dt><dd>{formatMaybeNumber(request.carrier_frequency_ghz)} GHz</dd></>}
       </dl>
@@ -232,11 +232,15 @@ function SinrResultDetails({ result }) {
         <dt>Signal power</dt><dd>{formatMaybeNumber(result.signal_power)} dBm</dd>
         <dt>Interference + noise</dt><dd>{formatMaybeNumber(result.noise_power)} dBm</dd>
       </dl>
-      <h3>Interferer</h3>
-      <dl className="detail-grid">
-        <dt>Position</dt><dd>{formatPositionValue(request.interferer_position)}</dd>
-        <dt>Tilt</dt><dd>{formatMaybeNumber(request.interferer_tilt)} deg</dd>
-      </dl>
+      {request.interferer_position && (
+        <>
+          <h3>Interferer</h3>
+          <dl className="detail-grid">
+            <dt>Position</dt><dd>{formatPositionValue(request.interferer_position)}</dd>
+            <dt>Tilt</dt><dd>{formatMaybeNumber(request.interferer_tilt)} deg</dd>
+          </dl>
+        </>
+      )}
     </>
   );
 }
@@ -252,10 +256,10 @@ function ThroughputResultDetails({ result }) {
       <dl className="detail-grid">
         <dt>Transmitter</dt><dd>{formatPositionValue(request.transmitter_position)}</dd>
         <dt>Receiver</dt><dd>{formatPositionValue(result.receiver_position || request.receiver_position)}</dd>
-        <dt>Interferer</dt><dd>{formatPositionValue(request.interferer_position)}</dd>
+        <dt>Interferer</dt><dd>{request.interferer_position ? formatPositionValue(request.interferer_position) : "None"}</dd>
         <dt>Power</dt><dd>{formatMaybeNumber(request.tx_power)} dBm</dd>
         <dt>Bandwidth</dt><dd>{formatMaybeNumber(request.bandwidth_mhz)} MHz</dd>
-        <dt>Interferer power</dt><dd>{formatMaybeNumber(request.interferer_tx_power ?? request.tx_power)} dBm</dd>
+        <dt>Interferer power</dt><dd>{request.interferer_position ? `${formatMaybeNumber(request.interferer_tx_power ?? request.tx_power)} dBm` : "None"}</dd>
         <dt>MIMO layers</dt><dd>{request.mimo_layers || "--"}</dd>
         <dt>Propagation</dt><dd>{formatPropagationModel(result.propagation_model)}</dd>
         {isAnalytical && <><dt>Frequency</dt><dd>{formatMaybeNumber(request.carrier_frequency_ghz)} GHz</dd></>}

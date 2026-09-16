@@ -183,6 +183,18 @@ export function normalizeStoredSinrRoles(roles) {
     }
   }
 
+  const receiverPosition = roles.receiver_position;
+  if (receiverPosition && typeof receiverPosition === "object" && !Array.isArray(receiverPosition)) {
+    const normalizeCoordinate = (value) => value === "" ? "" : Number(value);
+    const x = normalizeCoordinate(receiverPosition.x);
+    const y = normalizeCoordinate(receiverPosition.y);
+    const z = normalizeCoordinate(receiverPosition.z);
+
+    if ([x, y, z].every((value) => value === "" || Number.isFinite(value))) {
+      normalized.receiver_position = { x, y, z };
+    }
+  }
+
   return Object.keys(normalized).length ? normalized : null;
 }
 

@@ -74,10 +74,10 @@ Role value:
 ```json
 {
   "scene-id": {
-    "transmitter": "A1",
-    "receiver": "A2",
-    "interferer": "A3"
-  }
+  "transmitter": "A1",
+  "interferer": "A3",
+  "receiver_position": {"x": 45, "y": 90, "z": 1.5}
+}
 }
 ```
 

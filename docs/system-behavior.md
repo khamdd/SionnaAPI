@@ -42,8 +42,8 @@ changes normally should not require an edit here.
   comparisons, and confirmed single or bulk deletion.
 - Simulation positions are validated against active scene solver bounds. Coverage
   uses one inventory antenna; Network Coverage and RSRP accept up to ten enabled
-  antennas; SINR and Throughput require distinct transmitter, receiver, and
-  interferer roles.
+  antennas; SINR and Throughput require one transmitter antenna and one receiver
+  point, while an interferer antenna is optional.
 - SINR and Throughput support Sionna, UMa, Ericsson, and Friis. Analytical models
   bypass 3D scene loading and do not use tilt; Sionna uses ray tracing.
 - Queue retry, lease, heartbeat, cancellation, and failure rules are documented in

@@ -9,11 +9,11 @@ import {
 } from "../../utils/antennas";
 import {
   formatMaybeNumber,
-  formatText,
 } from "../../utils/format";
 import {
   lngLatInsideBounds,
   lngLatToScenePosition,
+  scenePositionToLngLat,
   validatePositionInsideSolver,
 } from "../../utils/scene";
 import { hasCachedSceneModel } from "../Scene3DPreview";
@@ -68,17 +68,54 @@ function sinrSelectedRoleAntennas(antennas, roles) {
 
   return {
     transmitter: byId.get(roles.transmitter) || null,
-    receiver: byId.get(roles.receiver) || null,
     interferer: byId.get(roles.interferer) || null,
   };
 }
 
-function sinrRolePositions(selectedRoles, bounds) {
+function sinrRolePositions(selectedRoles, receiverPosition, bounds) {
   return {
     transmitter_position: scenePositionForAntenna(selectedRoles.transmitter, bounds),
-    receiver_position: scenePositionForAntenna(selectedRoles.receiver, bounds),
+    receiver_position: receiverPositionToScenePosition(receiverPosition),
     interferer_position: scenePositionForAntenna(selectedRoles.interferer, bounds),
   };
+}
+
+function receiverPositionToScenePosition(position) {
+  if (!position) {
+    return null;
+  }
+
+  const values = [position.x, position.y, position.z].map(Number);
+  return values.every(Number.isFinite) ? values : null;
+}
+
+function receiverPositionForMode(position, mode, bounds) {
+  if (mode === "latlon") {
+    return scenePositionToLngLat(position, bounds);
+  }
+
+  if (!Array.isArray(position)) {
+    return null;
+  }
+
+  return { x: position[0], y: position[1], z: position[2] };
+}
+
+function receiverPositionFromMode(position, mode, bounds) {
+  if (mode === "latlon") {
+    if (!position) {
+      return null;
+    }
+
+    return lngLatToScenePosition({
+      longitude: position.longitude,
+      latitude: position.latitude,
+      height_m: position.height_m,
+    }, bounds);
+  }
+
+  const values = [position?.x, position?.y, position?.z].map(Number);
+  return values.every(Number.isFinite) ? values : null;
 }
 
 function scenePositionForAntenna(antenna, bounds) {
@@ -90,21 +127,24 @@ function scenePositionForAntenna(antenna, bounds) {
 }
 
 function validateSinrRoles(antennas, roles, selectedRoles, rolePositions, activeScene, simulationLabel = "SINR") {
-  if (!Array.isArray(antennas) || antennas.length < 3) {
-    return `${simulationLabel} needs exactly 3 role antennas. Add ${3 - (antennas?.length || 0)} missing antenna(s).`;
+  if (!Array.isArray(antennas) || antennas.length < 1) {
+    return `${simulationLabel} needs at least one antenna for the transmitter.`;
   }
 
-  const selectedIds = SINR_ROLES.map((role) => roles[role.key]).filter(Boolean);
-  if (selectedIds.length < 3) {
-    return "Select one transmitter, one receiver, and one interferer.";
+  if (!roles.transmitter) {
+    return "Select a transmitter antenna.";
   }
 
-  if (new Set(selectedIds).size !== 3) {
-    return "Transmitter, receiver, and interferer must be three different antennas.";
+  if (roles.interferer && roles.interferer === roles.transmitter) {
+    return "Transmitter and interferer must be different antennas.";
   }
 
   for (const role of SINR_ROLES) {
     const antenna = selectedRoles[role.key];
+
+    if (role.key === "interferer" && !roles.interferer) {
+      continue;
+    }
 
     if (!antenna) {
       return `${role.label} antenna is not available in this scene.`;
@@ -115,10 +155,8 @@ function validateSinrRoles(antennas, roles, selectedRoles, rolePositions, active
     }
   }
 
-  for (const [field, position] of Object.entries(rolePositions)) {
-    if (!Array.isArray(position)) {
-      return `${formatText(field.replace("_position", ""))} position is invalid.`;
-    }
+  if (!Array.isArray(rolePositions.receiver_position)) {
+    return "Enter a receiver point position.";
   }
 
   return "";
@@ -171,19 +209,25 @@ function cleanSinrRoleSelection(roles, antennas) {
     cleaned[role.key] = antennaId && availableIds.has(antennaId) ? antennaId : "";
   }
 
+  if (roles.receiver_position) {
+    cleaned.receiver_position = roles.receiver_position;
+  }
+
   return cleaned;
 }
 
 function sinrRoleSelectionChanged(nextRoles, currentRoles) {
-  return SINR_ROLES.some((role) => (nextRoles[role.key] || "") !== (currentRoles[role.key] || ""));
+  return SINR_ROLES.some((role) => (nextRoles[role.key] || "") !== (currentRoles[role.key] || ""))
+    || JSON.stringify(nextRoles.receiver_position || null)
+      !== JSON.stringify(currentRoles.receiver_position || null);
 }
 
 function firstPositionError(errors) {
   return Object.values(errors || {}).find(Boolean) || "";
 }
 
-function sinrPreviewAntennas(selectedRoles) {
-  return SINR_ROLES.map((role) => {
+function sinrPreviewAntennas(selectedRoles, receiverPosition) {
+  const antennas = SINR_ROLES.map((role) => {
     const antenna = selectedRoles[role.key];
 
     if (!antenna) {
@@ -195,6 +239,16 @@ function sinrPreviewAntennas(selectedRoles) {
       id: role.key === "interferer" ? "INT" : role.key === "receiver" ? "RX" : "TX",
     };
   }).filter(Boolean);
+
+  if (Array.isArray(receiverPosition)) {
+    antennas.push({
+      id: "RX",
+      kind: "receiver-point",
+      position: receiverPosition,
+    });
+  }
+
+  return antennas;
 }
 
 function sinrPreviewLinks(rolePositions) {
@@ -321,8 +375,8 @@ function linkResultAntennas(result, request) {
   if (Array.isArray(request.receiver_position)) {
     antennas.push({
       id: "RX",
+      kind: "receiver-point",
       position: request.receiver_position,
-      azimuth: 0,
     });
   }
 
@@ -540,6 +594,8 @@ export {
   linkResultAntennas,
   loadCoverageDraft,
   runButtonLabel,
+  receiverPositionForMode,
+  receiverPositionFromMode,
   selectCoverageInventoryAntenna,
   sinrPreviewAntennas,
   sinrPreviewLinks,

@@ -28,14 +28,15 @@ def compare_throughput_service(req: ThroughputRequest, scene):
             pattern=req.transmitter_pattern,
         )
 
-        sync_transmitter(
-            scene,
-            "tx_interferer",
-            req.interferer_position,
-            req.interferer_tilt,
-            interferer_power(req),
-            pattern=req.transmitter_pattern,
-        )
+        if req.interferer_position is not None:
+            sync_transmitter(
+                scene,
+                "tx_interferer",
+                req.interferer_position,
+                req.interferer_tilt,
+                interferer_power(req),
+                pattern=req.transmitter_pattern,
+            )
 
         rm_base = execute_radio_map(
             scene,
@@ -104,23 +105,7 @@ def compare_throughput_service(req: ThroughputRequest, scene):
             },
             "receiver_position": req.receiver_position,
             "solver": solver_metadata(req.solver),
-            "antennas": [
-                {
-                    "id": "TX",
-                    "position": req.transmitter_position,
-                    "azimuth": 0,
-                },
-                {
-                    "id": "INT",
-                    "position": req.interferer_position,
-                    "azimuth": 0,
-                },
-                {
-                    "id": "RX",
-                    "position": req.receiver_position,
-                    "azimuth": 0,
-                },
-            ],
+            "antennas": result_antennas(req),
             "recommendation": (
                 "Antenna modification yields a "
                 f"{abs(percentage_change)}% {direction} "
@@ -189,11 +174,13 @@ def compare_analytical_throughput_service(req: ThroughputRequest):
 
 
 def result_antennas(req):
-    return [
+    antennas = [
         {"id": "TX", "position": req.transmitter_position, "azimuth": 0},
-        {"id": "INT", "position": req.interferer_position, "azimuth": 0},
-        {"id": "RX", "position": req.receiver_position, "azimuth": 0},
     ]
+    if req.interferer_position is not None:
+        antennas.append({"id": "INT", "position": req.interferer_position, "azimuth": 0})
+    antennas.append({"id": "RX", "position": req.receiver_position, "kind": "receiver-point"})
+    return antennas
 
 
 def interferer_power(req):

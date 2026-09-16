@@ -283,7 +283,9 @@ def iter_position_fields(req):
 
     for label, field in direct_fields:
         if hasattr(req, field):
-            yield label, getattr(req, field)
+            position = getattr(req, field)
+            if position is not None:
+                yield label, position
 
     for antenna in getattr(req, "antennas", []) or []:
         antenna_id = getattr(antenna, "id", "unknown")

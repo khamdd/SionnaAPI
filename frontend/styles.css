@@ -956,6 +956,26 @@ button.hidden,
   padding: 0 8px 0 0;
 }
 
+.form-subsection {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin: 2px 0 0;
+  padding: 10px;
+}
+
+.form-subsection legend.receiver-point-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  color: var(--text);
+  font-size: 12px;
+  padding: 0;
+}
+
 .form-field {
   display: grid;
   grid-template-columns: 150px minmax(0, 1fr);

@@ -30,20 +30,22 @@ def calculate_analytical_link(req, model):
         frequency_hz,
         model,
     )
-    interference_power_dbm = received_power_dbm(
-        req.interferer_position,
-        req.receiver_position,
-        interferer_power(req),
-        frequency_hz,
-        model,
-    )
+    interference_power_dbm = None
+    if req.interferer_position is not None:
+        interference_power_dbm = received_power_dbm(
+            req.interferer_position,
+            req.receiver_position,
+            interferer_power(req),
+            frequency_hz,
+            model,
+        )
     thermal_noise_power_dbm = (
         THERMAL_NOISE_DENSITY_DBM_HZ
         + 10.0 * math.log10(float(req.bandwidth_mhz) * 1e6)
         + float(req.noise_figure_db)
     )
     interference_plus_noise_dbm = watts_to_dbm(
-        dbm_to_watts(interference_power_dbm)
+        (dbm_to_watts(interference_power_dbm) if interference_power_dbm is not None else 0.0)
         + dbm_to_watts(thermal_noise_power_dbm)
     )
     sinr_db = signal_power_dbm - interference_plus_noise_dbm
@@ -52,7 +54,11 @@ def calculate_analytical_link(req, model):
         "model": model,
         "sinr_db": round(sinr_db, 2),
         "signal_power_dbm": round(signal_power_dbm, 2),
-        "interference_power_dbm": round(interference_power_dbm, 2),
+        "interference_power_dbm": (
+            round(interference_power_dbm, 2)
+            if interference_power_dbm is not None
+            else None
+        ),
         "thermal_noise_power_dbm": round(thermal_noise_power_dbm, 2),
         "interference_plus_noise_power_dbm": round(
             interference_plus_noise_dbm,

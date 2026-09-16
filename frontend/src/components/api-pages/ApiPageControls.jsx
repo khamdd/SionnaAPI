@@ -3,11 +3,20 @@ import { parseAntennaNumericInput } from "../../utils/antennas";
 
 const SINR_ROLES = [
   { key: "transmitter", label: "Transmitter" },
-  { key: "receiver", label: "Receiver" },
   { key: "interferer", label: "Interferer" },
 ];
 
-function SinrRoleFields({ antennas, error, onChange, roles, simulationLabel = "SINR" }) {
+function SinrRoleFields({
+  antennas,
+  error,
+  onChange,
+  onReceiverCoordinateModeChange,
+  onReceiverPositionChange,
+  receiverCoordinateMode = "meters",
+  receiverPosition,
+  roles,
+  simulationLabel = "SINR",
+}) {
   const availableAntennas = Array.isArray(antennas) ? antennas : EMPTY_ARRAY;
 
   function updateRole(role, antennaId) {
@@ -19,9 +28,9 @@ function SinrRoleFields({ antennas, error, onChange, roles, simulationLabel = "S
 
   return (
     <>
-      {availableAntennas.length < 3 && (
+      {availableAntennas.length < 1 && (
         <p className="form-help">
-          Add {3 - availableAntennas.length} more added antenna(s) before running {simulationLabel}.
+          Add at least one antenna before running {simulationLabel}.
         </p>
       )}
       {SINR_ROLES.map((role) => (
@@ -29,7 +38,7 @@ function SinrRoleFields({ antennas, error, onChange, roles, simulationLabel = "S
           <span>{role.label}</span>
           <select
             value={roles[role.key] || ""}
-            required
+            required={role.key === "transmitter"}
             onChange={(event) => updateRole(role.key, event.target.value)}
           >
             <option value="">Select {role.label.toLowerCase()}</option>
@@ -41,9 +50,45 @@ function SinrRoleFields({ antennas, error, onChange, roles, simulationLabel = "S
           </select>
         </label>
       ))}
+      <fieldset className="form-subsection">
+        <legend className="receiver-point-heading">
+          <span>Receiver point</span>
+          <button
+            className="ghost-button"
+            type="button"
+            aria-label={`Switch receiver coordinates to ${receiverCoordinateMode === "meters" ? "GPS" : "scene meters"}`}
+            title={receiverCoordinateMode === "meters" ? "Switch to latitude/longitude" : "Switch to scene meters"}
+            onClick={() => onReceiverCoordinateModeChange?.(
+              receiverCoordinateMode === "meters" ? "latlon" : "meters",
+            )}
+          >
+            {receiverCoordinateMode === "meters" ? "m" : "GPS"}
+          </button>
+        </legend>
+        <p className="form-help">
+          The receiver is a measurement point, not an antenna.
+        </p>
+        {[
+          ...(receiverCoordinateMode === "latlon"
+            ? [["longitude", "Receiver longitude"], ["latitude", "Receiver latitude"], ["height_m", "Receiver height"]]
+            : [["x", "Receiver X"], ["y", "Receiver Y"], ["z", "Receiver height"]]),
+        ].map(([key, label]) => (
+          <NumberField
+            key={key}
+            label={label}
+            unit="m"
+            value={receiverPosition?.[key] ?? ""}
+            min={key === "z" ? 0 : undefined}
+            onChange={(value) => onReceiverPositionChange?.({
+              ...(receiverPosition || {}),
+              [key]: value,
+            })}
+          />
+        ))}
+      </fieldset>
       {error && <small className="field-error">{error}</small>}
       <p className="form-help">
-        {simulationLabel} runs only when one transmitter, one receiver, and one interferer are selected as three different antennas.
+        {simulationLabel} requires one transmitter and one receiver point. An interferer antenna is optional.
       </p>
     </>
   );

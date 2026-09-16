@@ -345,15 +345,7 @@ class SINRRequest(BaseModel):
         float
     ]
 
-    interferer_position: Tuple[
-        float,
-        float,
-        float
-    ] = (
-        120.0,
-        100.0,
-        25.0,
-    )
+    interferer_position: Tuple[float, float, float] | None = None
 
     interferer_tilt: float = 12.0
 
@@ -391,15 +383,7 @@ class ThroughputRequest(BaseModel):
         float
     ]
 
-    interferer_position: Tuple[
-        float,
-        float,
-        float
-    ] = (
-        120.0,
-        100.0,
-        25.0,
-    )
+    interferer_position: Tuple[float, float, float] | None = None
 
     interferer_tilt: float = 12.0
 
