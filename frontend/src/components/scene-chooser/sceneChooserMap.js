@@ -144,7 +144,10 @@ function createBuildingRegionManager(map, dataBaseUrl) {
       return;
     }
 
-    if (map.getZoom() < 13.5) {
+    // The chooser should stay responsive while browsing provinces and wards.
+    // Detailed 3D buildings are only useful at street-level zoom and are
+    // rendered again in the selected scene preview.
+    if (map.getZoom() < 16) {
       removeAllRegions();
       return;
     }
@@ -187,7 +190,7 @@ function createBuildingRegionManager(map, dataBaseUrl) {
         type: "fill-extrusion",
         source: sourceId,
         "source-layer": "buildings",
-        minzoom: 14,
+        minzoom: 16,
         paint: {
           "fill-extrusion-color": "#d18b62",
           "fill-extrusion-height": [
@@ -426,6 +429,9 @@ function ensureWardLayers(map) {
     map.addSource("vietnam-wards", {
       type: "geojson",
       data: emptyFeatureCollection(),
+      buffer: 0,
+      maxzoom: 14,
+      tolerance: 0.5,
     });
   }
 
@@ -460,7 +466,7 @@ function ensureWardLayers(map) {
       id: "vietnam-wards-labels",
       type: "symbol",
       source: "vietnam-wards",
-      minzoom: 11,
+      minzoom: 13,
       layout: {
         "text-field": ["coalesce", ["get", "ward_name"], ["get", "ward_name_en"]],
         "text-size": ["interpolate", ["linear"], ["zoom"], 11, 10, 15, 13],
