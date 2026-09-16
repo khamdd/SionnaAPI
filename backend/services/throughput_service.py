@@ -62,6 +62,7 @@ def compare_throughput_service(req: ThroughputRequest, scene):
             req.target_tilt,
             req.tx_power,
             pattern=req.transmitter_pattern,
+            azimuth_deg=getattr(req, "azimuth", 0.0),
         )
 
         rm_target = execute_radio_map(
