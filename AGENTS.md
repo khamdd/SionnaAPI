@@ -31,7 +31,7 @@ the nearest nested `AGENTS.md` before changing `backend/` or `frontend/`.
   boundary.
 - Every user-facing delete requires confirmation and must clean up only owned data
   and artifacts. Removing a queue item must not delete saved History.
-- Preserve existing API, route, localStorage, and artifact contracts unless the
+- Preserve retained API, route, localStorage, and artifact contracts unless the
   task explicitly changes them; update focused tests and contract docs when changed.
 - Never commit secrets, generated `static/` content, DB volumes, offline-map
   archives, or local runtime artifacts. Never revert unrelated user changes.
@@ -44,8 +44,7 @@ the nearest nested `AGENTS.md` before changing `backend/` or `frontend/`.
 - Routes and localStorage: `docs/frontend-route-matrix.md`,
   `docs/scene-draft-compatibility.md`
 - Queue reliability: `docs/simulation-job-reliability.md`
-- Feature contracts: the matching file in `docs/` (configurations, profiles,
-  impact, comparisons, optimization, reports, or notifications)
+- Feature contracts: the matching file in `docs/`.
 
 High-value entry points are `backend/main.py`, `backend/models.py`,
 `backend/api/`, `backend/schemas/`, `backend/services/`, `backend/simulations/`,

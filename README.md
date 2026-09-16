@@ -155,7 +155,7 @@ Docker Compose uses named volumes:
 
 | Volume | Contents |
 | --- | --- |
-| `postgres-data` | Users, network configurations, simulation profiles, impact studies, jobs, scene references, and saved history |
+| `postgres-data` | Users, jobs, antenna inventory, scene references, and saved history |
 | `elasticsearch-data` | Application logs |
 | `application-static` | Imported scenes and generated simulation files |
 
@@ -205,50 +205,6 @@ python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 
 When no database is configured, Alembic is not required and the existing inline,
 manual simulation mode remains available.
-
-The backend also exposes immutable, versioned network configurations for future
-automation. Their lifecycle and API rules are documented in
-[`docs/network-configurations.md`](docs/network-configurations.md). Existing
-browser simulation drafts continue to use localStorage for now. The scene-scoped
-`/configurations` workspace provides a version ledger, immutable proposal editor,
-exact server diff, and confirmed publication workflow.
-
-Saved simulation profiles provide repeatable solver, radio, and antenna-role
-settings for that automation. Their validation and API rules are documented in
-[`docs/simulation-profiles.md`](docs/simulation-profiles.md). The scene-scoped
-`/profiles` workspace provides structured editors for all supported simulation
-types, published-configuration role assignment, server request validation, and an
-explicit enabled run stack for later impact studies.
-
-Version-to-version antenna changes can be inspected through the authenticated
-configuration comparison API described in
-[`docs/configuration-differences.md`](docs/configuration-differences.md).
-
-The policy-versioned dry-run planner maps those changes to applicable enabled
-simulation profiles without submitting jobs. See
-[`docs/impact-planning.md`](docs/impact-planning.md).
-
-Durable impact studies persist that plan and submit linked baseline/candidate
-jobs through the existing simulation queue. See
-[`docs/impact-studies.md`](docs/impact-studies.md).
-
-Completed studies normalize baseline/candidate KPI deltas, objective outcomes,
-and compatible spatial grid changes. See
-[`docs/impact-comparisons.md`](docs/impact-comparisons.md).
-
-Impact Studies can optionally run Network Coverage optimization when the
-candidate misses an objective, then create a new draft from the suggestion. The
-policy is disabled by default and never publishes settings automatically. See
-[`docs/impact-optimization.md`](docs/impact-optimization.md).
-
-Terminal studies expose a persistent, authenticated HTML report download with
-configuration changes, KPI/objective results, spatial impact, warnings, runtime
-metadata, and a conservative decision-support status. See
-[`docs/impact-reports.md`](docs/impact-reports.md).
-
-Impact Study completion notifications are stored once per study and exposed
-through authenticated list, unread-count, and mark-read APIs. Child jobs and
-cancelled studies remain silent. See [`docs/notifications.md`](docs/notifications.md).
 
 Production queue execution uses a separate leased worker with heartbeat, crash
 recovery, bounded retries, timeouts, and cancellation checkpoints. See

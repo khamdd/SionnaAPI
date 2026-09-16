@@ -2,8 +2,6 @@ export const ROUTES = [
   { path: "/scenes", label: "Scenes" },
   { path: "/antennas", label: "Antennas" },
   { path: "/network", label: "Network Coverage" },
-  { path: "/configurations", label: "Configurations" },
-  { path: "/profiles", label: "Simulation Profiles" },
   { path: "/queue", label: "Simulation Queue" },
   { path: "/coverage", label: "Coverage Map" },
   { path: "/rsrp", label: "RSRP Analysis" },

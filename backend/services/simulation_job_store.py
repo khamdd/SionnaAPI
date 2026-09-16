@@ -10,7 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from backend.constants import STATIC_DIR
 from backend.core.config import get_simulation_job_settings
 from backend.database import db_session, is_database_configured
-from backend.models import ImpactStudy, SimulationJob
+from backend.models import SimulationJob
 from backend.schemas.requests import (
     CoverageRequest,
     NetworkCoverageOptimizationRequest,
@@ -44,9 +44,6 @@ REQUEST_MODELS = {
 }
 
 JOB_RESULT_DIR_NAME = "simulation-job-results"
-TERMINAL_JOB_STATUSES = {"succeeded", "failed", "cancelled"}
-
-
 def create_simulation_job(
     simulation_type,
     req,
@@ -81,10 +78,6 @@ def add_simulation_job(
     scene_info,
     base_url=None,
     created_by=None,
-    impact_study_id=None,
-    simulation_profile_id=None,
-    scenario_role=None,
-    input_signature=None,
     max_attempts=None,
     priority=0,
 ):
@@ -101,10 +94,6 @@ def add_simulation_job(
             request_json=normalize_json_value(to_json_string(req)),
             base_url=base_url,
             created_by=created_by,
-            impact_study_id=impact_study_id,
-            simulation_profile_id=simulation_profile_id,
-            scenario_role=scenario_role,
-            input_signature=input_signature,
             max_attempts=max_attempts,
             priority=priority,
         )
@@ -262,10 +251,6 @@ def claim_next_simulation_job(worker_id=None, lease_seconds=None):
         job.lease_expires_at = now + timedelta(seconds=lease_seconds)
         job.next_attempt_at = None
         job.failure_type = None
-        if job.impact_study_id:
-            study = session.get(ImpactStudy, job.impact_study_id)
-            if study is not None and study.status == "queued":
-                study.status = "running"
         session.flush()
 
         return {
@@ -314,7 +299,6 @@ def request_simulation_job_cancellation(job_id):
     if not is_database_configured():
         return {"database_configured": False, "cancelled": False}
 
-    impact_study_id = None
     try:
         with db_session() as session:
             row = session.scalar(
@@ -329,7 +313,6 @@ def request_simulation_job_cancellation(job_id):
                     "not_found": True,
                 }
 
-            impact_study_id = row.impact_study_id
             now = datetime.now(timezone.utc)
             if row.status == "queued":
                 row.status = "cancelled"
@@ -354,7 +337,6 @@ def request_simulation_job_cancellation(job_id):
             "error": "Failed to cancel simulation job.",
         }
 
-    _reconcile_impact_studies({impact_study_id} if impact_study_id else set())
     return response
 
 
@@ -363,7 +345,6 @@ def recover_expired_simulation_jobs(now=None):
         return 0
 
     now = now or datetime.now(timezone.utc)
-    impact_study_ids = set()
     with db_session() as session:
         rows = session.scalars(
             select(SimulationJob)
@@ -377,8 +358,6 @@ def recover_expired_simulation_jobs(now=None):
             .with_for_update(skip_locked=True)
         ).all()
         for row in rows:
-            if row.impact_study_id:
-                impact_study_ids.add(str(row.impact_study_id))
             row.worker_id = None
             row.heartbeat_at = None
             row.lease_expires_at = None
@@ -400,7 +379,6 @@ def recover_expired_simulation_jobs(now=None):
                 row.started_at = None
                 row.finished_at = None
 
-    _reconcile_impact_studies(impact_study_ids)
     return len(rows)
 
 
@@ -459,7 +437,6 @@ def handle_simulation_job_failure(
     worker_id=None,
 ):
     settings = get_simulation_job_settings()
-    impact_study_id = None
     with db_session() as session:
         job = session.scalar(
             select(SimulationJob)
@@ -469,7 +446,6 @@ def handle_simulation_job_failure(
         if not _worker_can_update(job, worker_id):
             return {"updated": False}
 
-        impact_study_id = job.impact_study_id
         now = datetime.now(timezone.utc)
         job.result_json = sanitize_json_value(result) if result is not None else None
         job.error_message = error_message
@@ -499,10 +475,6 @@ def handle_simulation_job_failure(
         final_status = job.status
         next_attempt_at = serialize_datetime(job.next_attempt_at)
 
-    if final_status in TERMINAL_JOB_STATUSES:
-        _reconcile_impact_studies(
-            {str(impact_study_id)} if impact_study_id else set()
-        )
     return {
         "updated": True,
         "status": final_status,
@@ -519,7 +491,6 @@ def update_simulation_job_finished(
     failure_type=None,
     worker_id=None,
 ):
-    impact_study_id = None
     with db_session() as session:
         job = session.scalar(
             select(SimulationJob)
@@ -529,7 +500,6 @@ def update_simulation_job_finished(
         if not _worker_can_update(job, worker_id):
             return False
 
-        impact_study_id = job.impact_study_id
         now = datetime.now(timezone.utc)
         if job.cancel_requested and status != "cancelled":
             status = "cancelled"
@@ -549,10 +519,6 @@ def update_simulation_job_finished(
         job.finished_at = now
         job.updated_at = now
 
-    if impact_study_id:
-        from backend.services.impact_study_service import reconcile_impact_study
-
-        reconcile_impact_study(str(impact_study_id))
     return True
 
 
@@ -785,15 +751,6 @@ def _worker_can_update(job, worker_id):
     return worker_id is None or job.worker_id == worker_id
 
 
-def _reconcile_impact_studies(study_ids):
-    if not study_ids:
-        return
-    from backend.services.impact_study_service import reconcile_impact_study
-
-    for study_id in study_ids:
-        reconcile_impact_study(str(study_id))
-
-
 def row_value(row, name):
     if isinstance(row, dict):
         return row[name]
@@ -836,16 +793,6 @@ def serialize_job(row):
         ),
         "failure_type": optional_row_value(row, "failure_type"),
         "priority": optional_row_value(row, "priority", 0),
-        "impact_study_id": str(optional_row_value(row, "impact_study_id"))
-        if optional_row_value(row, "impact_study_id")
-        else None,
-        "simulation_profile_id": str(
-            optional_row_value(row, "simulation_profile_id")
-        )
-        if optional_row_value(row, "simulation_profile_id")
-        else None,
-        "scenario_role": optional_row_value(row, "scenario_role"),
-        "input_signature": optional_row_value(row, "input_signature"),
         "queued_at": serialize_datetime(row_value(row, "queued_at")),
         "started_at": serialize_datetime(row_value(row, "started_at")),
         "finished_at": serialize_datetime(row_value(row, "finished_at")),

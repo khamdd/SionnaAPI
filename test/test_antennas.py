@@ -8,7 +8,6 @@ from backend.api.dependencies import require_current_user
 from backend.main import app
 from backend.schemas.antennas import AntennaCreateRequest, AntennaImportPreviewRequest
 from backend.services import antenna_service
-from backend.services.network_configuration_service import configuration_antennas
 
 USER_ID = "11111111-1111-1111-1111-111111111111"
 ANTENNA_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
@@ -77,21 +76,6 @@ def test_import_preview_classifies_new_changed_and_unchanged():
     assert [item["id"] for item in preview["new"]] == ["A3"]
     assert [item["id"] for item in preview["unchanged"]] == ["A1"]
     assert preview["changed"][0]["after"]["id"] == "A2"
-
-
-def test_configuration_resolves_live_values_and_archival():
-    antenna = record(power=30)
-    configuration = SimpleNamespace(
-        scene_id=None,
-        antennas_json=[],
-        antenna_links=[SimpleNamespace(antenna_id=ANTENNA_ID, antenna=antenna)],
-    )
-
-    assert configuration_antennas(configuration)[0]["tx_power"]["current"] == 30
-    antenna.tx_power_current_dbm = 35
-    assert configuration_antennas(configuration)[0]["tx_power"]["current"] == 35
-    antenna.status = "archived"
-    assert configuration_antennas(configuration) is None
 
 
 def test_create_antenna_api_uses_authenticated_user(monkeypatch, authenticated_user):

@@ -7,11 +7,6 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.api.antennas import router as antennas_router
 from backend.api.auth import router as auth_router
-from backend.api.configuration_impact import router as configuration_impact_router
-from backend.api.impact_studies import router as impact_studies_router
-from backend.api.network_configurations import router as network_configurations_router
-from backend.api.notifications import router as notifications_router
-from backend.api.simulation_profiles import router as simulation_profiles_router
 from backend.api.sinr import router as sinr_router
 from backend.api.vietnam_admin import router as vietnam_admin_router
 from backend.database import ensure_database_is_current
@@ -77,31 +72,6 @@ app.include_router(
 
 app.include_router(
     antennas_router,
-    prefix="/api/v1",
-)
-
-app.include_router(
-    network_configurations_router,
-    prefix="/api/v1",
-)
-
-app.include_router(
-    simulation_profiles_router,
-    prefix="/api/v1",
-)
-
-app.include_router(
-    configuration_impact_router,
-    prefix="/api/v1",
-)
-
-app.include_router(
-    impact_studies_router,
-    prefix="/api/v1",
-)
-
-app.include_router(
-    notifications_router,
     prefix="/api/v1",
 )
 

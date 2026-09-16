@@ -55,12 +55,7 @@ authority; verify them before making behavior changes.
   azimuth, and roles are scene-scoped request overrides.
 - Scenes with saved fixed antennas use them unchanged. Scenes without them begin
   with an empty antenna list; do not restore old defaults or scale antennas to fit.
-- Network configuration versions persist ordered inventory references and resolve
-  current inventory values. Archived or out-of-scene references make a version
-  unavailable. Queue and History keep immutable submitted snapshots.
-- Configuration and profile lifecycle rules are documented in
-  `network-configurations.md`, `configuration-differences.md`, and
-  `simulation-profiles.md`.
+- Queue and History keep immutable submitted snapshots.
 
 ## Network Coverage Optimization
 
@@ -105,19 +100,6 @@ authority; verify them before making behavior changes.
   and alternative summaries.
 - Core behavior and result shape live in
   `backend/services/optimization_service.py` and its targeted tests.
-
-## Automation and Impact Studies
-
-- Immutable network configurations, saved simulation profiles, dry-run impact
-  planning, durable studies, comparisons, optional optimization, HTML reports,
-  and notifications are separate but connected workflows.
-- Decision objectives belong to a study profile pair, not to reusable profiles.
-  Durable scenario-pair migration remains tracked in
-  `scenario-comparison-v2-handoff.md`.
-- Use the focused documentation: `network-configurations.md`,
-  `simulation-profiles.md`, `impact-planning.md`, `impact-studies.md`,
-  `impact-comparisons.md`, `impact-optimization.md`, `impact-reports.md`, and
-  `notifications.md`.
 
 ## Observability and Persistence
 

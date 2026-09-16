@@ -97,46 +97,6 @@ Scene invariants:
 - Imported antennas outside selected bounds are not saved with the kept scene.
 - Deleting a scene removes its generated scene artifacts where applicable.
 
-### Network configuration and profiles
-
-- `GET|POST /api/v1/network-configurations`
-- `POST /api/v1/network-configurations/compare`
-- `GET /api/v1/network-configurations/{configuration_id}`
-- `POST /api/v1/network-configurations/{configuration_id}/publish`
-- `GET /api/v1/scenes/{scene_id}/active-configuration`
-- `GET|POST /api/v1/simulation-profiles`
-- `GET|PUT|DELETE /api/v1/simulation-profiles/{profile_id}`
-- `POST /api/v1/simulation-profiles/{profile_id}/enable`
-- `POST /api/v1/simulation-profiles/{profile_id}/disable`
-- `POST /api/v1/simulation-profiles/{profile_id}/build-request`
-
-Configuration/profile invariants:
-
-- Configuration versions are immutable snapshots.
-- Publishing supersedes the prior published version and rejects identical content.
-- Draft visibility remains private to the creator; published/superseded visibility
-  follows the existing shared-scene rules.
-- Profiles are created disabled and require an explicit readable, same-scene
-  configuration before becoming eligible.
-- An eligible profile must be disabled before changing simulation type or request
-  template.
-- Impact objectives belong to profile pairs, not reusable profiles.
-
-### Impact planning, studies, reports, and notifications
-
-- `POST /api/v1/configuration-impact/preview`
-- `GET|POST /api/v1/impact-studies`
-- `GET /api/v1/impact-studies/{study_id}`
-- `POST /api/v1/impact-studies/{study_id}/start`
-- `POST /api/v1/impact-studies/{study_id}/cancel`
-- `GET /api/v1/impact-studies/{study_id}/comparison`
-- `GET /api/v1/impact-studies/{study_id}/report`
-- `POST /api/v1/impact-studies/{study_id}/profiles/{profile_id}/suggested-configuration`
-- `GET /api/v1/notifications`
-- `GET /api/v1/notifications/unread-count`
-- `POST /api/v1/notifications/read-all`
-- `POST /api/v1/notifications/{notification_id}/read`
-
 ### Vietnam admin reference data
 
 - `GET /api/v1/vietnam/provinces`
@@ -150,17 +110,6 @@ Vietnam admin invariants:
 - Ward search normalizes diacritics before matching `search_name` and ranks
   prefix matches before substring matches.
 - Boundary responses are cached because the reference data does not change.
-
-Impact invariants:
-
-- Preview is a dry run and creates no rows or jobs.
-- Durable creation still uses the policy-v1 compatibility path.
-- Start is idempotent and creates one baseline and one candidate job per planned
-  profile.
-- Partial failures remain explicit and do not discard successful siblings.
-- Suggested configurations are drafts and are never automatically published.
-- Reports are authenticated, idempotent HTML artifacts.
-- A terminal study creates at most one in-app notification.
 
 ## Request Contract Fixtures
 
@@ -186,7 +135,6 @@ output to these shapes before changing the fixture.
 | Rendered simulation images | `static/generated/` | Simulation result/history cleanup |
 | Saved heavy History results | `static/simulation-results/` | Simulation History store |
 | Temporary heavy queue results | `static/simulation-job-results/` | Simulation job store |
-| Impact Study reports | `static/impact-reports/` | Impact report service |
 
 Paths must continue to be resolved under `static/`; cleanup must not accept a
 public URL that escapes the configured static root. Artifact writes that are

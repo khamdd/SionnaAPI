@@ -70,9 +70,7 @@ import Navbar from "./components/Navbar";
 import OptimizationObjectivePage from "./components/OptimizationObjectivePage";
 import NetworkCoveragePage from "./components/NetworkCoveragePage";
 import QueueRoutePage from "./components/QueueRoutePage";
-import NetworkConfigurationsPage from "./components/NetworkConfigurationsPage";
 import QueueSubmissionPrompt from "./components/QueueSubmissionPrompt";
-import SimulationProfilesPage from "./components/SimulationProfilesPage";
 import SceneChooserPage from "./components/SceneChooserModal";
 import ScenesPage from "./components/ScenesPage";
 import AntennasPage from "./components/AntennasPage";
@@ -1317,20 +1315,6 @@ export default function App() {
             setCoverageImageUrl("");
             setRunStatus("Optimized antenna settings applied. Run Network Coverage to view the updated map.");
           }}
-        />
-      )}
-      {visibleRoute === "/configurations" && activeScene && (
-        <NetworkConfigurationsPage
-          key={activeScene.id}
-          activeScene={activeScene}
-          fixedAntennas={fixedSceneAntennas}
-        />
-      )}
-      {visibleRoute === "/profiles" && activeScene && (
-        <SimulationProfilesPage
-          key={activeScene.id}
-          activeScene={activeScene}
-          currentUser={currentUser}
         />
       )}
       {visibleRoute === "/coverage" && (

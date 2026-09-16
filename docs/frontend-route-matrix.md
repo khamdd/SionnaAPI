@@ -17,8 +17,6 @@ separate task.
 | `/network` | Yes | Yes | Simulations | Network Coverage |
 | `/network/optimization` | Yes | Yes | Opened from Network Coverage | Optimization; Network nav remains active |
 | `/antennas` | Yes | Yes | Configuration | Antenna inventory |
-| `/configurations` | Yes | Yes | Configuration | Network Configurations |
-| `/profiles` | Yes | Yes | Configuration | Simulation Profiles |
 | `/coverage` | Yes | Yes | Simulations | Coverage Map |
 | `/rsrp` | Yes | Yes | Simulations | RSRP Simulation |
 | `/sinr` | Yes | Yes | Simulations | SINR |

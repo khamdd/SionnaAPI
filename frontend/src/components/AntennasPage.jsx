@@ -133,7 +133,7 @@ export default function AntennasPage({ onInventoryChange }) {
       <header className="page-title">
         <div><h1>Antenna inventory</h1><p>Manage the shared antennas available to configurations and simulations.</p></div>
       </header>
-      {notice && <p className="configuration-notice error" role="alert">{notice}</p>}
+      {notice && <p className="antenna-inventory-notice" role="alert">{notice}</p>}
       <section className="antenna-inventory-toolbar">
         <input type="search" placeholder="Search antenna ID" value={query} onChange={(event) => setQuery(event.target.value)} />
         <select value={status} onChange={(event) => setStatus(event.target.value)}><option value="">All statuses</option><option value="active">Active</option><option value="archived">Archived</option></select>

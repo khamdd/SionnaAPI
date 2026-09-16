@@ -34,36 +34,6 @@ def test_successful_job_stores_result_without_run_reference(monkeypatch):
     ]
 
 
-def test_serialize_job_includes_impact_study_linkage():
-    timestamp = datetime(2026, 9, 8, 10, tzinfo=timezone.utc)
-    serialized = simulation_job_store.serialize_job(
-        {
-            "id": "job-1",
-            "simulation_type": "sinr",
-            "status": "queued",
-            "scene_json": {},
-            "request_json": {},
-            "result_json": None,
-            "result_run_id": None,
-            "error_message": None,
-            "attempts": 0,
-            "impact_study_id": "study-1",
-            "simulation_profile_id": "profile-1",
-            "scenario_role": "baseline",
-            "input_signature": "signature-1",
-            "queued_at": timestamp,
-            "started_at": None,
-            "finished_at": None,
-            "updated_at": timestamp,
-        }
-    )
-
-    assert serialized["impact_study_id"] == "study-1"
-    assert serialized["simulation_profile_id"] == "profile-1"
-    assert serialized["scenario_role"] == "baseline"
-    assert serialized["input_signature"] == "signature-1"
-
-
 def running_job(**overrides):
     values = {
         "id": "job-1",
@@ -72,7 +42,6 @@ def running_job(**overrides):
         "attempts": 1,
         "max_attempts": 3,
         "cancel_requested": False,
-        "impact_study_id": None,
         "result_json": None,
         "error_message": None,
         "failure_type": None,
@@ -183,12 +152,6 @@ def test_expired_lease_requeues_job(monkeypatch):
         "db_session",
         lambda: nullcontext(session),
     )
-    monkeypatch.setattr(
-        simulation_job_store,
-        "_reconcile_impact_studies",
-        lambda study_ids: None,
-    )
-
     recovered = simulation_job_store.recover_expired_simulation_jobs(
         datetime(2026, 9, 8, 10, tzinfo=timezone.utc)
     )
