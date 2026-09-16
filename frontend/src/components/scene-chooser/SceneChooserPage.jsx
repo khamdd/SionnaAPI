@@ -24,6 +24,7 @@ import {
   calculateMetrics,
   createBuildingRegionManager,
   createOfflineSceneMapStyle,
+  createWardBoundaryManager,
   emptyFeatureCollection,
   ensureSelectionLayers,
   ensureWardLayers,
@@ -45,6 +46,7 @@ export default function SceneChooserPage({
   const mapNodeRef = useRef(null);
   const mapRef = useRef(null);
   const buildingRegionManagerRef = useRef(null);
+  const wardBoundaryManagerRef = useRef(null);
   const drawStartRef = useRef(null);
   const mapViewRef = useRef(null);
   const [isSelectingArea, setIsSelectingArea] = useState(false);
@@ -69,6 +71,9 @@ export default function SceneChooserPage({
   const selectedWardCodeRef = useRef(null);
   const autoSceneNameRef = useRef(null);
   const wardSearchSequenceRef = useRef(0);
+
+  const wardClickHandlerRef = useRef(null);
+  wardClickHandlerRef.current = (ward) => selectWard(ward, ward.feature);
 
   const metrics = bounds ? calculateMetrics(bounds) : null;
   const selectedProvince =
@@ -167,6 +172,7 @@ export default function SceneChooserPage({
       SCENE_CHOOSER_DEFAULT_CENTER[0],
     ];
     const dataBaseUrl = offlineMapDataBaseUrl();
+    let mapLoaded = false;
     const map = new MapLibreMap({
       container: node,
       center: savedView?.center || defaultCenter,
@@ -185,6 +191,7 @@ export default function SceneChooserPage({
     );
 
     map.on("load", () => {
+      mapLoaded = true;
       ensureSelectionLayers(map);
       ensureWardLayers(map);
       setIsMapReady(true);
@@ -204,14 +211,23 @@ export default function SceneChooserPage({
         );
         setError(true);
       });
+
+      const wardBoundaryManager = createWardBoundaryManager(
+        map,
+        dataBaseUrl,
+        (ward) => wardClickHandlerRef.current?.(ward),
+      );
+      wardBoundaryManagerRef.current = wardBoundaryManager;
     });
 
     map.on("error", (event) => {
       const message =
         event?.error?.message || "offline map tiles could not be loaded";
-      setIsMapReady(false);
-      setStatus(`Map failed to load: ${message}`);
-      setError(true);
+      if (!mapLoaded) {
+        setIsMapReady(false);
+        setStatus(`Map failed to load: ${message}`);
+        setError(true);
+      }
     });
 
     mapRef.current = map;
@@ -234,6 +250,8 @@ export default function SceneChooserPage({
       observer.disconnect();
       buildingRegionManagerRef.current?.dispose();
       buildingRegionManagerRef.current = null;
+      wardBoundaryManagerRef.current?.dispose();
+      wardBoundaryManagerRef.current = null;
       map.remove();
       mapRef.current = null;
 
@@ -327,7 +345,7 @@ export default function SceneChooserPage({
     }
   }
 
-  async function showWardBoundary(ward) {
+  async function showWardBoundary(ward, featureOverride = null) {
     const map = mapRef.current;
 
     if (!map || !isMapReady) {
@@ -338,7 +356,7 @@ export default function SceneChooserPage({
     selectedWardCodeRef.current = ward.ward_code;
 
     try {
-      const feature = await loadWardFeature(ward.ward_code);
+      const feature = featureOverride || await loadWardFeature(ward.ward_code);
 
       if (selectedWardCodeRef.current !== ward.ward_code) {
         return;
@@ -368,7 +386,7 @@ export default function SceneChooserPage({
     }
   }
 
-  function selectWard(ward) {
+  function selectWard(ward, feature = null) {
     if (isBusy || !isMapReady) {
       return;
     }
@@ -416,7 +434,7 @@ export default function SceneChooserPage({
       updateSelectionBounds(map, wardBounds);
     }
 
-    showWardBoundary(ward);
+    showWardBoundary(ward, feature);
     focusMapOnBounds(wardBounds);
   }
 
@@ -452,6 +470,10 @@ export default function SceneChooserPage({
     const province = provinces.find((item) => item.code === provinceCode);
 
     setSelectedProvinceCode(provinceCode);
+    wardBoundaryManagerRef.current?.setProvince(provinceCode).catch((caught) => {
+      setStatus(`Ward boundaries could not be loaded: ${caught.message}`);
+      setError(true);
+    });
 
     if (!province || isBusy) {
       return;
@@ -597,9 +619,9 @@ export default function SceneChooserPage({
     setIsWardOptionsOpen(false);
     resetAutoSceneName();
     setError(false);
-    setIsSelectingArea(true);
+    setIsSelectingArea(false);
     setStatus(
-      "Selection mode enabled. Drag on the map to draw a small scene area.",
+      "Select another ward on the map, or click Select area to draw a scene rectangle.",
     );
   }
 

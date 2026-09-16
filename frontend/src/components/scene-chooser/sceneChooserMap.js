@@ -244,6 +244,119 @@ function createBuildingRegionManager(map, dataBaseUrl) {
   };
 }
 
+function createWardBoundaryManager(map, dataBaseUrl, onWardClick) {
+  let activeProvinceCode = "";
+  let disposed = false;
+  let loadSequence = 0;
+  const handleMouseEnter = () => {
+    map.getCanvas().style.cursor = "pointer";
+  };
+  const handleMouseLeave = () => {
+    map.getCanvas().style.cursor = "";
+  };
+
+  async function setProvince(provinceCode) {
+    const sequence = ++loadSequence;
+    activeProvinceCode = provinceCode || "";
+
+    if (!activeProvinceCode) {
+      clear();
+      return;
+    }
+
+    [
+      "vietnam-wards-fill",
+      "vietnam-wards-line",
+      "vietnam-wards-labels",
+    ].forEach((layerId) => {
+      if (map.getLayer(layerId)) {
+        map.moveLayer(layerId);
+      }
+    });
+
+    try {
+      const response = await fetch(
+        `${dataBaseUrl}vn-wards-${activeProvinceCode.padStart(2, "0")}.geojson`,
+        { headers: { Accept: "application/geo+json, application/json" } },
+      );
+
+      if (!response.ok) {
+        throw new Error(`ward boundary HTTP ${response.status}`);
+      }
+
+      const collection = await response.json();
+
+      if (
+        disposed
+        || sequence !== loadSequence
+        || !collection
+        || collection.type !== "FeatureCollection"
+        || !Array.isArray(collection.features)
+      ) {
+        return;
+      }
+
+      const source = map.getSource("vietnam-wards");
+      source?.setData(collection);
+    } catch (error) {
+      if (!disposed && sequence === loadSequence) {
+        clear();
+        throw error;
+      }
+    }
+  }
+
+  function clear() {
+    map.getSource("vietnam-wards")?.setData(emptyFeatureCollection());
+  }
+
+  function handleClick(event) {
+    const feature = event.features?.[0];
+    const properties = feature?.properties;
+
+    if (!feature || !properties?.ward_code || typeof onWardClick !== "function") {
+      return;
+    }
+
+    onWardClick({
+      bbox: normalizeWardBbox(properties.bbox),
+      ward_code: properties.ward_code,
+      ward_full_name: properties.ward_full_name,
+      ward_name: properties.ward_name,
+      ward_type: properties.ward_type,
+      province_code: activeProvinceCode,
+      feature,
+    });
+  }
+
+  map.on("click", "vietnam-wards-fill", handleClick);
+  map.on("mouseenter", "vietnam-wards-fill", handleMouseEnter);
+  map.on("mouseleave", "vietnam-wards-fill", handleMouseLeave);
+
+  function dispose() {
+    disposed = true;
+    loadSequence += 1;
+    map.off("click", "vietnam-wards-fill", handleClick);
+    map.off("mouseenter", "vietnam-wards-fill", handleMouseEnter);
+    map.off("mouseleave", "vietnam-wards-fill", handleMouseLeave);
+  }
+
+  return { dispose, setProvince };
+}
+
+function normalizeWardBbox(bbox) {
+  if (Array.isArray(bbox) && bbox.length >= 4) {
+    return {
+      east: Number(bbox[2]),
+      north: Number(bbox[3]),
+      south: Number(bbox[1]),
+      west: Number(bbox[0]),
+    };
+  }
+
+  return bbox;
+}
+
 function isValidBuildingRegion(region) {
   return (
     region &&
@@ -309,6 +422,59 @@ function ensureSelectionLayers(map) {
 }
 
 function ensureWardLayers(map) {
+  if (!map.getSource("vietnam-wards")) {
+    map.addSource("vietnam-wards", {
+      type: "geojson",
+      data: emptyFeatureCollection(),
+    });
+  }
+
+  if (!map.getLayer("vietnam-wards-fill")) {
+    map.addLayer({
+      id: "vietnam-wards-fill",
+      type: "fill",
+      source: "vietnam-wards",
+      paint: {
+        "fill-color": "#ef4444",
+        "fill-opacity": 0.025,
+        "fill-outline-color": "#dc2626",
+      },
+    });
+  }
+
+  if (!map.getLayer("vietnam-wards-line")) {
+    map.addLayer({
+      id: "vietnam-wards-line",
+      type: "line",
+      source: "vietnam-wards",
+      paint: {
+        "line-color": "#dc2626",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 8, 0.7, 12, 1.5, 16, 2.5],
+        "line-opacity": 0.9,
+      },
+    });
+  }
+
+  if (!map.getLayer("vietnam-wards-labels")) {
+    map.addLayer({
+      id: "vietnam-wards-labels",
+      type: "symbol",
+      source: "vietnam-wards",
+      minzoom: 11,
+      layout: {
+        "text-field": ["coalesce", ["get", "ward_name"], ["get", "ward_name_en"]],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 11, 10, 15, 13],
+        "text-allow-overlap": false,
+        "text-ignore-placement": false,
+      },
+      paint: {
+        "text-color": "#991b1b",
+        "text-halo-color": "#ffffff",
+        "text-halo-width": 1.5,
+      },
+    });
+  }
+
   if (!map.getSource("ward-boundary")) {
     map.addSource("ward-boundary", {
       type: "geojson",
@@ -473,6 +639,7 @@ export {
   boundsFromLngLats,
   calculateMetrics,
   createBuildingRegionManager,
+  createWardBoundaryManager,
   createOfflineSceneMapStyle,
   emptyFeatureCollection,
   ensureSelectionLayers,
