@@ -20,6 +20,12 @@ export function activateScene(sceneId) {
   });
 }
 
+export function deactivateActiveScene() {
+  return requestJson("/api/v1/scenes/active", {
+    method: "DELETE",
+  });
+}
+
 export function deleteScene(sceneId) {
   return requestJson(`/api/v1/scenes/${sceneId}`, {
     method: "DELETE",

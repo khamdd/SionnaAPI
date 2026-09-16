@@ -28,6 +28,7 @@ from backend.services.rsrp_service import (
 )
 from backend.services.scene_service import (
     activate_scene,
+    clear_active_scene,
     create_scene_preview,
     delete_scene,
     get_active_scene,
@@ -716,6 +717,29 @@ def scenes():
 @router.get("/scenes/active")
 def active_scene():
     return return_or_raise(get_active_scene())
+
+
+@router.delete("/scenes/active")
+def deactivate_active_scene_route():
+    result = clear_active_scene()
+
+    if str(result.get("status", "")).lower().startswith("failure"):
+        log_failed_business_event(
+            "scene_deactivation_failed",
+            result,
+        )
+        return return_or_raise(result)
+
+    clear_engine_active_scene = getattr(engine, "clear_active_scene", None)
+    if clear_engine_active_scene is not None:
+        clear_engine_active_scene()
+
+    log_business_event(
+        "scene_deactivated",
+        active_scene_reset=result.get("active_scene_reset"),
+    )
+
+    return return_or_raise(result)
 
 
 @router.post("/scenes/preview")

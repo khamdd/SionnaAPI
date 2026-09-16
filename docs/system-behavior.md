@@ -13,7 +13,10 @@ changes normally should not require an edit here.
   `/choose-scene`.
 - Simulation, History, configuration, profile, optimization, and antenna routes
   are gated by the selected work scene where applicable. Change scene confirms,
-  clears frontend work-scene state, and returns to `/scenes`.
+  clears the persisted active scene via `DELETE /api/v1/scenes/active`, clears
+  frontend work-scene state, and returns to `/scenes`. Signing out also clears
+  the persisted active scene. Reloading the browser without changing or signing
+  out keeps the active scene.
 - The scene chooser uses an offline Vietnam MapLibre/PMTiles map. With a database,
   province and ward search uses the authenticated Vietnam admin API and persisted
   PostGIS boundaries. Without a database, manual area drawing remains available.

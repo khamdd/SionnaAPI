@@ -83,6 +83,7 @@ History invariants:
 
 - `GET /api/v1/scenes`
 - `GET /api/v1/scenes/active`
+- `DELETE /api/v1/scenes/active`
 - `POST /api/v1/scenes/preview`
 - `POST /api/v1/scenes/{scene_id}/activate`
 - `DELETE /api/v1/scenes/{scene_id}`

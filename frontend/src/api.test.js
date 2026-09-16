@@ -345,6 +345,16 @@ describe("scene endpoints", () => {
     });
   });
 
+  it("deactivates the active scene with a body-less DELETE", async () => {
+    await api.deactivateActiveScene();
+
+    expectRequest({
+      method: "DELETE",
+      path: "/api/v1/scenes/active",
+      headers: { Authorization: "Bearer tok-123" },
+    });
+  });
+
   it("deletes a scene through the raw fetch path", async () => {
     fetchMock = vi.fn(async () => respond({ deleted: true }));
     vi.stubGlobal("fetch", fetchMock);

@@ -44,6 +44,49 @@ def test_get_active_scene_fails_when_no_scene_is_selected(tmp_path, monkeypatch)
     assert result["error"] == "No active scene is selected."
 
 
+def test_clear_active_scene_resets_active_scene(tmp_path, monkeypatch):
+    scene_root = tmp_path / "scenes"
+    monkeypatch.setattr(scene_service, "SCENE_ROOT", scene_root)
+    monkeypatch.setattr(scene_service, "SCENE_REGISTRY_PATH", scene_root / "scenes.json")
+
+    scene_service.save_registry(
+        {
+            "active_scene_id": "scene-1",
+            "scenes": [
+                {
+                    "id": "scene-1",
+                    "name": "Scene One",
+                    "status": "ready",
+                    "is_default": False,
+                }
+            ],
+        }
+    )
+
+    result = scene_service.clear_active_scene()
+
+    assert result["status"] == "success"
+    assert result["active_scene_reset"] is True
+
+    list_result = scene_service.list_scenes()
+    assert list_result["active_scene_id"] is None
+    assert list_result["active_scene"] is None
+    assert [scene["id"] for scene in list_result["scenes"]] == ["scene-1"]
+    assert scene_service.get_active_scene()["status"] == "failure"
+
+
+def test_clear_active_scene_is_a_no_op_without_active_scene(tmp_path, monkeypatch):
+    scene_root = tmp_path / "scenes"
+    monkeypatch.setattr(scene_service, "SCENE_ROOT", scene_root)
+    monkeypatch.setattr(scene_service, "SCENE_REGISTRY_PATH", scene_root / "scenes.json")
+
+    result = scene_service.clear_active_scene()
+
+    assert result["status"] == "success"
+    assert result["active_scene_reset"] is False
+    assert scene_service.list_scenes()["active_scene_id"] is None
+
+
 def test_create_scene_preview_registers_generated_osm_scene(tmp_path, monkeypatch):
     scene_root = tmp_path / "scenes"
     monkeypatch.setattr(scene_service, "SCENE_ROOT", scene_root)

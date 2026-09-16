@@ -220,6 +220,26 @@ def delete_scene(scene_id):
         }
 
 
+def clear_active_scene():
+    with _lock:
+        registry = load_registry()
+        active_scene_id = registry.get("active_scene_id")
+
+        if active_scene_id is None:
+            return {
+                "status": "success",
+                "active_scene_reset": False,
+            }
+
+        registry["active_scene_id"] = None
+        save_registry(registry)
+
+        return {
+            "status": "success",
+            "active_scene_reset": True,
+        }
+
+
 def calculate_bounds_metrics(req: SceneBoundsRequest):
     mid_lat = math.radians((req.south + req.north) / 2.0)
     meters_per_degree_lat = 111_320.0

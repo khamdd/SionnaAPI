@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  deactivateActiveScene,
   deleteSimulationJob,
   getSimulationJob,
   getSimulationJobResult,
@@ -203,7 +204,14 @@ export default function PlannerApp({ currentUser, isNewSession, onLogout }) {
   const throughputAntennas = throughputDraft.antennas;
   const throughputRoleSelection = throughputDraft.roleSelection;
 
-  function logout() {
+  async function logout() {
+    try {
+      await deactivateActiveScene();
+    } catch (error) {
+      setSceneNotice(`Failed to clear the active scene: ${error.message}`, true);
+      return;
+    }
+
     sceneWorkspace.clear();
     onLogout();
   }
@@ -367,12 +375,19 @@ export default function PlannerApp({ currentUser, isNewSession, onLogout }) {
     }
   }
 
-  function changeWorkScene() {
+  async function changeWorkScene() {
     const confirmed = window.confirm(
       "Change scene? The current work scene will be cleared and simulations will be unavailable until you select another scene.",
     );
 
     if (!confirmed) {
+      return;
+    }
+
+    try {
+      await deactivateActiveScene();
+    } catch (error) {
+      setSceneNotice(`Failed to clear the active scene: ${error.message}`, true);
       return;
     }
 
