@@ -9,14 +9,10 @@ import {
   listSimulationRuns,
   listSimulationJobs,
   runNetworkCoverage,
-  getCurrentUser,
   saveSimulationJobResult,
-  listAntennas,
-  createAntenna,
 } from "./api";
 import {
   DEFAULT_SOLVER,
-  AUTH_TOKEN_STORAGE_KEY,
   NETWORK_ANTENNA_SETTINGS_STORAGE_KEY,
   NETWORK_OPTIMIZATION_OBJECTIVES_STORAGE_KEY,
   NETWORK_TYPE2_ANTENNAS_STORAGE_KEY,
@@ -28,7 +24,6 @@ import {
   THROUGHPUT_ANTENNA_SETTINGS_STORAGE_KEY,
   THROUGHPUT_ROLE_SELECTION_STORAGE_KEY,
   THROUGHPUT_TYPE2_ANTENNAS_STORAGE_KEY,
-  USER_STORAGE_KEY,
 } from "./constants";
 import {
   MAX_NETWORK_COVERAGE_ANTENNAS,
@@ -40,11 +35,8 @@ import {
   removeSetValue,
   toggleSetValue,
 } from "./utils/collections";
+import { buildNetworkCoveragePayload } from "./utils/jobAdapters";
 import {
-  buildNetworkCoveragePayload,
-} from "./utils/jobAdapters";
-import {
-  NETWORK_OPTIMIZATION_ROUTE,
   SCENE_CREATION_ROUTE,
   SCENE_SELECTION_ROUTE,
   SIMULATION_ENTRY_ROUTE,
@@ -53,37 +45,24 @@ import {
   shouldRedirectToSceneSelection,
 } from "./utils/routes";
 import useSceneAntennaDraft from "./hooks/useSceneAntennaDraft";
-import {
-  CoverageApiPage,
-  RsrpSimulationPage,
-  SinrApiPage,
-  ThroughputApiPage,
-} from "./components/ApiPages";
+import useAntennaInventory from "./hooks/useAntennaInventory";
+import useAuthSession from "./hooks/useAuthSession";
+import AppRouteContent from "./components/AppRouteContent";
 import ComparisonResult from "./components/ComparisonResult";
 import GlobalProgress from "./components/GlobalProgress";
 import HistoryDetail from "./components/HistoryDetail";
 import HistoryModal, { HistoryModalBody } from "./components/HistoryModal";
-import HistoryRoutePage from "./components/HistoryRoutePage";
 import JobResultDetail from "./components/JobResultDetail";
 import LoginPage from "./components/LoginPage";
 import Navbar from "./components/Navbar";
-import OptimizationObjectivePage from "./components/OptimizationObjectivePage";
-import NetworkCoveragePage from "./components/NetworkCoveragePage";
-import QueueRoutePage from "./components/QueueRoutePage";
 import QueueSubmissionPrompt from "./components/QueueSubmissionPrompt";
-import SceneChooserPage from "./components/SceneChooserModal";
-import ScenesPage from "./components/ScenesPage";
-import AntennasPage from "./components/AntennasPage";
 import { formatDateTime, formatSimulationType } from "./utils/format";
 import {
   isSuccessfulHistoryItem,
   pruneComparisonDetails,
   pruneComparisonSelection,
 } from "./utils/history";
-import {
-  drawHeatmap,
-  summarizeGrid,
-} from "./utils/map";
+import { drawHeatmap, summarizeGrid } from "./utils/map";
 import { lngLatInsideBounds, solverForScene } from "./utils/scene";
 
 const HISTORY_PAGE_LIMIT = 200;
@@ -91,11 +70,21 @@ const JOB_PAGE_LIMIT = 200;
 const MAX_RSRP_SIMULATION_ANTENNAS = 10;
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState(null);
-  const [route, setRoute] = useState(() => normalizeRoute(window.location.pathname));
+  const auth = useAuthSession();
+  const { currentUser, status: authStatus } = auth;
+  const {
+    antennas: antennaInventory,
+    createInventoryAntenna,
+    setAntennas: setAntennaInventory,
+  } = useAntennaInventory(currentUser);
+  const [route, setRoute] = useState(() =>
+    normalizeRoute(window.location.pathname),
+  );
   const [latestGrid, setLatestGrid] = useState(null);
   const [latestSolver, setLatestSolver] = useState(() => clone(DEFAULT_SOLVER));
-  const [networkSolverDraft, setNetworkSolverDraft] = useState(() => clone(DEFAULT_SOLVER));
+  const [networkSolverDraft, setNetworkSolverDraft] = useState(() =>
+    clone(DEFAULT_SOLVER),
+  );
   const [coverageImageUrl, setCoverageImageUrl] = useState("");
   const [runStatus, setRunStatus] = useState("Ready");
   const [runError, setRunError] = useState(false);
@@ -107,18 +96,24 @@ export default function App() {
   const [jobProgressLabel, setJobProgressLabel] = useState("");
   const [simulationJobs, setSimulationJobs] = useState([]);
   const [selectedJobId, setSelectedJobId] = useState(null);
-  const [selectedJobDeleteIds, setSelectedJobDeleteIds] = useState(() => new Set());
+  const [selectedJobDeleteIds, setSelectedJobDeleteIds] = useState(
+    () => new Set(),
+  );
   const [queuedPrompt, setQueuedPrompt] = useState(null);
   const [apiProgressLabel, setApiProgressLabel] = useState("");
   const [historyProgressLabel, setHistoryProgressLabel] = useState("");
   const [historyPreviewLoadCount, setHistoryPreviewLoadCount] = useState(0);
   const [latestHistory, setLatestHistory] = useState([]);
   const [selectedHistoryId, setSelectedHistoryId] = useState(null);
-  const [selectedHistoryDeleteIds, setSelectedHistoryDeleteIds] = useState(() => new Set());
+  const [selectedHistoryDeleteIds, setSelectedHistoryDeleteIds] = useState(
+    () => new Set(),
+  );
   const [comparisonType, setComparisonType] = useState(null);
   const [comparisonSceneId, setComparisonSceneId] = useState(null);
   const [comparisonSceneName, setComparisonSceneName] = useState(null);
-  const [selectedComparisonIds, setSelectedComparisonIds] = useState(() => new Set());
+  const [selectedComparisonIds, setSelectedComparisonIds] = useState(
+    () => new Set(),
+  );
   const [comparisonDetails, setComparisonDetails] = useState(() => new Map());
   const [modalContent, setModalContent] = useState(null);
   const [scenes, setScenes] = useState([]);
@@ -127,8 +122,6 @@ export default function App() {
   const [isSceneLoading, setIsSceneLoading] = useState(false);
   const [sceneNotice, setSceneNoticeState] = useState(null);
   const [hover, setHover] = useState(null);
-  const [authStatus, setAuthStatus] = useState("checking");
-  const [antennaInventory, setAntennaInventory] = useState([]);
   const [hasWorkScene, setHasWorkScene] = useState(false);
 
   const canvasRef = useRef(null);
@@ -136,9 +129,12 @@ export default function App() {
   const pendingEntryNavigationRef = useRef(false);
   const summary = useMemo(() => summarizeGrid(latestGrid), [latestGrid]);
   const fixedSceneAntennas = useMemo(
-    () => antennaInventory.filter((antenna) => (
-      antenna.status === "active" && lngLatInsideBounds(antenna, activeScene?.bounds)
-    )),
+    () =>
+      antennaInventory.filter(
+        (antenna) =>
+          antenna.status === "active" &&
+          lngLatInsideBounds(antenna, activeScene?.bounds),
+      ),
     [activeScene?.bounds, antennaInventory],
   );
   const networkDraft = useSceneAntennaDraft({
@@ -185,52 +181,13 @@ export default function App() {
   const throughputRoleSelection = throughputDraft.roleSelection;
 
   function authenticate(authResult) {
-    localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authResult.access_token);
-    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(authResult.user));
-    setCurrentUser(authResult.user);
-    setAuthStatus("authenticated");
+    auth.authenticate(authResult);
     pendingEntryNavigationRef.current = true;
     navigate(SCENE_SELECTION_ROUTE, { replace: true });
   }
 
-  useEffect(() => {
-    const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
-
-    if(!token) {
-      setAuthStatus("unauthenticated");
-      return;
-    }
-
-    getCurrentUser()
-    .then((result) => {
-      setCurrentUser(result.user);
-      setAuthStatus("authenticated");
-    })
-    .catch(() => {
-      localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
-      localStorage.removeItem(USER_STORAGE_KEY);
-      setCurrentUser(null);
-      setAuthStatus("unauthenticated");
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!currentUser) {
-      setAntennaInventory([]);
-      return;
-    }
-    listAntennas().then((result) => {
-      setAntennaInventory(result.antennas || []);
-    }).catch(() => {
-      setAntennaInventory([]);
-    });
-  }, [currentUser]);
-
   function logout() {
-    localStorage.removeItem(USER_STORAGE_KEY);
-    localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
-    setCurrentUser(null);
-    setAuthStatus("unauthenticated");
+    auth.logout();
     setHasWorkScene(false);
   }
 
@@ -239,7 +196,9 @@ export default function App() {
   }, []);
 
   const handleHistoryPreviewLoadingChange = useCallback((active) => {
-    setHistoryPreviewLoadCount((current) => Math.max(0, current + (active ? 1 : -1)));
+    setHistoryPreviewLoadCount((current) =>
+      Math.max(0, current + (active ? 1 : -1)),
+    );
   }, []);
 
   const loadHistory = useCallback(async () => {
@@ -275,7 +234,9 @@ export default function App() {
         setComparisonDetails(new Map());
         setComparisonType(null);
         setModalContent(null);
-        setHistoryStatus("Database is not configured. Set DATABASE_URL to use history.");
+        setHistoryStatus(
+          "Database is not configured. Set DATABASE_URL to use history.",
+        );
         return;
       }
 
@@ -283,15 +244,29 @@ export default function App() {
         throw new Error(result.error);
       }
 
-      const items = (result.items || []).filter((item) => item.scene_id === sceneId);
+      const items = (result.items || []).filter(
+        (item) => item.scene_id === sceneId,
+      );
       setLatestHistory(items);
-      setSelectedHistoryDeleteIds((current) => new Set(
-        [...current].filter((id) => items.some((item) => item.id === id)),
-      ));
-      setHistoryStatus(items.length ? `${items.length} saved simulations for ${sceneName}` : `No saved simulations for ${sceneName}.`);
-      setSelectedComparisonIds((current) => (
-        pruneComparisonSelection(current, items, comparisonType, comparisonSceneId)
-      ));
+      setSelectedHistoryDeleteIds(
+        (current) =>
+          new Set(
+            [...current].filter((id) => items.some((item) => item.id === id)),
+          ),
+      );
+      setHistoryStatus(
+        items.length
+          ? `${items.length} saved simulations for ${sceneName}`
+          : `No saved simulations for ${sceneName}.`,
+      );
+      setSelectedComparisonIds((current) =>
+        pruneComparisonSelection(
+          current,
+          items,
+          comparisonType,
+          comparisonSceneId,
+        ),
+      );
       setComparisonDetails((current) => pruneComparisonDetails(current, items));
     } catch (error) {
       setHistoryStatus(`History failed: ${error.message}`);
@@ -313,7 +288,9 @@ export default function App() {
         setSimulationJobs([]);
         setSelectedJobId(null);
         setSelectedJobDeleteIds(new Set());
-        setJobStatus("Database is not configured. Set DATABASE_URL to use the simulation queue.");
+        setJobStatus(
+          "Database is not configured. Set DATABASE_URL to use the simulation queue.",
+        );
         setJobError(true);
         return;
       }
@@ -324,15 +301,26 @@ export default function App() {
 
       const items = result.items || [];
       setSimulationJobs(items);
-      setSelectedJobId((current) => (
-        items.some((item) => item.id === current) ? current : null
-      ));
-      setSelectedJobDeleteIds((current) => new Set(
-        [...current].filter((id) => items.some((item) => (
-          item.id === id && String(item.status || "").toLowerCase() !== "running"
-        ))),
-      ));
-      setJobStatus(items.length ? `${items.length} simulation jobs recorded.` : "No simulation jobs recorded.");
+      setSelectedJobId((current) =>
+        items.some((item) => item.id === current) ? current : null,
+      );
+      setSelectedJobDeleteIds(
+        (current) =>
+          new Set(
+            [...current].filter((id) =>
+              items.some(
+                (item) =>
+                  item.id === id &&
+                  String(item.status || "").toLowerCase() !== "running",
+              ),
+            ),
+          ),
+      );
+      setJobStatus(
+        items.length
+          ? `${items.length} simulation jobs recorded.`
+          : "No simulation jobs recorded.",
+      );
     } catch (error) {
       setJobStatus(`Queue failed: ${error.message}`);
       setJobError(true);
@@ -354,7 +342,11 @@ export default function App() {
       if (syncActiveScene) {
         setActiveScene(nextActiveScene);
         setHasWorkScene(Boolean(nextActiveScene));
-        setLatestSolver(nextActiveScene ? solverForScene(nextActiveScene) : clone(DEFAULT_SOLVER));
+        setLatestSolver(
+          nextActiveScene
+            ? solverForScene(nextActiveScene)
+            : clone(DEFAULT_SOLVER),
+        );
       }
       return {
         ...result,
@@ -376,12 +368,21 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if(authStatus !== "authenticated"){
+    if (authStatus !== "authenticated") {
       return;
     }
 
-    if (shouldRedirectToSceneSelection({ hasWorkScene, isSceneListLoading, pathname: route })) {
-      setSceneNotice("Select or create a work scene before opening simulations.", true);
+    if (
+      shouldRedirectToSceneSelection({
+        hasWorkScene,
+        isSceneListLoading,
+        pathname: route,
+      })
+    ) {
+      setSceneNotice(
+        "Select or create a work scene before opening simulations.",
+        true,
+      );
       navigate(SCENE_SELECTION_ROUTE, { replace: true });
       return;
     }
@@ -393,16 +394,23 @@ export default function App() {
     if (route === "/queue") {
       loadJobs();
     }
-  }, [authStatus, hasWorkScene, isSceneListLoading, route, loadHistory, loadJobs]);
+  }, [
+    authStatus,
+    hasWorkScene,
+    isSceneListLoading,
+    route,
+    loadHistory,
+    loadJobs,
+  ]);
 
   useEffect(() => {
     if (authStatus !== "authenticated" || route !== "/queue") {
       return undefined;
     }
 
-    const hasPendingJob = simulationJobs.some((job) => (
-      job.status === "queued" || job.status === "running"
-    ));
+    const hasPendingJob = simulationJobs.some(
+      (job) => job.status === "queued" || job.status === "running",
+    );
 
     if (!hasPendingJob) {
       return undefined;
@@ -416,23 +424,25 @@ export default function App() {
   }, [authStatus, loadJobs, route, simulationJobs]);
 
   useEffect(() => {
-    if(authStatus !== "authenticated") {
+    if (authStatus !== "authenticated") {
       return;
     }
 
-    loadScenes({ syncActiveScene: true }).then((result) => {
-      if (!pendingEntryNavigationRef.current) {
-        return;
-      }
-      pendingEntryNavigationRef.current = false;
-      navigate(
-        result.active_scene ? SIMULATION_ENTRY_ROUTE : SCENE_SELECTION_ROUTE,
-        { allowWithoutWorkScene: true, replace: true },
-      );
-    }).catch((error) => {
-      pendingEntryNavigationRef.current = false;
-      setSceneNotice(`Failed to load scenes: ${error.message}`, true);
-    });
+    loadScenes({ syncActiveScene: true })
+      .then((result) => {
+        if (!pendingEntryNavigationRef.current) {
+          return;
+        }
+        pendingEntryNavigationRef.current = false;
+        navigate(
+          result.active_scene ? SIMULATION_ENTRY_ROUTE : SCENE_SELECTION_ROUTE,
+          { allowWithoutWorkScene: true, replace: true },
+        );
+      })
+      .catch((error) => {
+        pendingEntryNavigationRef.current = false;
+        setSceneNotice(`Failed to load scenes: ${error.message}`, true);
+      });
   }, [authStatus, loadScenes]);
 
   useEffect(() => {
@@ -458,7 +468,11 @@ export default function App() {
     setComparisonSceneId(null);
     setComparisonSceneName(null);
     setModalContent(null);
-    setHistoryStatus(activeScene ? `History is scoped to ${activeScene.name}.` : "Select a work scene to view history.");
+    setHistoryStatus(
+      activeScene
+        ? `History is scoped to ${activeScene.name}.`
+        : "Select a work scene to view history.",
+    );
     setHistoryError(!activeScene);
   }, [activeScene?.id]);
 
@@ -515,8 +529,15 @@ export default function App() {
   }, [modalContent, queuedPrompt]);
 
   function navigate(path, options = {}) {
-    if (!options.allowWithoutWorkScene && !hasWorkScene && isWorkSceneRequiredRoute(path)) {
-      setSceneNotice("Select or create a work scene before opening simulations.", true);
+    if (
+      !options.allowWithoutWorkScene &&
+      !hasWorkScene &&
+      isWorkSceneRequiredRoute(path)
+    ) {
+      setSceneNotice(
+        "Select or create a work scene before opening simulations.",
+        true,
+      );
       path = SCENE_SELECTION_ROUTE;
     }
 
@@ -548,7 +569,13 @@ export default function App() {
         throw new Error(validationError);
       }
 
-      const result = await runNetworkCoverage(buildNetworkCoveragePayload(activeNetworkAntennas, activeScene, networkSolverDraft));
+      const result = await runNetworkCoverage(
+        buildNetworkCoveragePayload(
+          activeNetworkAntennas,
+          activeScene,
+          networkSolverDraft,
+        ),
+      );
 
       if (result.status === "queued") {
         showQueuedPrompt({
@@ -566,7 +593,11 @@ export default function App() {
 
       setLatestGrid(result.grid);
       setLatestSolver(result.solver);
-      setCoverageImageUrl(result.coverage_map_image_url ? `${result.coverage_map_image_url}?t=${Date.now()}` : "");
+      setCoverageImageUrl(
+        result.coverage_map_image_url
+          ? `${result.coverage_map_image_url}?t=${Date.now()}`
+          : "",
+      );
       setRunStatus("Simulation complete");
     } catch (error) {
       setRunStatus(`Simulation failed: ${error.message}`);
@@ -578,13 +609,6 @@ export default function App() {
 
   function updateAntenna(antennaId, field, value) {
     networkDraft.updateAntenna(antennaId, field, value);
-  }
-
-  async function createInventoryAntenna(payload) {
-    const result = await createAntenna(payload);
-    const antenna = result.antenna || result;
-    setAntennaInventory((current) => [...current, antenna]);
-    return antenna;
   }
 
   function addType2Antenna(antenna) {
@@ -686,17 +710,32 @@ export default function App() {
     setRunError(false);
   }
 
+  function applyOptimizationSettings(settings) {
+    Object.entries(settings).forEach(([id, values]) => {
+      if (values && typeof values === "object") {
+        updateAntenna(id, "tilt", values.tilt);
+        updateAntenna(id, "tx_power", values.tx_power);
+        updateAntenna(id, "azimuth", values.azimuth);
+        return;
+      }
+      updateAntenna(id, "tilt", values);
+    });
+    setLatestGrid(null);
+    setCoverageImageUrl("");
+    setRunStatus(
+      "Optimized antenna settings applied. Run Network Coverage to view the updated map.",
+    );
+  }
+
   function toggleComparisonSelection(item) {
     if (!isSuccessfulHistoryItem(item)) {
       return;
     }
 
     if (
-      comparisonType
-      && (
-        item.simulation_type !== comparisonType
-        || item.scene_id !== comparisonSceneId
-      )
+      comparisonType &&
+      (item.simulation_type !== comparisonType ||
+        item.scene_id !== comparisonSceneId)
     ) {
       return;
     }
@@ -717,7 +756,15 @@ export default function App() {
   }
 
   async function chooseScene() {
-    if (isRunning || apiProgressLabel || jobProgressLabel || historyProgressLabel || historyPreviewLoadCount > 0 || isSceneLoading || isSceneListLoading) {
+    if (
+      isRunning ||
+      apiProgressLabel ||
+      jobProgressLabel ||
+      historyProgressLabel ||
+      historyPreviewLoadCount > 0 ||
+      isSceneLoading ||
+      isSceneListLoading
+    ) {
       return;
     }
 
@@ -727,7 +774,10 @@ export default function App() {
       const maxScenes = result.max_imported_scenes || 3;
 
       if (importedCount >= maxScenes) {
-        setSceneNotice(`Only ${maxScenes} imported scenes are allowed. Delete one before choosing a new scene.`, true);
+        setSceneNotice(
+          `Only ${maxScenes} imported scenes are allowed. Delete one before choosing a new scene.`,
+          true,
+        );
         navigate(SCENE_SELECTION_ROUTE);
         return;
       }
@@ -740,7 +790,9 @@ export default function App() {
   }
 
   function changeWorkScene() {
-    const confirmed = window.confirm("Change scene? The current work scene will be cleared and simulations will be unavailable until you select another scene.");
+    const confirmed = window.confirm(
+      "Change scene? The current work scene will be cleared and simulations will be unavailable until you select another scene.",
+    );
 
     if (!confirmed) {
       return;
@@ -759,7 +811,9 @@ export default function App() {
     setRunStatus("Ready");
     setRunError(false);
     cancelComparison();
-    setSceneNotice("No work scene is active. Select or create a scene to continue.");
+    setSceneNotice(
+      "No work scene is active. Select or create a scene to continue.",
+    );
     navigate(SCENE_SELECTION_ROUTE, { allowWithoutWorkScene: true });
   }
 
@@ -809,7 +863,9 @@ export default function App() {
 
       setComparisonDetails(details);
       setModalContent(
-        <HistoryModalBody title={`Comparison: ${formatSimulationType(comparisonType)}`}>
+        <HistoryModalBody
+          title={`Comparison: ${formatSimulationType(comparisonType)}`}
+        >
           <ComparisonResult
             items={items}
             onPreviewLoadingChange={handleHistoryPreviewLoadingChange}
@@ -842,7 +898,9 @@ export default function App() {
       const result = await getSimulationRun(runId);
 
       if (!result.database_configured) {
-        setModalContent(<p className="history-status">Database is not configured.</p>);
+        setModalContent(
+          <p className="history-status">Database is not configured.</p>,
+        );
         return;
       }
 
@@ -851,7 +909,9 @@ export default function App() {
       }
 
       if (!result.item) {
-        setModalContent(<p className="history-status">Simulation not found.</p>);
+        setModalContent(
+          <p className="history-status">Simulation not found.</p>,
+        );
         return;
       }
 
@@ -867,7 +927,11 @@ export default function App() {
         />,
       );
     } catch (error) {
-      setModalContent(<p className="history-status error-text">Detail failed: {error.message}</p>);
+      setModalContent(
+        <p className="history-status error-text">
+          Detail failed: {error.message}
+        </p>,
+      );
     } finally {
       setHistoryProgressLabel("");
     }
@@ -899,7 +963,9 @@ export default function App() {
 
       setSelectedComparisonIds((current) => removeSetValue(current, item.id));
       setComparisonDetails((current) => removeMapValue(current, item.id));
-      setSelectedHistoryDeleteIds((current) => removeSetValue(current, item.id));
+      setSelectedHistoryDeleteIds((current) =>
+        removeSetValue(current, item.id),
+      );
 
       await loadHistory();
     } catch (error) {
@@ -915,18 +981,18 @@ export default function App() {
   }
 
   function toggleAllHistoryDeleteSelection() {
-    setSelectedHistoryDeleteIds((current) => (
+    setSelectedHistoryDeleteIds((current) =>
       current.size === latestHistory.length
         ? new Set()
-        : new Set(latestHistory.map((item) => item.id))
-    ));
+        : new Set(latestHistory.map((item) => item.id)),
+    );
   }
 
   async function deleteSelectedHistory() {
     if (
-      historyProgressLabel
-      || historyPreviewLoadCount > 0
-      || selectedHistoryDeleteIds.size === 0
+      historyProgressLabel ||
+      historyPreviewLoadCount > 0 ||
+      selectedHistoryDeleteIds.size === 0
     ) {
       return;
     }
@@ -949,7 +1015,9 @@ export default function App() {
         selectedIds.map((runId) => deleteSimulationRun(runId)),
       );
       const deletedIds = new Set(
-        selectedIds.filter((id, index) => results[index].status === "fulfilled"),
+        selectedIds.filter(
+          (id, index) => results[index].status === "fulfilled",
+        ),
       );
       const failedIds = selectedIds.filter((id) => !deletedIds.has(id));
 
@@ -957,18 +1025,21 @@ export default function App() {
         closeModal();
       }
 
-      setSelectedComparisonIds((current) => new Set(
-        [...current].filter((id) => !deletedIds.has(id)),
-      ));
-      setComparisonDetails((current) => new Map(
-        [...current].filter(([id]) => !deletedIds.has(id)),
-      ));
+      setSelectedComparisonIds(
+        (current) => new Set([...current].filter((id) => !deletedIds.has(id))),
+      );
+      setComparisonDetails(
+        (current) =>
+          new Map([...current].filter(([id]) => !deletedIds.has(id))),
+      );
       setSelectedHistoryDeleteIds(new Set(failedIds));
 
       await loadHistory();
 
       if (failedIds.length > 0) {
-        setHistoryStatus(`Deleted ${deletedIds.size}; ${failedIds.length} failed.`);
+        setHistoryStatus(
+          `Deleted ${deletedIds.size}; ${failedIds.length} failed.`,
+        );
         setHistoryError(true);
       } else {
         setHistoryStatus(`Deleted ${deletedIds.size} selected histories.`);
@@ -991,7 +1062,9 @@ export default function App() {
       const jobResponse = await getSimulationJob(jobId);
 
       if (!jobResponse.database_configured) {
-        setModalContent(<p className="history-status">Database is not configured.</p>);
+        setModalContent(
+          <p className="history-status">Database is not configured.</p>,
+        );
         return;
       }
 
@@ -1001,21 +1074,30 @@ export default function App() {
 
       const job = jobResponse.item;
       if (!job) {
-        setModalContent(<p className="history-status">Simulation job not found.</p>);
+        setModalContent(
+          <p className="history-status">Simulation job not found.</p>,
+        );
         return;
       }
 
-      const fullResult = job.status === "succeeded"
-        ? await getSimulationJobResult(jobId)
-        : job.result;
+      const fullResult =
+        job.status === "succeeded"
+          ? await getSimulationJobResult(jobId)
+          : job.result;
 
       setModalContent(
-        <HistoryModalBody title={`Queue result: ${formatSimulationType(job.simulation_type)}`}>
+        <HistoryModalBody
+          title={`Queue result: ${formatSimulationType(job.simulation_type)}`}
+        >
           <JobResultDetail
             job={job}
             result={fullResult}
             onDiscard={() => discardSimulationJob(job)}
-            onOpenHistory={job.result_run_id ? () => openHistoryDetail(job.result_run_id) : null}
+            onOpenHistory={
+              job.result_run_id
+                ? () => openHistoryDetail(job.result_run_id)
+                : null
+            }
             onPreviewLoadingChange={handleHistoryPreviewLoadingChange}
             onSave={() => saveSimulationJob(job)}
             wardBoundary={
@@ -1027,7 +1109,11 @@ export default function App() {
         </HistoryModalBody>,
       );
     } catch (error) {
-      setModalContent(<p className="history-status error-text">Job detail failed: {error.message}</p>);
+      setModalContent(
+        <p className="history-status error-text">
+          Job detail failed: {error.message}
+        </p>,
+      );
     } finally {
       setJobProgressLabel("");
     }
@@ -1050,7 +1136,11 @@ export default function App() {
         await loadHistory();
       }
 
-      setJobStatus(result.already_saved ? "Result is already saved in Simulation History." : "Result saved in Simulation History.");
+      setJobStatus(
+        result.already_saved
+          ? "Result is already saved in Simulation History."
+          : "Result saved in Simulation History.",
+      );
       if (result.run_id) {
         await openHistoryDetail(result.run_id);
       } else {
@@ -1087,7 +1177,11 @@ export default function App() {
       await deleteSimulationJob(job.id);
       closeModal();
       await loadJobs();
-      setJobStatus(job.result_run_id ? "Queue entry removed." : "Simulation result discarded.");
+      setJobStatus(
+        job.result_run_id
+          ? "Queue entry removed."
+          : "Simulation result discarded.",
+      );
     } catch (error) {
       setJobStatus(`Discard failed: ${error.message}`);
       setJobError(true);
@@ -1108,11 +1202,11 @@ export default function App() {
     const deletableIds = simulationJobs
       .filter((job) => String(job.status || "").toLowerCase() !== "running")
       .map((job) => job.id);
-    setSelectedJobDeleteIds((current) => (
+    setSelectedJobDeleteIds((current) =>
       deletableIds.length > 0 && deletableIds.every((id) => current.has(id))
         ? new Set()
-        : new Set(deletableIds)
-    ));
+        : new Set(deletableIds),
+    );
   }
 
   async function deleteSelectedJobs() {
@@ -1138,9 +1232,11 @@ export default function App() {
         selectedIds.map((jobId) => deleteSimulationJob(jobId)),
       );
       const deletedIds = new Set(
-        selectedIds.filter((id, index) => (
-          results[index].status === "fulfilled" && results[index].value?.deleted
-        )),
+        selectedIds.filter(
+          (id, index) =>
+            results[index].status === "fulfilled" &&
+            results[index].value?.deleted,
+        ),
       );
       const failedIds = selectedIds.filter((id) => !deletedIds.has(id));
 
@@ -1152,7 +1248,9 @@ export default function App() {
       await loadJobs();
 
       if (failedIds.length > 0) {
-        setJobStatus(`Deleted ${deletedIds.size}; ${failedIds.length} failed or started running.`);
+        setJobStatus(
+          `Deleted ${deletedIds.size}; ${failedIds.length} failed or started running.`,
+        );
         setJobError(true);
       } else {
         setJobStatus(`Deleted ${deletedIds.size} selected queue entries.`);
@@ -1182,47 +1280,57 @@ export default function App() {
   const hoverFrameRef = useRef(0);
   const hoverPointRef = useRef(null);
 
-  const handleHover = useCallback((event) => {
-    hoverPointRef.current = { clientX: event.clientX, clientY: event.clientY };
-    if (hoverFrameRef.current) {
-      return;
-    }
-    hoverFrameRef.current = window.requestAnimationFrame(() => {
-      hoverFrameRef.current = 0;
-      const point = hoverPointRef.current;
-      const canvas = canvasRef.current;
-      if (!point || !canvas) {
+  const handleHover = useCallback(
+    (event) => {
+      hoverPointRef.current = {
+        clientX: event.clientX,
+        clientY: event.clientY,
+      };
+      if (hoverFrameRef.current) {
         return;
       }
-      if (!latestGrid) {
-        setHover(null);
-        return;
-      }
-      const rect = canvas.getBoundingClientRect();
-      const x = point.clientX - rect.left;
-      const y = point.clientY - rect.top;
-      const col = Math.floor((x / rect.width) * latestGrid.cols);
-      const row = latestGrid.rows - 1 - Math.floor((y / rect.height) * latestGrid.rows);
-      const cell = cellIndex.get(row * latestGrid.cols + col) || null;
+      hoverFrameRef.current = window.requestAnimationFrame(() => {
+        hoverFrameRef.current = 0;
+        const point = hoverPointRef.current;
+        const canvas = canvasRef.current;
+        if (!point || !canvas) {
+          return;
+        }
+        if (!latestGrid) {
+          setHover(null);
+          return;
+        }
+        const rect = canvas.getBoundingClientRect();
+        const x = point.clientX - rect.left;
+        const y = point.clientY - rect.top;
+        const col = Math.floor((x / rect.width) * latestGrid.cols);
+        const row =
+          latestGrid.rows - 1 - Math.floor((y / rect.height) * latestGrid.rows);
+        const cell = cellIndex.get(row * latestGrid.cols + col) || null;
 
-      if (!cell) {
-        setHover(null);
-        return;
-      }
+        if (!cell) {
+          setHover(null);
+          return;
+        }
 
-      setHover({
-        cell,
-        left: Math.min(x + 14, rect.width - 252),
-        top: Math.max(y - 80, 10),
+        setHover({
+          cell,
+          left: Math.min(x + 14, rect.width - 252),
+          top: Math.max(y - 80, 10),
+        });
       });
-    });
-  }, [cellIndex, latestGrid]);
+    },
+    [cellIndex, latestGrid],
+  );
 
-  useEffect(() => () => {
-    if (hoverFrameRef.current) {
-      window.cancelAnimationFrame(hoverFrameRef.current);
-    }
-  }, []);
+  useEffect(
+    () => () => {
+      if (hoverFrameRef.current) {
+        window.cancelAnimationFrame(hoverFrameRef.current);
+      }
+    },
+    [],
+  );
 
   const networkSolver = useMemo(
     () => solverForScene(activeScene, networkSolverDraft),
@@ -1230,27 +1338,34 @@ export default function App() {
   );
 
   const modalProgressLabel = modalContent
-    ? jobProgressLabel
-      || historyProgressLabel
-      || (historyPreviewLoadCount > 0 ? "Loading history preview..." : "")
+    ? jobProgressLabel ||
+      historyProgressLabel ||
+      (historyPreviewLoadCount > 0 ? "Loading history preview..." : "")
     : "";
 
   const busyLabel = isRunning
     ? "Running simulation..."
-    : apiProgressLabel
-      || jobProgressLabel
-      || (!modalContent ? historyProgressLabel : "")
-      || (!modalContent && historyPreviewLoadCount > 0 ? "Loading history preview..." : "")
-      || (isSceneLoading ? "Loading scene..." : "")
-      || (isSceneListLoading ? "Loading scenes..." : "");
-  const visibleRoute = !hasWorkScene && isWorkSceneRequiredRoute(route)
-    ? SCENE_SELECTION_ROUTE
-    : route;
+    : apiProgressLabel ||
+      jobProgressLabel ||
+      (!modalContent ? historyProgressLabel : "") ||
+      (!modalContent && historyPreviewLoadCount > 0
+        ? "Loading history preview..."
+        : "") ||
+      (isSceneLoading ? "Loading scene..." : "") ||
+      (isSceneListLoading ? "Loading scenes..." : "");
+  const visibleRoute =
+    !hasWorkScene && isWorkSceneRequiredRoute(route)
+      ? SCENE_SELECTION_ROUTE
+      : route;
 
   if (authStatus === "checking") {
     return (
       <main className="session-check" role="status">
-        <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>
+        <span className="brand-mark" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+        </span>
         <strong>Opening Sionna Planner</strong>
         <p>Checking your workspace session...</p>
       </main>
@@ -1274,200 +1389,129 @@ export default function App() {
         onNavigate={navigate}
       />
       <GlobalProgress active={Boolean(busyLabel)} label={busyLabel} />
-      {visibleRoute === "/network" && (
-        <NetworkCoveragePage
-          activeScene={activeScene}
-          antennaPool={fixedSceneAntennas}
-          antennas={antennas}
-          displayAntennas={activeNetworkAntennas}
-          canvasRef={canvasRef}
-          coverageImageUrl={coverageImageUrl}
-          hover={hover}
-          isSceneLoading={isSceneLoading || isSceneListLoading || !activeScene}
-          isRunning={isRunning}
-          latestGrid={latestGrid}
-          latestSolver={latestSolver}
-          mapStageRef={mapStageRef}
-          onHover={handleHover}
-          onHoverEnd={() => setHover(null)}
-          onResetAntennas={resetAntennas}
-          onRun={runSimulation}
-          onOptimize={() => navigate(NETWORK_OPTIMIZATION_ROUTE)}
-          onSceneLoadingChange={setIsSceneLoading}
-          onAddType2Antenna={addType2Antenna}
-          onCreateAntenna={createInventoryAntenna}
-          onRemoveType2Antenna={removeType2Antenna}
-          onUpdateAntenna={updateAntenna}
-          maxAntennas={MAX_NETWORK_COVERAGE_ANTENNAS}
-          runError={runError}
-          runStatus={runStatus}
-          solver={networkSolver}
-          onSolverChange={setNetworkSolverDraft}
-          summary={summary}
-        />
-      )}
-      {visibleRoute === NETWORK_OPTIMIZATION_ROUTE && activeScene && (
-        <OptimizationObjectivePage
-          key={activeScene.id}
-          activeScene={activeScene}
-          baseRequest={buildNetworkCoveragePayload(activeNetworkAntennas, activeScene)}
-          storageKey={NETWORK_OPTIMIZATION_OBJECTIVES_STORAGE_KEY}
-          onBack={() => navigate(SIMULATION_ENTRY_ROUTE)}
-          onApply={(settings) => {
-            Object.entries(settings).forEach(([id, values]) => {
-              if (values && typeof values === "object") {
-                updateAntenna(id, "tilt", values.tilt);
-                updateAntenna(id, "tx_power", values.tx_power);
-                updateAntenna(id, "azimuth", values.azimuth);
-                return;
-              }
-              updateAntenna(id, "tilt", values);
-            });
-            setLatestGrid(null);
-            setCoverageImageUrl("");
-            setRunStatus("Optimized antenna settings applied. Run Network Coverage to view the updated map.");
-          }}
-        />
-      )}
-      {visibleRoute === "/coverage" && (
-        <CoverageApiPage
-          key={activeScene?.id}
-          activeScene={activeScene}
-          antennas={fixedSceneAntennas}
-          onQueueOpen={() => navigate("/queue")}
-          onSimulationQueued={showQueuedPrompt}
-          onCreateAntenna={createInventoryAntenna}
-          onProgressChange={handleApiProgressChange}
-          onSceneLoadingChange={setIsSceneLoading}
-        />
-      )}
-      {visibleRoute === "/rsrp" && (
-        <RsrpSimulationPage
-          activeScene={activeScene}
-          antennaPool={fixedSceneAntennas}
-          antennas={rsrpAntennas}
-          simulationAntennas={activeRsrpAntennas}
-          maxAntennas={MAX_RSRP_SIMULATION_ANTENNAS}
-          onAddType2Antenna={addRsrpType2Antenna}
-          onCreateAntenna={createInventoryAntenna}
-          onQueueOpen={() => navigate("/queue")}
-          onRemoveType2Antenna={removeRsrpType2Antenna}
-          onResetAntennas={resetRsrpAntennas}
-          onSimulationQueued={showQueuedPrompt}
-          onUpdateAntenna={updateRsrpAntenna}
-          onProgressChange={handleApiProgressChange}
-          onSceneLoadingChange={setIsSceneLoading}
-        />
-      )}
-      {visibleRoute === "/sinr" && (
-        <SinrApiPage
-          activeScene={activeScene}
-          antennaPool={fixedSceneAntennas}
-          antennas={sinrAntennas}
-          onAddType2Antenna={addSinrType2Antenna}
-          onCreateAntenna={createInventoryAntenna}
-          onQueueOpen={() => navigate("/queue")}
-          onRemoveType2Antenna={removeSinrType2Antenna}
-          onResetAntennas={resetSinrAntennas}
-          onRoleSelectionChange={updateSinrRoleSelection}
-          onSimulationQueued={showQueuedPrompt}
-          onUpdateAntenna={updateSinrAntenna}
-          onProgressChange={handleApiProgressChange}
-          onSceneLoadingChange={setIsSceneLoading}
-          roleSelection={sinrRoleSelection}
-        />
-      )}
-      {visibleRoute === "/throughput" && (
-        <ThroughputApiPage
-          activeScene={activeScene}
-          antennaPool={fixedSceneAntennas}
-          antennas={throughputAntennas}
-          onAddType2Antenna={addThroughputType2Antenna}
-          onCreateAntenna={createInventoryAntenna}
-          onQueueOpen={() => navigate("/queue")}
-          onRemoveType2Antenna={removeThroughputType2Antenna}
-          onResetAntennas={resetThroughputAntennas}
-          onRoleSelectionChange={updateThroughputRoleSelection}
-          onSimulationQueued={showQueuedPrompt}
-          onUpdateAntenna={updateThroughputAntenna}
-          onProgressChange={handleApiProgressChange}
-          onSceneLoadingChange={setIsSceneLoading}
-          roleSelection={throughputRoleSelection}
-        />
-      )}
-      {visibleRoute === "/queue" && (
-        <QueueRoutePage
-          jobError={jobError}
-          jobs={simulationJobs}
-          jobStatus={jobStatus}
-          isLoading={Boolean(jobProgressLabel)}
-          onDiscard={discardSimulationJob}
-          onDeleteSelected={deleteSelectedJobs}
-          onOpen={openJobDetail}
-          onOpenHistory={openHistoryDetail}
-          onRefresh={loadJobs}
-          onSave={saveSimulationJob}
-          onToggleDeleteSelection={toggleJobDeleteSelection}
-          onToggleSelectAll={toggleAllJobDeleteSelection}
-          selectedDeleteIds={selectedJobDeleteIds}
-          selectedJobId={selectedJobId}
-        />
-      )}
-      {visibleRoute === "/history" && (
-        <HistoryRoutePage
-          activeScene={activeScene}
-          comparisonType={comparisonType}
-          historyError={historyError}
-          historyStatus={historyStatus}
-          isLoading={Boolean(historyProgressLabel) || historyPreviewLoadCount > 0}
-          items={latestHistory}
-          onCancelComparison={cancelComparison}
-          onDelete={deleteHistoryItem}
-          onDeleteSelected={deleteSelectedHistory}
-          onOpen={openHistoryDetail}
-          onRefresh={loadHistory}
-          onShowComparison={showComparisonResult}
-          onToggleCompare={toggleComparisonSelection}
-          onToggleDeleteSelection={toggleHistoryDeleteSelection}
-          onToggleSelectAll={toggleAllHistoryDeleteSelection}
-          selectedComparisonIds={selectedComparisonIds}
-          selectedDeleteIds={selectedHistoryDeleteIds}
-          selectedHistoryId={selectedHistoryId}
-          comparisonSceneId={comparisonSceneId}
-          comparisonSceneName={comparisonSceneName}
-        />
-      )}
-      {visibleRoute === "/scenes" && (
-        <ScenesPage
-          activeSceneId={hasWorkScene ? activeScene?.id : null}
-          isLoading={isSceneListLoading || isSceneLoading}
-          notice={sceneNotice}
-          onCreateScene={chooseScene}
-          onRefresh={loadScenes}
-          onSceneActivated={handleSceneActivated}
-          onSetNotice={setSceneNotice}
-          scenes={scenes}
-        />
-      )}
-      {visibleRoute === "/antennas" && (
-        <AntennasPage onInventoryChange={setAntennaInventory} />
-      )}
-      {visibleRoute === SCENE_CREATION_ROUTE && (
-        <SceneChooserPage
-          onCancel={() => navigate(SCENE_SELECTION_ROUTE)}
-          onLimitReached={(message) => {
+      <AppRouteContent
+        apiPages={{
+          onProgressChange: handleApiProgressChange,
+          rsrp: {
+            activeAntennas: activeRsrpAntennas,
+            antennas: rsrpAntennas,
+            maxAntennas: MAX_RSRP_SIMULATION_ANTENNAS,
+            onAddType2Antenna: addRsrpType2Antenna,
+            onRemoveType2Antenna: removeRsrpType2Antenna,
+            onResetAntennas: resetRsrpAntennas,
+            onUpdateAntenna: updateRsrpAntenna,
+          },
+          sinr: {
+            antennas: sinrAntennas,
+            onAddType2Antenna: addSinrType2Antenna,
+            onRemoveType2Antenna: removeSinrType2Antenna,
+            onResetAntennas: resetSinrAntennas,
+            onRoleSelectionChange: updateSinrRoleSelection,
+            onUpdateAntenna: updateSinrAntenna,
+            roleSelection: sinrRoleSelection,
+          },
+          throughput: {
+            antennas: throughputAntennas,
+            onAddType2Antenna: addThroughputType2Antenna,
+            onRemoveType2Antenna: removeThroughputType2Antenna,
+            onResetAntennas: resetThroughputAntennas,
+            onRoleSelectionChange: updateThroughputRoleSelection,
+            onUpdateAntenna: updateThroughputAntenna,
+            roleSelection: throughputRoleSelection,
+          },
+        }}
+        history={{
+          comparisonSceneId,
+          comparisonSceneName,
+          comparisonType,
+          error: historyError,
+          isLoading: Boolean(historyProgressLabel) || historyPreviewLoadCount > 0,
+          items: latestHistory,
+          onCancelComparison: cancelComparison,
+          onDelete: deleteHistoryItem,
+          onDeleteSelected: deleteSelectedHistory,
+          onOpen: openHistoryDetail,
+          onRefresh: loadHistory,
+          onShowComparison: showComparisonResult,
+          onToggleCompare: toggleComparisonSelection,
+          onToggleDeleteSelection: toggleHistoryDeleteSelection,
+          onToggleSelectAll: toggleAllHistoryDeleteSelection,
+          selectedComparisonIds,
+          selectedDeleteIds: selectedHistoryDeleteIds,
+          selectedHistoryId,
+          status: historyStatus,
+        }}
+        network={{
+          activeAntennas: activeNetworkAntennas,
+          antennas,
+          canvasRef,
+          coverageImageUrl,
+          hover,
+          isRunning,
+          isSceneLoading: isSceneLoading || isSceneListLoading || !activeScene,
+          latestGrid,
+          latestSolver,
+          mapStageRef,
+          maxAntennas: MAX_NETWORK_COVERAGE_ANTENNAS,
+          onAddType2Antenna: addType2Antenna,
+          onApplyOptimization: applyOptimizationSettings,
+          onHover: handleHover,
+          onHoverEnd: () => setHover(null),
+          onRemoveType2Antenna: removeType2Antenna,
+          onResetAntennas: resetAntennas,
+          onRun: runSimulation,
+          onSolverChange: setNetworkSolverDraft,
+          onUpdateAntenna: updateAntenna,
+          optimizationStorageKey: NETWORK_OPTIMIZATION_OBJECTIVES_STORAGE_KEY,
+          runError,
+          runStatus,
+          solver: networkSolver,
+          summary,
+        }}
+        queue={{
+          error: jobError,
+          isLoading: Boolean(jobProgressLabel),
+          jobs: simulationJobs,
+          onDeleteSelected: deleteSelectedJobs,
+          onDiscard: discardSimulationJob,
+          onOpen: openJobDetail,
+          onOpenHistory: openHistoryDetail,
+          onRefresh: loadJobs,
+          onSave: saveSimulationJob,
+          onToggleDeleteSelection: toggleJobDeleteSelection,
+          onToggleSelectAll: toggleAllJobDeleteSelection,
+          selectedDeleteIds: selectedJobDeleteIds,
+          selectedJobId,
+          status: jobStatus,
+        }}
+        route={visibleRoute}
+        sceneManagement={{
+          activeSceneId: hasWorkScene ? activeScene?.id : null,
+          isLoading: isSceneListLoading || isSceneLoading,
+          notice: sceneNotice,
+          onCreateScene: chooseScene,
+          onInventoryChange: setAntennaInventory,
+          onLimitReached: (message) => {
             setSceneNotice(message, true);
             navigate(SCENE_SELECTION_ROUTE);
-          }}
-          onSceneActivated={handleSceneActivated}
-        />
-      )}
+          },
+          onRefresh: loadScenes,
+          onSceneActivated: handleSceneActivated,
+          onSetNotice: setSceneNotice,
+          scenes,
+        }}
+        workspace={{
+          activeScene,
+          createInventoryAntenna,
+          fixedSceneAntennas,
+          navigate,
+          setIsSceneLoading,
+          showQueuedPrompt,
+        }}
+      />
 
       {modalContent && (
-        <HistoryModal
-          onClose={closeModal}
-          progressLabel={modalProgressLabel}
-        >
+        <HistoryModal onClose={closeModal} progressLabel={modalProgressLabel}>
           {modalContent}
         </HistoryModal>
       )}
