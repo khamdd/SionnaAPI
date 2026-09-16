@@ -7,7 +7,9 @@ export async function requestJson(path, options = {}) {
   const response = await fetch(`${API_BASE_URL}${path}`, withAuth(options));
 
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response));
+    const error = new Error(await readErrorMessage(response));
+    error.status = response.status;
+    throw error;
   }
 
   return response.json();

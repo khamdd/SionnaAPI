@@ -121,6 +121,14 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
         setError("");
       } catch (err) {
         if (disposed) return;
+        if (err.status === 404) {
+          setJobId(null);
+          write(runKey, null);
+          setBusy(false);
+          setError("This optimization job was deleted from the simulation queue.");
+          setStatus("Optimization job no longer exists.");
+          return;
+        }
         setError(`Cannot check progress: ${err.message}. Retrying automatically.`);
       }
       if (!disposed) timer = setTimeout(poll, 3000);
