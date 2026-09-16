@@ -133,6 +133,7 @@ export default function App() {
 
   const canvasRef = useRef(null);
   const mapStageRef = useRef(null);
+  const pendingEntryNavigationRef = useRef(false);
   const summary = useMemo(() => summarizeGrid(latestGrid), [latestGrid]);
   const fixedSceneAntennas = useMemo(
     () => antennaInventory.filter((antenna) => (
@@ -188,7 +189,8 @@ export default function App() {
     localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(authResult.user));
     setCurrentUser(authResult.user);
     setAuthStatus("authenticated");
-    navigate(SCENE_SELECTION_ROUTE);
+    pendingEntryNavigationRef.current = true;
+    navigate(SCENE_SELECTION_ROUTE, { replace: true });
   }
 
   useEffect(() => {
@@ -418,7 +420,17 @@ export default function App() {
       return;
     }
 
-    loadScenes({ syncActiveScene: true }).catch((error) => {
+    loadScenes({ syncActiveScene: true }).then((result) => {
+      if (!pendingEntryNavigationRef.current) {
+        return;
+      }
+      pendingEntryNavigationRef.current = false;
+      navigate(
+        result.active_scene ? SIMULATION_ENTRY_ROUTE : SCENE_SELECTION_ROUTE,
+        { allowWithoutWorkScene: true, replace: true },
+      );
+    }).catch((error) => {
+      pendingEntryNavigationRef.current = false;
       setSceneNotice(`Failed to load scenes: ${error.message}`, true);
     });
   }, [authStatus, loadScenes]);

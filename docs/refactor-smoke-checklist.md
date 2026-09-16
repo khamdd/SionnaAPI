@@ -19,7 +19,8 @@ closing a phase.
 ## Authentication and routing
 
 - [ ] Open an unknown URL while signed out; Login is shown.
-- [ ] Register or log in; the app opens `/scenes`.
+- [ ] Register or log in without a work scene; the app opens `/scenes`.
+- [ ] Log in with a persisted work scene; the app opens `/network`.
 - [ ] Directly open `/network` without a work scene; the app returns to `/scenes`
       with a notice.
 - [ ] Select a scene; the app opens `/network` and planning/result navigation is

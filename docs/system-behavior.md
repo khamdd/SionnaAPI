@@ -6,8 +6,10 @@ authority; verify them before making behavior changes.
 
 ## Scenes and Navigation
 
-- There is no built-in default scene. Users authenticate, land on `/scenes`, and
-  explicitly select an imported scene or create one at `/choose-scene`.
+- There is no built-in default scene. After authenticating, users land on
+  `/network` when a persisted work scene is active, otherwise on `/scenes`,
+  where they explicitly select an imported scene or create one at
+  `/choose-scene`.
 - Simulation, History, configuration, profile, optimization, and antenna routes
   are gated by the selected work scene where applicable. Change scene confirms,
   clears frontend work-scene state, and returns to `/scenes`.
