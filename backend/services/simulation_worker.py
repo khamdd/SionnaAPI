@@ -409,12 +409,12 @@ def get_worker_scene(scene_info):
 
 
 def load_scene(scene_path):
-    from sionna.rt import load_scene as sionna_load_scene
+    from backend.simulations.sionna_scene import load_scene as load_sionna_scene
 
     if not scene_path:
         raise ValueError("No active scene is selected.")
 
-    return sionna_load_scene(scene_path, merge_shapes=True)
+    return load_sionna_scene(scene_path)
 
 
 def is_failure_result(result):

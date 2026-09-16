@@ -98,6 +98,8 @@ services:
   backend:
     image: sionna-simulation-backend:local
     pull_policy: never
+    # Sionna RT runs in the worker, but keep the API GPU-capable for inline/no-DB runs.
+    gpus: all
     build:
       context: .
       dockerfile: Dockerfile.backend
@@ -109,6 +111,10 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sionna-local-password}
       POSTGRES_DB: ${POSTGRES_DB:-sionna_simulation}
       AUTH_SECRET_KEY: ${AUTH_SECRET_KEY:-docker-local-change-this-secret}
+      # OptiX needs the NVIDIA graphics driver libraries in addition to CUDA.
+      NVIDIA_DRIVER_CAPABILITIES: all
+      DRJIT_LIBOPTIX_PATH: /opt/nvidia/lib/libnvoptix.so.1
+      LD_LIBRARY_PATH: /opt/nvidia/lib:/usr/lib/wsl/lib
       ELASTICSEARCH_ENABLED: "true"
       ELASTICSEARCH_URL: http://elasticsearch:9200
       ELASTICSEARCH_INDEX: ${ELASTICSEARCH_INDEX:-sionna-logs-dev}
@@ -126,6 +132,8 @@ services:
       - "127.0.0.1:${BACKEND_HOST_PORT:-8000}:8000"
     volumes:
       - ./static:/app/static
+      - "./.optix-driver/extracted/usr/lib/x86_64-linux-gnu:/opt/nvidia/lib:ro"
+      - "./.optix-driver/extracted/usr/share/nvidia:/usr/share/nvidia:ro"
     healthcheck:
       test:
         - CMD
@@ -139,6 +147,8 @@ services:
   simulation-worker:
     image: sionna-simulation-backend:local
     pull_policy: never
+    # Ray tracing is executed by this service in database-backed deployments.
+    gpus: all
     build:
       context: .
       dockerfile: Dockerfile.backend
@@ -150,6 +160,10 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sionna-local-password}
       POSTGRES_DB: ${POSTGRES_DB:-sionna_simulation}
       SIMULATION_WORKER_ENABLED: "true"
+      # OptiX needs the NVIDIA graphics driver libraries in addition to CUDA.
+      NVIDIA_DRIVER_CAPABILITIES: all
+      DRJIT_LIBOPTIX_PATH: /opt/nvidia/lib/libnvoptix.so.1
+      LD_LIBRARY_PATH: /opt/nvidia/lib:/usr/lib/wsl/lib
       SIMULATION_WORKER_POLL_SECONDS: ${SIMULATION_WORKER_POLL_SECONDS:-1}
       SIMULATION_JOB_HEARTBEAT_SECONDS: ${SIMULATION_JOB_HEARTBEAT_SECONDS:-20}
       SIMULATION_JOB_LEASE_SECONDS: ${SIMULATION_JOB_LEASE_SECONDS:-90}
@@ -164,6 +178,8 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./static:/app/static
+      - "./.optix-driver/extracted/usr/lib/x86_64-linux-gnu:/opt/nvidia/lib:ro"
+      - "./.optix-driver/extracted/usr/share/nvidia:/usr/share/nvidia:ro"
     command:
       - python
       - -m

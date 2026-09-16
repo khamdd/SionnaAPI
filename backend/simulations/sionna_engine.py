@@ -84,12 +84,12 @@ class SionnaEngine:
         self._active_scene_synced = True
 
     def _load_scene(self):
-        from sionna.rt import load_scene
+        from backend.simulations.sionna_scene import load_scene
 
         if not self._scene_path:
             raise RuntimeError("No active scene is selected.")
 
-        return load_scene(self._scene_path, merge_shapes=True)
+        return load_scene(self._scene_path)
 
 
 engine = SionnaEngine()

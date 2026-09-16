@@ -11,6 +11,7 @@ htmlcov/
 venv/
 env/
 backend/.sionna-venv/
+.optix-driver/
 
 # Local configuration and secrets
 .env

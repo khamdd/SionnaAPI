@@ -26,6 +26,7 @@ Install:
 
 - [Git](https://git-scm.com/)
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+- An NVIDIA driver with Docker GPU passthrough support
 
 Start Docker Desktop before running the commands below.
 
@@ -67,6 +68,25 @@ Open:
 
 Register the first application user from the login page. The database schema is
 created and upgraded by the `database-migrate` service before the backend starts.
+The backend and simulation-worker are configured with `gpus: all`, allowing
+Sionna RT to use the NVIDIA GPU for ray tracing. Verify GPU passthrough with:
+
+```powershell
+docker compose --env-file .env.docker run --rm simulation-worker nvidia-smi
+```
+
+The command should list the host GPU. If it fails, enable Linux-container GPU
+support in Docker Desktop before starting the stack.
+
+On Windows Docker Desktop, also install the Linux OptiX runtime used by Mitsuba:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/setup-optix-runtime.ps1
+docker compose --env-file .env.docker up --build -d
+```
+
+This downloads userspace libraries only; it does not install or replace the
+Windows display driver. The runtime directory is local and ignored by Git.
 
 ### 4. Everyday Docker commands
 
