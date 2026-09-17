@@ -70,6 +70,7 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
   const [guardrails, setGuardrails] = useState([]);
   const [showAllowedChanges, setShowAllowedChanges] = useState(false);
   const [showGuardrails, setShowGuardrails] = useState(false);
+  const [antennaSearch, setAntennaSearch] = useState("");
   const signature = JSON.stringify(baseRequest);
 
   useEffect(() => {
@@ -285,6 +286,10 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
     antennaCount: baseRequest?.antennas?.length || 0,
   });
   const allowedChangesValid = !showAllowedChanges || (changeFields.length > 0 && eligibleAntennaIds.length > 0 && !allowedChangesError);
+  const antennas = baseRequest?.antennas || [];
+  const normalizedAntennaSearch = antennaSearch.trim().toLowerCase();
+  const visibleAntennas = antennas.filter((antenna) => String(antenna.id).toLowerCase().includes(normalizedAntennaSearch));
+  const visibleAntennaIds = visibleAntennas.map((antenna) => antenna.id);
   const guardrailsValid = !showGuardrails || guardrails.every((guardrail) => Boolean(guardrail.metric) && Number.isFinite(Number(guardrail.max_regression)) && Number(guardrail.max_regression) >= 0);
   const valid = objectiveValid && allowedChangesValid && guardrailsValid;
   const disabledReason = optimizationDisabledReason({
@@ -375,7 +380,26 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
                 <NumberWithUnit label="Maximum azimuth change" unit="deg" value={maxAzimuthChange} min="1" max="180" onChange={setMaxAzimuthChange} />
                 <NumberWithUnit label="Maximum antennas changed" unit="sites" value={maxChangedAntennas} min="1" max={String(baseRequest?.antennas?.length || 1)} step="1" onChange={setMaxChangedAntennas} />
               </div>
-              <div className="optimization-antenna-scope"><span>Antennas allowed to change</span><div>{baseRequest?.antennas?.map((antenna) => <label key={antenna.id}><input type="checkbox" checked={eligibleAntennaIds.includes(antenna.id)} onChange={() => setEligibleAntennaIds((current) => current.includes(antenna.id) ? current.filter((id) => id !== antenna.id) : [...current, antenna.id])} />{antenna.id}</label>)}</div></div>
+              <div className="optimization-antenna-scope">
+                <div className="optimization-antenna-heading">
+                  <span>Antennas allowed to change</span>
+                  <strong>{eligibleAntennaIds.length} of {antennas.length} selected</strong>
+                </div>
+                <div className="optimization-antenna-toolbar">
+                  <label className="optimization-antenna-search">
+                    <span className="sr-only">Search antennas</span>
+                    <input type="search" placeholder="Search by antenna ID" value={antennaSearch} onChange={(event) => setAntennaSearch(event.target.value)} />
+                  </label>
+                  <div className="optimization-antenna-actions">
+                    <button type="button" className="ghost-button" onClick={() => setEligibleAntennaIds((current) => [...new Set([...current, ...visibleAntennaIds])])}>Select visible</button>
+                    <button type="button" className="ghost-button" onClick={() => setEligibleAntennaIds((current) => current.filter((id) => !visibleAntennaIds.includes(id)))}>Clear visible</button>
+                  </div>
+                </div>
+                <div className="optimization-antenna-grid" role="group" aria-label="Antennas allowed to change">
+                  {visibleAntennas.map((antenna) => <label className="optimization-antenna-option" key={antenna.id}><input type="checkbox" checked={eligibleAntennaIds.includes(antenna.id)} onChange={() => setEligibleAntennaIds((current) => current.includes(antenna.id) ? current.filter((id) => id !== antenna.id) : [...current, antenna.id])} /><span>{antenna.id}</span></label>)}
+                  {!visibleAntennas.length && <p className="optimization-antenna-empty">No antennas match “{antennaSearch}”.</p>}
+                </div>
+              </div>
             </>}
           </section>
 
