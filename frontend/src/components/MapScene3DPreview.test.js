@@ -3,9 +3,11 @@ import {
   antennaFeatures,
   cellFeature,
   colorForCoverageCell,
+  constrainedSceneCenter,
   coverageCellAtLngLat,
+  offlineBuildingFeatureCollection,
   signalLinkFeatures,
-  viewportMaskFeatures,
+  viewportMaskVertices,
   worldPositionToLngLat,
 } from "./MapScene3DPreview";
 
@@ -35,9 +37,37 @@ describe("MapScene3DPreview overlay projection", () => {
     expect(colorForCoverageCell({ overlap_level: "high_overlap" }, "overlap")).toContain("234, 179, 8");
   });
 
-  it("masks the nationwide basemap outside the selected scene", () => {
-    const mask = viewportMaskFeatures(bounds);
-    expect(mask.features).toHaveLength(4);
-    expect(mask.features.every((feature) => feature.geometry.coordinates[0].length === 5)).toBe(true);
+  it("keeps buildings in one MapLibre GeoJSON source at every zoom", () => {
+    const collection = offlineBuildingFeatureCollection([
+      {
+        id: "b1",
+        tags: { "building:levels": "3" },
+        geometry: [
+          { lon: 106, lat: 10 },
+          { lon: 106.001, lat: 10 },
+          { lon: 106.001, lat: 10.001 },
+        ],
+      },
+    ]);
+    expect(collection.features).toHaveLength(1);
+    expect(collection.features[0].properties.height).toBeCloseTo(9.3);
+    expect(collection.features[0].geometry.coordinates[0]).toHaveLength(4);
+  });
+
+  it("builds four WebGL rectangles around the selected scene", () => {
+    const vertices = viewportMaskVertices(bounds);
+    expect(vertices).toHaveLength(48);
+    expect(vertices.every(Number.isFinite)).toBe(true);
+  });
+
+  it("constrains panning without imposing a minimum zoom", () => {
+    expect(constrainedSceneCenter({ lng: 105, lat: 11 }, bounds)).toEqual({
+      lng: bounds.west,
+      lat: bounds.north,
+    });
+    expect(constrainedSceneCenter({ lng: 106.005, lat: 10.005 }, bounds)).toEqual({
+      lng: 106.005,
+      lat: 10.005,
+    });
   });
 });

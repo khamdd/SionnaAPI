@@ -29,10 +29,13 @@ changes normally should not require an edit here.
 - Scene registry metadata is stored in `static/scenes/scenes.json`; database scene
   rows are minimal references for persisted results. Preview scenes expire and
   are cleaned up when not kept.
-- Offline building data lives under `frontend/public/data/`. Regional PMTiles are
-  loaded at high zoom by both the Vietnam map and selected-scene previews, so
-  browser rendering uses the same streamed vector-tile path. Simulation
-  overlays (coverage, antennas, links, users, and ward boundaries) remain
+- Offline building data lives under `frontend/public/data/`. The Vietnam
+  overview uses regional PMTiles with a high-zoom gate, while a selected-scene
+  preview loads its bounded offline building geometry into one MapLibre source
+  at every zoom so its building set does not change while navigating. The preview
+  masks data outside the selected scene and keeps the camera center within that
+  scene without limiting zoom, while preserving right-drag rotation. Simulation overlays
+  (coverage, antennas, links, users, and ward boundaries) remain
   scene-scoped MapLibre layers; this does not change Sionna scene generation or
   solver execution. The generated map data is intentionally excluded from Git.
 

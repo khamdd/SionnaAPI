@@ -37,13 +37,18 @@ function offlineMapDataBaseUrl() {
   ).toString();
 }
 
-function createOfflineSceneMapStyle(dataBaseUrl) {
+function createOfflineSceneMapStyle(dataBaseUrl, bounds = null) {
+  const sourceBounds = bounds
+    ? [bounds.west, bounds.south, bounds.east, bounds.north]
+    : undefined;
+
   return {
     version: 8,
     sources: {
       vietnam: {
         type: "vector",
         url: `pmtiles://${dataBaseUrl}vietnam.pmtiles`,
+        ...(sourceBounds ? { bounds: sourceBounds } : {}),
       },
     },
     layers: [

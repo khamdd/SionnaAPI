@@ -1,12 +1,12 @@
 import { memo, useEffect, useRef, useState } from "react";
-import { Map as MapLibreMap, setWorkerUrl } from "maplibre-gl";
+import { Map as MapLibreMap, MercatorCoordinate, setWorkerUrl } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { EMPTY_ARRAY } from "../constants";
+import { getOfflineBuildings } from "../api";
 import { scenePositionToLngLat } from "../utils/scene";
 import {
   acquirePmtilesProtocol,
-  createBuildingRegionManager,
   createOfflineSceneMapStyle,
   emptyFeatureCollection,
   offlineMapDataBaseUrl,
@@ -40,8 +40,6 @@ function MapScene3DPreview({
   wardBoundary = null,
 }) {
   const mapHostRef = useRef(null);
-  const viewportMaskRef = useRef(null);
-  const viewportMaskPathRef = useRef(null);
   const mapRef = useRef(null);
   const dataRef = useRef({});
   const [status, setStatus] = useState("Loading vector scene...");
@@ -95,29 +93,18 @@ function MapScene3DPreview({
 
     const isReady = hasCachedSceneModel(activeBounds);
     let map = null;
-    let buildingManager = null;
+    let fallbackController = null;
     let isLoaded = false;
     let disposed = false;
     const dataBaseUrl = offlineMapDataBaseUrl();
 
-    const updateViewportMask = () => {
-      const svg = viewportMaskRef.current;
-      const path = viewportMaskPathRef.current;
-      if (!svg || !path || !map) return;
-      const width = host.clientWidth;
-      const height = host.clientHeight;
-      if (!width || !height) return;
-      const selectedCorners = [
-        map.project([activeBounds.west, activeBounds.north]),
-        map.project([activeBounds.east, activeBounds.north]),
-        map.project([activeBounds.east, activeBounds.south]),
-        map.project([activeBounds.west, activeBounds.south]),
-      ];
-      const selectedPath = selectedCorners
-        .map((point, index) => `${index === 0 ? "M" : "L"}${point.x},${point.y}`)
-        .join(" ");
-      svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-      path.setAttribute("d", `M0,0 H${width} V${height} H0 Z ${selectedPath} Z`);
+    const constrainSceneCenter = () => {
+      if (!map) return;
+      const center = map.getCenter();
+      const constrained = constrainedSceneCenter(center, activeBounds);
+      if (constrained.lng !== center.lng || constrained.lat !== center.lat) {
+        map.jumpTo({ center: [constrained.lng, constrained.lat] });
+      }
     };
 
     setStatus(isReady ? "Cached vector scene ready." : "Loading vector scene...");
@@ -169,7 +156,7 @@ function MapScene3DPreview({
     try {
       map = new MapLibreMap({
         container: host,
-        style: createOfflineSceneMapStyle(dataBaseUrl),
+        style: createOfflineSceneMapStyle(dataBaseUrl, activeBounds),
         attributionControl: false,
         antialias: false,
         renderWorldCopies: false,
@@ -186,28 +173,26 @@ function MapScene3DPreview({
     }
 
     mapRef.current = map;
-    map.on("move", updateViewportMask);
-    map.on("resize", updateViewportMask);
     map.on("mousemove", handleMouseMove);
     map.on("mouseleave", handleMouseLeave);
     map.on("click", handleClick);
+    map.on("moveend", constrainSceneCenter);
     map.on("load", async () => {
       if (disposed) return;
       isLoaded = true;
-      ensureSimulationLayers(map);
+      ensureSimulationLayers(map, activeBounds);
       map.fitBounds(
         [[activeBounds.west, activeBounds.south], [activeBounds.east, activeBounds.north]],
         { padding: 24, maxZoom: viewMode === "top" ? 19 : 18, duration: 0 },
       );
-      updateViewportMask();
       syncSimulationLayers(map, dataRef.current);
 
-      buildingManager = createBuildingRegionManager(map, dataBaseUrl, { minZoom: 13 });
+      fallbackController = new AbortController();
       try {
-        await buildingManager.load();
-        if (!disposed) setStatus("Vector scene ready · drag to explore.");
+        await loadSceneBuildings(map, activeBounds, fallbackController.signal);
+        if (!disposed) setStatus("Scene ready · drag to explore.");
       } catch {
-        if (!disposed) setStatus("Vector scene ready · building tiles unavailable.");
+        if (!disposed) setStatus("Scene ready · buildings unavailable.");
       } finally {
         if (!disposed) {
           previewReadyCache.add(boundsKey);
@@ -228,13 +213,12 @@ function MapScene3DPreview({
 
     return () => {
       disposed = true;
-      buildingManager?.dispose();
+      fallbackController?.abort();
       observer.disconnect();
       map.off("mousemove", handleMouseMove);
       map.off("mouseleave", handleMouseLeave);
       map.off("click", handleClick);
-      map.off("move", updateViewportMask);
-      map.off("resize", updateViewportMask);
+      map.off("moveend", constrainSceneCenter);
       map.remove();
       mapRef.current = null;
       releasePmtilesProtocol();
@@ -249,19 +233,6 @@ function MapScene3DPreview({
         className="scene-3d-canvas"
         aria-label="Interactive 3D scene. Drag to move, right-drag to rotate, and scroll or pinch to zoom."
       />
-      <svg
-        ref={viewportMaskRef}
-        className="scene-viewport-mask-overlay"
-        aria-hidden="true"
-        focusable="false"
-      >
-        <path
-          ref={viewportMaskPathRef}
-          fill="#eef1f4"
-          fillOpacity="0.98"
-          fillRule="evenodd"
-        />
-      </svg>
       <div className="scene-3d-navigation-hint" aria-hidden="true">
         Drag to move · Right-drag to rotate · Scroll/pinch to zoom
       </div>
@@ -277,12 +248,18 @@ function MapScene3DPreview({
 
 export default memo(MapScene3DPreview);
 
-function ensureSimulationLayers(map) {
+export function constrainedSceneCenter(center, bounds) {
+  return {
+    lng: Math.min(Math.max(Number(center.lng), Number(bounds.west)), Number(bounds.east)),
+    lat: Math.min(Math.max(Number(center.lat), Number(bounds.south)), Number(bounds.north)),
+  };
+}
+
+function ensureSimulationLayers(map, bounds) {
   [
     "scene-coverage-hover", "scene-selected-coverage",
     "scene-antennas", "scene-signal-links",
     "scene-rsrp-users", "scene-selected-rsrp-user", "scene-ward-boundary",
-    "scene-viewport-mask",
   ].forEach((id) => addGeoJsonSource(map, id, emptyFeatureCollection()));
 
   addLayerIfMissing(map, {
@@ -360,10 +337,9 @@ function ensureSimulationLayers(map) {
     id: "scene-ward-boundary-line", type: "line", source: "scene-ward-boundary",
     paint: { "line-color": "#dc2626", "line-width": 3 },
   });
-  addLayerIfMissing(map, {
-    id: "scene-viewport-mask", type: "fill", source: "scene-viewport-mask",
-    paint: { "fill-color": "#eef1f4", "fill-opacity": 0.98 },
-  });
+  if (!map.getLayer("scene-viewport-mask")) {
+    map.addLayer(createSceneViewportMaskLayer(bounds));
+  }
 }
 
 function addGeoJsonSource(map, id, data) {
@@ -372,6 +348,171 @@ function addGeoJsonSource(map, id, data) {
 
 function addLayerIfMissing(map, layer) {
   if (!map.getLayer(layer.id)) map.addLayer(layer);
+}
+
+async function loadSceneBuildings(map, bounds, signal) {
+  const result = await getOfflineBuildings(bounds, signal);
+  const data = offlineBuildingFeatureCollection(result?.elements);
+  if (!map.getSource("scene-buildings")) {
+    map.addSource("scene-buildings", { type: "geojson", data });
+  } else {
+    map.getSource("scene-buildings").setData(data);
+  }
+  const buildingLayer = {
+    id: "scene-buildings",
+    type: "fill-extrusion",
+    source: "scene-buildings",
+    minzoom: 0,
+    paint: {
+      "fill-extrusion-color": "#64748b",
+      "fill-extrusion-height": [
+        "case",
+        ["has", "height"],
+        ["get", "height"],
+        9,
+      ],
+      "fill-extrusion-base": 0,
+      "fill-extrusion-opacity": 0.9,
+    },
+  };
+  if (!map.getLayer(buildingLayer.id)) map.addLayer(buildingLayer);
+}
+
+function createSceneViewportMaskLayer(bounds) {
+  let program = null;
+  let vertexBuffer = null;
+  let vertexArray = null;
+  let matrixLocation = null;
+  const vertices = new Float32Array(viewportMaskVertices(bounds));
+  return {
+    id: "scene-viewport-mask",
+    type: "custom",
+    renderingMode: "2d",
+    onAdd(_map, gl) {
+      const vertexShader = compileMaskShader(gl, gl.VERTEX_SHADER, `#version 300 es
+        uniform mat4 u_matrix;
+        in vec2 a_position;
+        void main() { gl_Position = u_matrix * vec4(a_position, 0.0, 1.0); }
+      `);
+      const fragmentShader = compileMaskShader(gl, gl.FRAGMENT_SHADER, `#version 300 es
+        precision highp float;
+        out vec4 color;
+        void main() { color = vec4(0.9294118, 0.9490196, 0.9686275, 1.0); }
+      `);
+      program = gl.createProgram();
+      gl.attachShader(program, vertexShader);
+      gl.attachShader(program, fragmentShader);
+      gl.linkProgram(program);
+      gl.deleteShader(vertexShader);
+      gl.deleteShader(fragmentShader);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        throw new Error(gl.getProgramInfoLog(program) || "Unable to link scene crop shader");
+      }
+      matrixLocation = gl.getUniformLocation(program, "u_matrix");
+      const positionLocation = gl.getAttribLocation(program, "a_position");
+      vertexBuffer = gl.createBuffer();
+      vertexArray = gl.createVertexArray();
+      gl.bindVertexArray(vertexArray);
+      gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(positionLocation);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+      gl.bindVertexArray(null);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    },
+    render(gl, options) {
+      const depthEnabled = gl.isEnabled(gl.DEPTH_TEST);
+      const cullEnabled = gl.isEnabled(gl.CULL_FACE);
+      gl.disable(gl.DEPTH_TEST);
+      gl.disable(gl.CULL_FACE);
+      gl.useProgram(program);
+      gl.uniformMatrix4fv(matrixLocation, false, options.defaultProjectionData.mainMatrix);
+      gl.bindVertexArray(vertexArray);
+      gl.drawArrays(gl.TRIANGLES, 0, vertices.length / 2);
+      gl.bindVertexArray(null);
+      if (depthEnabled) gl.enable(gl.DEPTH_TEST);
+      if (cullEnabled) gl.enable(gl.CULL_FACE);
+    },
+    onRemove(_map, gl) {
+      if (vertexArray) gl.deleteVertexArray(vertexArray);
+      if (vertexBuffer) gl.deleteBuffer(vertexBuffer);
+      if (program) gl.deleteProgram(program);
+    },
+  };
+}
+
+function compileMaskShader(gl, type, source) {
+  const shader = gl.createShader(type);
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    const message = gl.getShaderInfoLog(shader) || "Unable to compile scene crop shader";
+    gl.deleteShader(shader);
+    throw new Error(message);
+  }
+  return shader;
+}
+
+export function viewportMaskVertices(bounds) {
+  const worldNorthWest = MercatorCoordinate.fromLngLat([-180, 85]);
+  const worldSouthEast = MercatorCoordinate.fromLngLat([180, -85]);
+  const sceneNorthWest = MercatorCoordinate.fromLngLat([Number(bounds.west), Number(bounds.north)]);
+  const sceneSouthEast = MercatorCoordinate.fromLngLat([Number(bounds.east), Number(bounds.south)]);
+  const vertices = [];
+  pushMaskRectangle(vertices, worldNorthWest.x, worldNorthWest.y, worldSouthEast.x, sceneNorthWest.y);
+  pushMaskRectangle(vertices, worldNorthWest.x, sceneSouthEast.y, worldSouthEast.x, worldSouthEast.y);
+  pushMaskRectangle(vertices, worldNorthWest.x, sceneNorthWest.y, sceneNorthWest.x, sceneSouthEast.y);
+  pushMaskRectangle(vertices, sceneSouthEast.x, sceneNorthWest.y, worldSouthEast.x, sceneSouthEast.y);
+  return vertices;
+}
+
+function pushMaskRectangle(vertices, west, north, east, south) {
+  vertices.push(
+    west, north, east, north, east, south,
+    west, north, east, south, west, south,
+  );
+}
+
+function offlineBuildingFeatureCollection(elements) {
+  const features = (Array.isArray(elements) ? elements : []).flatMap((element, index) => {
+    const points = Array.isArray(element?.geometry) ? element.geometry : [];
+    const coordinates = points
+      .map((point) => [Number(point.lon), Number(point.lat)])
+      .filter(([longitude, latitude]) => Number.isFinite(longitude) && Number.isFinite(latitude));
+    if (coordinates.length < 3) return [];
+    const first = coordinates[0];
+    const last = coordinates[coordinates.length - 1];
+    if (first[0] !== last[0] || first[1] !== last[1]) coordinates.push(first);
+    return [{
+      type: "Feature",
+      properties: { height: inferOfflineBuildingHeight(element?.tags) },
+      geometry: { type: "Polygon", coordinates: [coordinates] },
+      id: element?.id || `offline-building-${index}`,
+    }];
+  });
+  return { type: "FeatureCollection", features };
+}
+
+function inferOfflineBuildingHeight(tags = {}) {
+  const explicit = parseBuildingMeters(tags.height || tags["building:height"]);
+  if (Number.isFinite(explicit) && explicit > 0) return Math.min(Math.max(explicit, 2.5), 160);
+  const levels = Number.parseFloat(tags["building:levels"] || tags.levels);
+  if (Number.isFinite(levels) && levels > 0) return Math.min(Math.max(levels * 3.1, 2.5), 160);
+  const type = String(tags.building || "").toLowerCase();
+  if (["apartments", "residential", "hotel", "dormitory"].includes(type)) return 18;
+  if (["office", "commercial", "retail", "public", "hospital"].includes(type)) return 16;
+  if (["industrial", "warehouse", "manufacture"].includes(type)) return 10;
+  if (["house", "detached", "semidetached_house", "terrace", "garage"].includes(type)) return 7;
+  if (["church", "cathedral", "temple"].includes(type)) return 24;
+  return 9;
+}
+
+function parseBuildingMeters(value) {
+  if (value === null || value === undefined || value === "") return NaN;
+  const text = String(value).trim().toLowerCase();
+  const numeric = Number.parseFloat(text.replace(",", "."));
+  if (!Number.isFinite(numeric)) return NaN;
+  return text.includes("ft") || text.includes("feet") ? numeric * 0.3048 : numeric;
 }
 
 function syncSimulationLayers(map, data) {
@@ -391,7 +532,6 @@ function syncSimulationLayers(map, data) {
     data.selectedRsrpUser ? rsrpUserFeature(data.selectedRsrpUser, data.solver, data.bounds) : emptyFeatureCollection(),
   );
   map.getSource("scene-ward-boundary")?.setData(data.wardBoundary || emptyFeatureCollection());
-  map.getSource("scene-viewport-mask")?.setData(viewportMaskFeatures(data.bounds));
 }
 
 function syncCoverageImage(map, data) {
@@ -661,27 +801,6 @@ function metersPerDegreeLng(bounds) {
   return 111320 * Math.max(Math.cos(centerLat), 0.01);
 }
 
-function viewportMaskFeatures(bounds) {
-  const worldWest = -180;
-  const worldEast = 180;
-  const worldSouth = -85;
-  const worldNorth = 85;
-  const rectangles = [
-    [[worldWest, bounds.north], [worldEast, bounds.north], [worldEast, worldNorth], [worldWest, worldNorth]],
-    [[worldWest, worldSouth], [worldEast, worldSouth], [worldEast, bounds.south], [worldWest, bounds.south]],
-    [[worldWest, bounds.south], [bounds.west, bounds.south], [bounds.west, bounds.north], [worldWest, bounds.north]],
-    [[bounds.east, bounds.south], [worldEast, bounds.south], [worldEast, bounds.north], [bounds.east, bounds.north]],
-  ];
-  return {
-    type: "FeatureCollection",
-    features: rectangles.map((rectangle) => ({
-      type: "Feature",
-      properties: {},
-      geometry: { type: "Polygon", coordinates: [[...rectangle, rectangle[0]]] },
-    })),
-  };
-}
-
 function antennaPalette(id = "") {
   const normalized = String(id).toUpperCase();
   if (normalized.includes("RX")) return { color: "#2563eb", labelColor: "#1d4ed8" };
@@ -746,8 +865,8 @@ export {
   colorForCoverageCell,
   coverageFeatures,
   coverageCellAtLngLat,
+  offlineBuildingFeatureCollection,
   rsrpUserFeatures,
   signalLinkFeatures,
-  viewportMaskFeatures,
   worldPositionToLngLat,
 };
