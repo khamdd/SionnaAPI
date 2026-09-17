@@ -58,6 +58,36 @@ def test_insert_simulation_run_stores_summarized_response_json():
     }
 
 
+def test_summarize_response_strips_nested_optimization_comparison_grid():
+    result = {
+        "status": "success",
+        "grid": {
+            "rows": 2,
+            "cols": 2,
+            "cells": [{"row": 0, "col": 0}],
+        },
+        "optimization": {
+            "tested_count": 3,
+            "comparison": {
+                "baseline_grid": {
+                    "rows": 2,
+                    "cols": 2,
+                    "cells": [{"row": 0, "col": 0}, {"row": 0, "col": 1}],
+                },
+            },
+        },
+    }
+
+    summary = simulation_store.summarize_response(result)
+
+    assert "cells" not in summary["grid"]
+    assert summary["grid"]["cell_count"] == 1
+    assert "cells" not in summary["optimization"]["comparison"]["baseline_grid"]
+    assert summary["optimization"]["comparison"]["baseline_grid"]["cell_count"] == 2
+    assert summary["optimization"]["tested_count"] == 3
+    assert len(result["optimization"]["comparison"]["baseline_grid"]["cells"]) == 2
+
+
 def test_full_result_file_url_is_attached_for_heavy_result(tmp_path, monkeypatch):
     session = CapturingSession(SimpleNamespace(response_json={}))
     monkeypatch.setattr(simulation_store, "STATIC_DIR", tmp_path)

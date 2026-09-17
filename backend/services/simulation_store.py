@@ -590,13 +590,7 @@ def summarize_response(result):
     grid = summary.get("grid")
 
     if isinstance(grid, dict):
-        cells = grid.get("cells") or []
-        summary["grid"] = {
-            key: value
-            for key, value in grid.items()
-            if key != "cells"
-        }
-        summary["grid"]["cell_count"] = grid.get("cell_count") or len(cells)
+        summary["grid"] = summarized_grid(grid)
 
     users = summary.get("users")
 
@@ -605,7 +599,35 @@ def summarize_response(result):
             "count": len(users),
         }
 
+    optimization = summary.get("optimization")
+
+    if isinstance(optimization, dict):
+        comparison = optimization.get("comparison")
+
+        if isinstance(comparison, dict) and isinstance(
+            comparison.get("baseline_grid"),
+            dict,
+        ):
+            comparison = dict(comparison)
+            comparison["baseline_grid"] = summarized_grid(
+                comparison["baseline_grid"],
+            )
+            optimization = dict(optimization)
+            optimization["comparison"] = comparison
+            summary["optimization"] = optimization
+
     return summary
+
+
+def summarized_grid(grid):
+    cells = grid.get("cells") or []
+    stripped = {
+        key: value
+        for key, value in grid.items()
+        if key != "cells"
+    }
+    stripped["cell_count"] = grid.get("cell_count") or len(cells)
+    return stripped
 
 
 def to_json_string(value):

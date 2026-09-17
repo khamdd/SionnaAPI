@@ -158,7 +158,7 @@ def test_simulation_jobs_returns_items(monkeypatch):
 def test_simulation_job_result_returns_result(monkeypatch):
     monkeypatch.setattr(
         api_module,
-        "get_simulation_job_result",
+        "get_simulation_job_result_payload",
         lambda job_id: {
             "database_configured": True,
             "result": {
@@ -174,6 +174,29 @@ def test_simulation_job_result_returns_result(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["sinr_db"] == 12.5
+
+
+def test_simulation_job_result_streams_artifact_file(monkeypatch, tmp_path):
+    artifact = tmp_path / "simulation-job-results" / "job-1.json"
+    artifact.parent.mkdir()
+    artifact.write_text('{"status": "success", "grid": {"cells": [1]}}', encoding="utf-8")
+    monkeypatch.setattr(
+        api_module,
+        "get_simulation_job_result_payload",
+        lambda job_id: {
+            "database_configured": True,
+            "result": None,
+            "artifact_path": artifact,
+        },
+    )
+
+    response = client.get(
+        "/api/v1/simulation-jobs/11111111-1111-1111-1111-111111111111/result"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.json()["grid"]["cells"] == [1]
 
 
 def test_save_simulation_job_returns_run_id(monkeypatch):

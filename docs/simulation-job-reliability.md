@@ -19,6 +19,11 @@ set `SIMULATION_WORKER_ENABLED=false` when running a separate worker.
 - The dedicated Linux worker enforces the configured per-attempt timeout.
 - Result artifacts use the job ID as their stable path, and only the worker that
   owns the current lease can finalize database state.
+- Job rows store only a summarized result: large grid cell payloads (including
+  nested grids such as the optimization comparison baseline grid) are reduced to
+  `cell_count`, keeping queue status/list responses small. Full results live in
+  the artifact and `GET /api/v1/simulation-jobs/{job_id}/result` streams the
+  artifact file directly instead of re-serializing it.
 - Queue result files are reconciled at API/worker startup and periodically while
   the worker runs. Files older than the short reconciliation grace period are
   removed when their job ID no longer exists.

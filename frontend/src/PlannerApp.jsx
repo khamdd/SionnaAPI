@@ -453,34 +453,44 @@ export default function PlannerApp({ currentUser, isNewSession, onLogout }) {
         return;
       }
 
+      const showJobResult = (result) => {
+        setModalContent(
+          <HistoryModalBody
+            title={`Queue result: ${formatSimulationType(job.simulation_type)}`}
+          >
+            <JobResultDetail
+              job={job}
+              result={result}
+              onDiscard={() => discardSimulationJob(job)}
+              onOpenHistory={
+                job.result_run_id
+                  ? () => openHistoryDetail(job.result_run_id)
+                  : null
+              }
+              onPreviewLoadingChange={handleHistoryPreviewLoadingChange}
+              onSave={() => saveSimulationJob(job)}
+              wardBoundary={
+                job.scene_id === activeScene?.id
+                  ? activeScene?.ward_boundary
+                  : null
+              }
+            />
+          </HistoryModalBody>,
+        );
+      };
+
+      const summaryResult = job.result;
+      if (job.status === "succeeded" && summaryResult) {
+        showJobResult(summaryResult);
+        setJobProgressLabel("Loading detailed result...");
+      }
+
       const fullResult =
         job.status === "succeeded"
           ? await getSimulationJobResult(jobId)
           : job.result;
 
-      setModalContent(
-        <HistoryModalBody
-          title={`Queue result: ${formatSimulationType(job.simulation_type)}`}
-        >
-          <JobResultDetail
-            job={job}
-            result={fullResult}
-            onDiscard={() => discardSimulationJob(job)}
-            onOpenHistory={
-              job.result_run_id
-                ? () => openHistoryDetail(job.result_run_id)
-                : null
-            }
-            onPreviewLoadingChange={handleHistoryPreviewLoadingChange}
-            onSave={() => saveSimulationJob(job)}
-            wardBoundary={
-              job.scene_id === activeScene?.id
-                ? activeScene?.ward_boundary
-                : null
-            }
-          />
-        </HistoryModalBody>,
-      );
+      showJobResult(fullResult);
     } catch (error) {
       setModalContent(
         <p className="history-status error-text">

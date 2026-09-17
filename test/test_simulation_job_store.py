@@ -3,7 +3,12 @@ from contextlib import nullcontext
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-from backend.services import simulation_job_store
+from backend.services import simulation_job_store, simulation_store
+
+
+def patch_static_dir(monkeypatch, tmp_path):
+    monkeypatch.setattr(simulation_job_store, "STATIC_DIR", tmp_path)
+    monkeypatch.setattr(simulation_store, "STATIC_DIR", tmp_path)
 
 
 def test_successful_job_stores_result_without_run_reference(monkeypatch):
@@ -169,7 +174,7 @@ def test_cancellation_race_removes_result_written_before_job_update(tmp_path, mo
     artifact.write_text("{}", encoding="utf-8")
     row = running_job(cancel_requested=True, result_json=None)
     session = SimpleNamespace(scalar=lambda statement: row)
-    monkeypatch.setattr(simulation_job_store, "STATIC_DIR", tmp_path)
+    patch_static_dir(monkeypatch, tmp_path)
     monkeypatch.setattr(
         simulation_job_store,
         "db_session",
@@ -205,7 +210,7 @@ def test_orphan_reconciliation_removes_unreferenced_old_files(tmp_path, monkeypa
     os.utime(referenced, (old_timestamp, old_timestamp))
 
     session = SimpleNamespace(scalars=lambda statement: ["known"])
-    monkeypatch.setattr(simulation_job_store, "STATIC_DIR", tmp_path)
+    patch_static_dir(monkeypatch, tmp_path)
     monkeypatch.setattr(simulation_job_store, "is_database_configured", lambda: True)
     monkeypatch.setattr(
         simulation_job_store,

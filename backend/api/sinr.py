@@ -1,6 +1,7 @@
 import math
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import FileResponse
 
 from backend.api.dependencies import require_current_user
 from backend.database import is_database_configured
@@ -37,7 +38,7 @@ from backend.services.simulation_job_store import (
     create_simulation_job,
     delete_simulation_job,
     get_simulation_job,
-    get_simulation_job_result,
+    get_simulation_job_result_payload,
     list_simulation_jobs,
     request_simulation_job_cancellation,
     save_simulation_job_result,
@@ -494,7 +495,7 @@ def simulation_jobs(limit: int = 100):
 
 @router.get("/simulation-jobs/{job_id}/result")
 def simulation_job_result(job_id: str):
-    response = get_simulation_job_result(job_id)
+    response = get_simulation_job_result_payload(job_id)
 
     if not response.get("database_configured"):
         raise HTTPException(
@@ -512,6 +513,13 @@ def simulation_job_result(job_id: str):
         raise HTTPException(
             status_code=500,
             detail=response["error"],
+        )
+
+    artifact_path = response.get("artifact_path")
+    if artifact_path is not None:
+        return FileResponse(
+            artifact_path,
+            media_type="application/json",
         )
 
     if response.get("result") is None:

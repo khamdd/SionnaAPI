@@ -182,8 +182,34 @@ def get_simulation_job_result(job_id):
     return load_simulation_job_result(job)
 
 
-def load_simulation_job_result(job):
-    """Load a job's complete result from inline JSON or its stable artifact."""
+def get_simulation_job_result_payload(job_id):
+    """Resolve a job result without parsing artifact-backed files.
+
+    Artifact-backed results are reported through "artifact_path" so callers
+    can stream the file instead of loading it into memory.
+    """
+    response = get_simulation_job(job_id)
+
+    if not response.get("database_configured"):
+        return {
+            "database_configured": False,
+            "result": None,
+        }
+
+    job = response.get("item")
+    if job is None:
+        return {
+            "database_configured": True,
+            "result": None,
+            "not_found": not response.get("error"),
+            "error": response.get("error"),
+        }
+
+    return resolve_simulation_job_result(job)
+
+
+def resolve_simulation_job_result(job):
+    """Return a job's inline result or the artifact path that stores it."""
     if not isinstance(job, dict):
         job = serialize_job(job)
 
@@ -203,6 +229,24 @@ def load_simulation_job_result(job):
             "result": None,
             "error": "Queued simulation result file is unavailable.",
         }
+
+    return {
+        "database_configured": True,
+        "result": None,
+        "artifact_path": file_path,
+    }
+
+
+def load_simulation_job_result(job):
+    """Load a job's complete result from inline JSON or its stable artifact."""
+    response = resolve_simulation_job_result(job)
+
+    if response.get("error") or response.get("result") is not None:
+        return response
+
+    file_path = response.get("artifact_path")
+    if file_path is None:
+        return response
 
     try:
         return {

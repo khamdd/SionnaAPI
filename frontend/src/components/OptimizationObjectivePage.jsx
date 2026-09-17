@@ -99,10 +99,22 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
           return;
         }
         if (job.status === "succeeded") {
+          const summary = job.result;
+          if (summary?.optimization) {
+            setShowTestedSetups(false);
+            setShowOutcome(false);
+            setResult(summary);
+            setSelectedCandidateId((summary.optimization.recommended_candidate || summary.optimization.best)?.id);
+            setSaved(Boolean(job.result_run_id));
+            setStatus(summary.full_result_url ? "Optimization summary ready. Loading coverage details..." : "Optimization finished.");
+          }
+
           const full = await getSimulationJobResult(jobId);
           if (disposed) return;
           if (!full.optimization) {
-            setError(full.error || "Optimization result is unavailable. Start a new run.");
+            if (!summary?.optimization) {
+              setError(full.error || "Optimization result is unavailable. Start a new run.");
+            }
             setBusy(false);
             return;
           }
