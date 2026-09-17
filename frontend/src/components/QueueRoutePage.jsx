@@ -8,6 +8,8 @@ function QueueRow({
   isSelected,
   isSelectedForDelete,
   job,
+  cancellingJobIds,
+  onCancel,
   onDiscard,
   onOpen,
   onOpenHistory,
@@ -21,6 +23,8 @@ function QueueRow({
   const isSaved = Boolean(job.result_run_id);
   const canOpen = isSucceeded || status === "failed";
   const canDiscard = !isRunning;
+  const isCancelling = cancellingJobIds.has(job.id);
+  const canCancel = isQueued || isRunning;
 
   return (
     <div className="queue-row">
@@ -63,6 +67,14 @@ function QueueRow({
         History
       </button>
       <button
+        className="ghost-button queue-cancel"
+        type="button"
+        disabled={isLoading || !canCancel || isCancelling}
+        onClick={() => onCancel(job.id)}
+      >
+        {isCancelling ? "Stopping..." : "Stop"}
+      </button>
+      <button
         className="history-delete queue-discard"
         type="button"
         title={isSaved ? "Remove queue entry" : "Discard simulation result"}
@@ -82,6 +94,8 @@ export default function QueueRoutePage({
   jobs,
   jobStatus,
   onDiscard,
+  cancellingJobIds,
+  onCancel,
   onDeleteSelected,
   onOpen,
   onOpenHistory,
@@ -131,6 +145,8 @@ export default function QueueRoutePage({
                 isSelected={job.id === selectedJobId}
                 isSelectedForDelete={selectedDeleteIds.has(job.id)}
                 job={job}
+                cancellingJobIds={cancellingJobIds}
+                onCancel={onCancel}
                 onDiscard={onDiscard}
                 onOpen={onOpen}
                 onOpenHistory={onOpenHistory}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { deleteSimulationJob, listSimulationJobs } from "../api";
+import { cancelSimulationJob, deleteSimulationJob, listSimulationJobs } from "../api";
 import { toggleSetValue } from "../utils/collections";
 
 const JOB_PAGE_LIMIT = 200;
@@ -11,6 +11,7 @@ export default function useSimulationQueue({ enabled, route }) {
   const [progressLabel, setProgressLabel] = useState("");
   const [selectedDeleteIds, setSelectedDeleteIds] = useState(() => new Set());
   const [selectedJobId, setSelectedJobId] = useState(null);
+  const [cancellingJobIds, setCancellingJobIds] = useState(() => new Set());
   const [status, setStatus] = useState("No queue loaded.");
 
   const load = useCallback(async () => {
@@ -153,8 +154,39 @@ export default function useSimulationQueue({ enabled, route }) {
     }
   }, [load, progressLabel, selectedDeleteIds]);
 
+  const cancelJob = useCallback(async (jobId) => {
+    if (!jobId || cancellingJobIds.has(jobId)) {
+      return null;
+    }
+
+    setCancellingJobIds((current) => new Set(current).add(jobId));
+    setError(false);
+    try {
+      const result = await cancelSimulationJob(jobId);
+      await load();
+      setStatus(
+        result.cancelled
+          ? "Simulation job stopped."
+          : "Stop requested. The worker will finish its current step and stop.",
+      );
+      return result;
+    } catch (cancelError) {
+      setStatus(`Could not stop simulation: ${cancelError.message}`);
+      setError(true);
+      return null;
+    } finally {
+      setCancellingJobIds((current) => {
+        const next = new Set(current);
+        next.delete(jobId);
+        return next;
+      });
+    }
+  }, [cancellingJobIds, load]);
+
   return {
     deleteSelected,
+    cancelJob,
+    cancellingJobIds,
     error,
     jobs,
     load,

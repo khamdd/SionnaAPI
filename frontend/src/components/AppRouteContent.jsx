@@ -164,6 +164,8 @@ export default function AppRouteContent({
           jobStatus={queue.status}
           isLoading={queue.isLoading}
           onDiscard={queue.onDiscard}
+          cancellingJobIds={queue.cancellingJobIds}
+          onCancel={queue.onCancel}
           onDeleteSelected={queue.onDeleteSelected}
           onOpen={queue.onOpen}
           onOpenHistory={queue.onOpenHistory}

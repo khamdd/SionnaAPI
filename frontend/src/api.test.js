@@ -273,6 +273,16 @@ describe("history and queue endpoints", () => {
     expectRequest({ path: "/api/v1/simulation-jobs/job-1/result" });
   });
 
+  it("cancels a simulation job with a body-less POST", async () => {
+    await api.cancelSimulationJob("job-1");
+
+    expectRequest({
+      method: "POST",
+      path: "/api/v1/simulation-jobs/job-1/cancel",
+      headers: { Authorization: "Bearer tok-123" },
+    });
+  });
+
   it("saves a queue result with a body-less POST", async () => {
     await api.saveSimulationJobResult("job-1");
 

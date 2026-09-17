@@ -81,6 +81,8 @@ export default function PlannerApp({ currentUser, isNewSession, onLogout }) {
   });
   const {
     error: jobError,
+    cancelJob: cancelSimulationJobFromQueue,
+    cancellingJobIds,
     jobs: simulationJobs,
     load: loadJobs,
     progressLabel: jobProgressLabel,
@@ -705,6 +707,8 @@ export default function PlannerApp({ currentUser, isNewSession, onLogout }) {
           jobs: simulationJobs,
           onDeleteSelected: deleteSelectedJobs,
           onDiscard: discardSimulationJob,
+          onCancel: cancelSimulationJobFromQueue,
+          cancellingJobIds,
           onOpen: openJobDetail,
           onOpenHistory: openHistoryDetail,
           onRefresh: loadJobs,

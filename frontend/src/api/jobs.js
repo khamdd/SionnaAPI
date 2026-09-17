@@ -42,6 +42,12 @@ export function getSimulationJobResult(jobId) {
   return requestJson(`/api/v1/simulation-jobs/${jobId}/result`);
 }
 
+export function cancelSimulationJob(jobId) {
+  return requestJson(`/api/v1/simulation-jobs/${jobId}/cancel`, {
+    method: "POST",
+  });
+}
+
 export function saveSimulationJobResult(jobId) {
   return requestJson(`/api/v1/simulation-jobs/${jobId}/save`, {
     method: "POST",

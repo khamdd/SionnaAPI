@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getSimulationJob, getSimulationJobResult, runNetworkCoverageOptimization, saveSimulationJobResult } from "../api";
+import { cancelSimulationJob, getSimulationJob, getSimulationJobResult, runNetworkCoverageOptimization, saveSimulationJobResult } from "../api";
 import { downloadOptimizationReport } from "../utils/optimizationReport";
 
 const AGGREGATE_METRICS = [
@@ -50,6 +50,7 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
   const [jobId, setJobId] = useState(() => read(runKey)?.jobId || null);
   const [sourceSignature, setSourceSignature] = useState(() => read(runKey)?.signature || "");
   const [busy, setBusy] = useState(() => Boolean(read(runKey)?.jobId));
+  const [cancelling, setCancelling] = useState(false);
   const [result, setResult] = useState(null);
   const [status, setStatus] = useState("Ready to search antenna tilt, power, and azimuth combinations.");
   const [error, setError] = useState("");
@@ -96,6 +97,15 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
         if (job.status === "failed") {
           setError(job.error_message || "Optimization failed.");
           setBusy(false);
+          return;
+        }
+        if (job.status === "cancelled") {
+          setBusy(false);
+          setCancelling(false);
+          setJobId(null);
+          write(runKey, null);
+          setError("");
+          setStatus("Optimization stopped.");
           return;
         }
         if (job.status === "succeeded") {
@@ -149,6 +159,29 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
     return () => { disposed = true; clearTimeout(timer); };
   }, [jobId, activeScene.id, runKey]);
 
+  async function stop() {
+    if (!jobId || cancelling) return;
+    setCancelling(true);
+    setError("");
+    setStatus("Stopping optimization...");
+    try {
+      const response = await cancelSimulationJob(jobId);
+      if (response.cancelled) {
+        setBusy(false);
+        setCancelling(false);
+        setJobId(null);
+        write(runKey, null);
+        setStatus("Optimization stopped.");
+        return;
+      }
+      setStatus("Stop requested. Finishing the current simulation...");
+    } catch (err) {
+      setCancelling(false);
+      setError(`Could not stop optimization: ${err.message}`);
+      setStatus("Optimization is still running.");
+    }
+  }
+
   function update(index, field, value) {
     setObjectives((current) => current.map((item, i) => {
       if (i !== index) return item;
@@ -172,6 +205,7 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
     if (busy) return;
     const targets = objectives.map(serializeObjective);
     setBusy(true);
+    setCancelling(false);
     setJobId(null);
     setResult(null);
     setError("");
@@ -420,6 +454,7 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
             <p role="status">{status}</p>
             {busy && <p>{jobId ? "You can leave this page and return to check the run." : "Keep this page open while the request is starting."}</p>}
           </div>
+          {jobId && busy && <button type="button" className="optimization-stop-button" onClick={stop} disabled={cancelling}>{cancelling ? "Stopping..." : "Stop optimization"}</button>}
         </div>
         {error && <p className="error-text" role="alert">{error}</p>}
       </form>
