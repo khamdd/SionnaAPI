@@ -617,6 +617,7 @@ function ObjectiveFields({ objective, index, update }) {
 }
 
 const COMPARISON_MEASUREMENTS = {
+  coverage: { label: "Coverage", unit: "", unchanged: 0 },
   signal_dbm: { label: "RSRP", unit: "dBm", unchanged: 0.1 },
   sinr_db: { label: "SINR", unit: "dB", unchanged: 0.1 },
   throughput_mbps: { label: "Throughput", unit: "Mbps", unchanged: 0.1 },
@@ -644,7 +645,7 @@ function OptimizationMapComparison({ baselineGrid, candidateGrid }) {
       <span className="improved">Improved {summary.improved}</span>
       <span className="unchanged">Unchanged {summary.unchanged}</span>
       <span className="regressed">Regressed {summary.regressed}</span>
-      <small>{summary.compared} matched cells · change threshold ±{COMPARISON_MEASUREMENTS[measurement].unchanged} {COMPARISON_MEASUREMENTS[measurement].unit}</small>
+      <small>{summary.compared} matched cells · {measurement === "coverage" ? "coverage state changes counted exactly" : `change threshold ±${COMPARISON_MEASUREMENTS[measurement].unchanged} ${COMPARISON_MEASUREMENTS[measurement].unit}`}</small>
     </div>
   </section>;
 }
@@ -680,8 +681,8 @@ function summarizeGridChange(baselineGrid, candidateGrid, measurement) {
   const threshold = COMPARISON_MEASUREMENTS[measurement]?.unchanged || 0.1;
   const summary = { improved: 0, unchanged: 0, regressed: 0, compared: 0 };
   for (const { cell, baseline } of matchedGridCells(baselineGrid, candidateGrid)) {
-    const before = finiteMeasurement(baseline[measurement]);
-    const after = finiteMeasurement(cell[measurement]);
+    const before = comparisonValue(baseline, measurement);
+    const after = comparisonValue(cell, measurement);
     if (before === null || after === null) continue;
     const delta = after - before;
     summary.compared += 1;
@@ -705,10 +706,10 @@ function drawComparisonHeatmap(canvas, grid, measurement, baselineGrid, delta) {
   (grid.cells || []).forEach((cell, index) => {
     const row = Number.isFinite(Number(cell.row)) ? Number(cell.row) : Math.floor(index / cols);
     const col = Number.isFinite(Number(cell.col)) ? Number(cell.col) : index % cols;
-    const value = finiteMeasurement(cell[measurement]);
+    const value = comparisonValue(cell, measurement);
     let color = measurementColor(measurement, value);
     if (delta) {
-      const before = finiteMeasurement(baseline.get(cellKey(cell, index))?.[measurement]);
+      const before = comparisonValue(baseline.get(cellKey(cell, index)), measurement);
       color = deltaColor(value !== null && before !== null ? value - before : null, COMPARISON_MEASUREMENTS[measurement].unchanged);
     }
     context.fillStyle = color;
@@ -720,8 +721,17 @@ function finiteMeasurement(value) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function comparisonValue(cell, measurement) {
+  if (measurement !== "coverage") return finiteMeasurement(cell?.[measurement]);
+  if (!cell || cell.overlap_level === "no_coverage") return 0;
+  const overlapCount = finiteMeasurement(cell.overlap_count);
+  if (overlapCount !== null) return overlapCount > 0 ? 1 : 0;
+  return finiteMeasurement(cell.sinr_db) === null ? 0 : 1;
+}
+
 function measurementColor(measurement, value) {
   if (!Number.isFinite(value)) return "#d7dde1";
+  if (measurement === "coverage") return value > 0 ? "#267da8" : "#cbd3d8";
   if (measurement === "signal_dbm") return value < -110 ? "#b84a4a" : value < -95 ? "#d9a441" : value < -80 ? "#6eaa78" : "#267da8";
   if (measurement === "sinr_db") return value < 0 ? "#b84a4a" : value < 8 ? "#d9a441" : value < 18 ? "#6eaa78" : "#267da8";
   return value < 20 ? "#b84a4a" : value < 100 ? "#d9a441" : value < 500 ? "#6eaa78" : "#267da8";

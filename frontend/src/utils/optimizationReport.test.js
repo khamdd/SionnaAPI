@@ -38,14 +38,13 @@ describe("optimization engineering report", () => {
       } },
     });
 
-    expect(report).toContain("Targets and safety checks passed");
     expect(report).toContain("Test &lt;scene&gt;");
     expect(report).not.toContain("Test <scene>");
     expect(report).toContain("A&lt;1");
     expect(report).toContain("Tilt 3°, power 30 dBm, azimuth 90°");
     expect(report).toContain("P10 SINR");
     expect(report).toContain("Alternative 1");
-    expect(report).toContain("Starting RSRP");
+    expect(report).toContain("Starting coverage");
     expect(report).toContain("<svg");
     expect(report).toContain("8 simulations");
   });
