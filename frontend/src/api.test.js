@@ -227,6 +227,14 @@ describe("authentication endpoints", () => {
 });
 
 describe("history and queue endpoints", () => {
+  it("loads scene-scoped simulation statistics", async () => {
+    await api.getSimulationStatistics();
+    expectRequest({ path: "/api/v1/simulation-statistics?limit=100" });
+
+    await api.getSimulationStatistics(40, "scene-9");
+    expectRequest({ path: "/api/v1/simulation-statistics?limit=40&scene_id=scene-9" });
+  });
+
   it("lists runs with a default limit and optional scene id", async () => {
     await api.listSimulationRuns();
 

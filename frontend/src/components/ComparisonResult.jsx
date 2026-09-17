@@ -9,6 +9,7 @@ import {
   formatText,
 } from "../utils/format";
 import Scene3DPreview from "./Scene3DPreview";
+import { BarChart, ChartCard } from "./charts/ChartPrimitives";
 
 export default function ComparisonResult({ type, items, onPreviewLoadingChange, wardBoundary = null }) {
   if (type === "coverage_map") {
@@ -76,8 +77,16 @@ function CoverageMapComparison({ items, onPreviewLoadingChange, wardBoundary }) 
 }
 
 function NetworkCoverageComparison({ items, onPreviewLoadingChange, wardBoundary }) {
+  const bars = items.flatMap((item, index) => {
+    const grid = item.response_json?.grid || {};
+    const kpis = item.response_json?.kpis || {};
+    return [
+      { label: `Run ${index + 1} coverage`, value: kpis.covered_area_percent ?? grid.coverage_percent },
+      { label: `Run ${index + 1} overlap`, value: grid.overlap_summary?.overlap_percent },
+    ];
+  });
   return (
-    <div className="comparison-grid">
+    <><ChartCard title="Coverage comparison" subtitle="Higher coverage is better; lower overlap is usually better." legend={[{ label: "Coverage", color: "#0f766e", description: "area reached by the network" }, { label: "Overlap", color: "#f59e0b", description: "area reached by multiple antennas" }]}><BarChart bars={bars} unit="%" /></ChartCard><div className="comparison-grid">
       {items.map((item, index) => {
         const response = item.response_json || {};
         const grid = response.grid || {};
@@ -112,7 +121,7 @@ function NetworkCoverageComparison({ items, onPreviewLoadingChange, wardBoundary
           </article>
         );
       })}
-    </div>
+    </div></>
   );
 }
 
@@ -136,10 +145,10 @@ function SinrComparison({ items }) {
   });
 
   return (
-    <ComparisonTable
+    <><ChartCard title="SINR comparison" subtitle="Higher SINR means a cleaner, more reliable radio link." legend={[{ label: "SINR", color: "#0f766e", description: "signal quality in dB" }, { label: "Signal", color: "#f59e0b", description: "received power in dBm" }]}><BarChart bars={items.flatMap((item, index) => [{ label: `Run ${index + 1} SINR`, value: item.response_json?.sinr_db }, { label: `Run ${index + 1} signal`, value: item.response_json?.signal_power }])} unit=" dB" /></ChartCard><ComparisonTable
       headers={["Run", "Created", "Status", "Transmitter", "Receiver", "Tilt", "Power", "SINR", "Signal", "Noise"]}
       rows={rows}
-    />
+    /></>
   );
 }
 
@@ -167,7 +176,7 @@ function ThroughputComparison({ items }) {
   });
 
   return (
-    <ComparisonTable
+    <><ChartCard title="Throughput comparison" subtitle="Target throughput is the proposed setting; compare it with the base setting." legend={[{ label: "Base", color: "#64748b", description: "current setting" }, { label: "Target", color: "#0f766e", description: "proposed setting" }]}><BarChart bars={items.flatMap((item, index) => { const comparison = item.response_json?.comparison || {}; return [{ label: `Run ${index + 1} base`, value: comparison.base_throughput_mbps }, { label: `Run ${index + 1} target`, value: comparison.target_throughput_mbps }]; })} colors={["#64748b", "#0f766e"]} unit=" Mbps" /></ChartCard><ComparisonTable
       headers={[
         "Run",
         "Created",
@@ -184,7 +193,7 @@ function ThroughputComparison({ items }) {
         "Direction",
       ]}
       rows={rows}
-    />
+    /></>
   );
 }
 

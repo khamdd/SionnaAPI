@@ -23,6 +23,7 @@ separate task.
 | `/throughput` | Yes | Yes | Simulations | Throughput Comparison |
 | `/queue` | Yes | Yes | Results | Simulation Queue |
 | `/history` | Yes | Yes | Results | Saved Results scoped to the work scene |
+| `/statistics` | Yes | Yes | Results | Scene-scoped simulation statistics |
 | Any unknown path | Yes | No | None | Normalizes to `/scenes` |
 
 ## Session and Navigation Matrix

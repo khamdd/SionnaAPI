@@ -116,6 +116,86 @@ def list_simulation_runs(limit=25, scene_id=None):
         }
 
 
+def get_simulation_statistics(scene_id=None, limit=100):
+    """Return scene-scoped KPI series and summary counts for the dashboard."""
+    if not is_database_configured():
+        return {"database_configured": False, "summary": {}, "series": []}
+
+    try:
+        with db_session() as session:
+            query = select(SimulationRun).order_by(SimulationRun.created_at.asc()).limit(limit)
+            if scene_id:
+                query = query.where(SimulationRun.scene_id == scene_id)
+
+            rows = list(session.scalars(query))
+            series = []
+            type_counts = {}
+            successful = 0
+            for row in rows:
+                response = normalize_json_value(row.response_json) or {}
+                item = {
+                    "id": str(row.id),
+                    "simulation_type": row.simulation_type,
+                    "status": row.status,
+                    "created_at": serialize_datetime(row.created_at),
+                    "metrics": extract_statistics_metrics(row.simulation_type, response),
+                }
+                series.append(item)
+                type_counts[row.simulation_type] = type_counts.get(row.simulation_type, 0) + 1
+                if str(row.status).lower() == "success":
+                    successful += 1
+
+            return {
+                "database_configured": True,
+                "summary": {
+                    "total_runs": len(rows),
+                    "successful_runs": successful,
+                    "failed_runs": len(rows) - successful,
+                    "failure_rate": round(((len(rows) - successful) / len(rows)) * 100, 2) if rows else 0,
+                    "latest_run": series[-1] if series else None,
+                    "type_counts": type_counts,
+                },
+                "series": series,
+            }
+    except SQLAlchemyError:
+        logger.exception("Failed to load simulation statistics.")
+        return {
+            "database_configured": True,
+            "summary": {},
+            "series": [],
+            "error": "Failed to load simulation statistics.",
+        }
+
+
+def extract_statistics_metrics(simulation_type, response):
+    metrics = {}
+    if simulation_type == "network_coverage":
+        kpis = response.get("kpis") or {}
+        grid = response.get("grid") or {}
+        overlap = grid.get("overlap_summary") or {}
+        metrics.update({
+            "coverage_percent": kpis.get("covered_area_percent"),
+            "covered_cells": kpis.get("covered_cells"),
+            "overlap_percent": overlap.get("overlap_percent"),
+        })
+    elif simulation_type == "rsrp_simulation":
+        summary = response.get("summary") or {}
+        metrics.update({
+            "coverage_percent": summary.get("coverage_percent"),
+            "average_rsrp_dbm": summary.get("average_best_rsrp_dbm"),
+        })
+    elif simulation_type == "sinr":
+        metrics["sinr_db"] = response.get("sinr_db")
+    elif simulation_type == "throughput_comparison":
+        comparison = response.get("comparison") or {}
+        metrics.update({
+            "base_throughput_mbps": comparison.get("base_throughput_mbps"),
+            "target_throughput_mbps": comparison.get("target_throughput_mbps"),
+            "percentage_change": comparison.get("percentage_change"),
+        })
+    return {key: value for key, value in metrics.items() if value is not None}
+
+
 def get_simulation_run(run_id):
     if not is_database_configured():
         return {

@@ -353,6 +353,7 @@ POST   /api/v1/simulation-jobs/{job_id}/save
 POST   /api/v1/simulation-jobs/{job_id}/cancel
 DELETE /api/v1/simulation-jobs/{job_id}
 GET    /api/v1/simulation-runs
+GET    /api/v1/simulation-statistics
 GET    /api/v1/simulation-runs/{run_id}
 GET    /api/v1/simulation-runs/{run_id}/result
 DELETE /api/v1/simulation-runs/{run_id}

@@ -67,6 +67,7 @@ Queue invariants:
 
 ### Simulation History
 
+- `GET /api/v1/simulation-statistics`
 - `GET /api/v1/simulation-runs`
 - `GET /api/v1/simulation-runs/{run_id}`
 - `GET /api/v1/simulation-runs/{run_id}/result`
@@ -75,6 +76,7 @@ Queue invariants:
 History invariants:
 
 - The frontend requests and displays History scoped to the selected scene.
+- Statistics are aggregated from saved runs and scoped to the selected scene.
 - Comparisons require successful runs with the same simulation type and scene.
 - Deleting a run deletes its database rows and owned artifacts.
 - Every user-facing delete asks for confirmation first.

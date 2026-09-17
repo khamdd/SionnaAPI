@@ -49,6 +49,7 @@ from backend.services.simulation_store import (
     get_simulation_run_result,
     list_simulation_runs,
     store_simulation_result,
+    get_simulation_statistics,
     utc_now,
 )
 from backend.services.sinr_service import (
@@ -619,6 +620,11 @@ def delete_simulation_job_route(job_id: str):
 @router.get("/simulation-runs")
 def simulation_runs(limit: int = 25, scene_id: str | None = None):
     return list_simulation_runs(limit=limit, scene_id=scene_id)
+
+
+@router.get("/simulation-statistics")
+def simulation_statistics(limit: int = 100, scene_id: str | None = None):
+    return get_simulation_statistics(limit=min(max(limit, 1), 500), scene_id=scene_id)
 
 
 @router.get("/simulation-runs/{run_id}/result")

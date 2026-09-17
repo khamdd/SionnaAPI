@@ -15,6 +15,7 @@ function NavIcon({ path }) {
     "/throughput": "M3 17 8 12l4 4 8-9m-5 0h5v5",
     "/queue": "M5 4h14v4H5V4Zm0 6h14v4H5v-4Zm0 6h14v4H5v-4Z",
     "/history": "M12 8v5l3 2m6-3a9 9 0 1 1-3-6.7M21 3v6h-6",
+    "/statistics": "M4 19V5m0 14h16M8 16v-5m4 5V7m4 9v-8",
   };
 
   return (
@@ -41,13 +42,14 @@ export default function Navbar({
   const simulationRoutes = visibleRoutes.filter((item) => (
     item.path !== "/queue"
     && item.path !== "/history"
+    && item.path !== "/statistics"
     && !configurationPaths.includes(item.path)
   ));
   const configurationRoutes = visibleRoutes.filter((item) => (
     configurationPaths.includes(item.path)
   ));
   const resultRoutes = visibleRoutes.filter((item) => (
-    item.path === "/queue" || item.path === "/history"
+    item.path === "/queue" || item.path === "/history" || item.path === "/statistics"
   ));
 
   return (

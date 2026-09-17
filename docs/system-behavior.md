@@ -51,6 +51,9 @@ changes normally should not require an edit here.
   `static/` directories while database rows retain summaries and references.
 - History is scoped to the current work scene and supports detail, compatible
   comparisons, and confirmed single or bulk deletion.
+- Statistics is a scene-scoped Results view derived from saved History runs;
+  optimization results expose trial progression and baseline/recommendation
+  KPI charts.
 - Simulation positions are validated against active scene solver bounds. Coverage
   uses one inventory antenna; Network Coverage and RSRP accept up to ten enabled
   antennas; SINR and Throughput require one transmitter antenna and one receiver

@@ -8,4 +8,5 @@ export const ROUTES = [
   { path: "/sinr", label: "SINR Analysis" },
   { path: "/throughput", label: "Throughput" },
   { path: "/history", label: "Saved Results" },
+  { path: "/statistics", label: "Statistics" },
 ];

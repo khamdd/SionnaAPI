@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { cancelSimulationJob, getSimulationJob, getSimulationJobResult, runNetworkCoverageOptimization, saveSimulationJobResult } from "../api";
 import { downloadOptimizationReport } from "../utils/optimizationReport";
+import { BarChart, ChartCard, LineChart } from "./charts/ChartPrimitives";
 
 const AGGREGATE_METRICS = [
   { id: "uncovered_area_percent", label: "Uncovered area", unit: "%", operator: "<=", target: 2 },
@@ -525,6 +526,7 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
             </div>
           </section>}
         </>}
+        <OptimizationCharts optimization={optimization} selectedCandidate={selectedCandidate} />
         <table className="optimization-results-table optimization-candidate-table"><thead><tr><th>Use</th><th title="Setups are ranked by target results first, then by fewer changed antennas and smaller adjustments.">Option</th><th>Goals met</th><th>Guardrails</th><th>Antennas changed</th><th>Adjustments</th></tr></thead>
           <tbody>{candidateOptions.map((candidate, index) => {
             const evaluations = candidate.evaluation?.evaluations || [];
@@ -583,6 +585,25 @@ export default function OptimizationObjectivePage({ activeScene, baseRequest, on
       </section>}
     </main>
   );
+}
+
+function OptimizationCharts({ optimization, selectedCandidate }) {
+  if (!optimization || !selectedCandidate) return null;
+  const objective = optimization.objectives?.[0];
+  const metric = objective?.metric || objective?.measurement;
+  const evaluations = (optimization.trials || []).map((trial, index) => ({
+    label: String(index + 1),
+    value: trial.evaluation?.evaluations?.[0]?.actual,
+  })).filter((point) => Number.isFinite(Number(point.value)));
+  const baseline = optimization.baseline?.evaluation?.evaluations?.[0]?.actual;
+  const selected = selectedCandidate.evaluation?.evaluations?.[0]?.actual;
+  const target = objective?.target;
+  const unit = objective?.unit || (metric?.includes("percent") ? "%" : "");
+  const bars = [{ label: "Baseline", value: baseline }, { label: "Recommended", value: selected }].filter((bar) => Number.isFinite(Number(bar.value)));
+  return <section className="optimization-chart-grid" aria-label="Optimization statistics">
+    <ChartCard title="Search progression" subtitle={`Trial order · ${objectiveLabel(objective || {})}`} legend={[{ label: "Trial result", color: "#0f766e", description: "actual value for each tested setup" }, ...(Number.isFinite(Number(target)) ? [{ label: "Target", dashed: true, description: "goal the optimizer tried to reach" }] : [])]}><LineChart points={evaluations} target={target} unit={unit} color="#0f766e" /></ChartCard>
+    <ChartCard title="Baseline vs recommended" subtitle="The first objective’s actual result." legend={[{ label: "Baseline", color: "#64748b", description: "starting antenna setup" }, { label: "Recommended", color: "#0f766e", description: "setup selected by the optimizer" }]}><BarChart bars={bars} colors={["#64748b", "#0f766e"]} unit={unit} /></ChartCard>
+  </section>;
 }
 
 function ObjectiveFields({ objective, index, update }) {

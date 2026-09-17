@@ -16,6 +16,7 @@ import HistoryRoutePage from "./HistoryRoutePage";
 import NetworkCoveragePage from "./NetworkCoveragePage";
 import OptimizationObjectivePage from "./OptimizationObjectivePage";
 import QueueRoutePage from "./QueueRoutePage";
+import StatisticsPage from "./StatisticsPage";
 import SceneChooserPage from "./SceneChooserModal";
 import ScenesPage from "./ScenesPage";
 
@@ -201,6 +202,7 @@ export default function AppRouteContent({
           comparisonSceneName={history.comparisonSceneName}
         />
       )}
+      {route === "/statistics" && activeScene && <StatisticsPage activeScene={activeScene} />}
       {route === SCENE_SELECTION_ROUTE && (
         <ScenesPage
           activeSceneId={sceneManagement.activeSceneId}

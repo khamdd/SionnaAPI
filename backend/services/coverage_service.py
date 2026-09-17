@@ -8,6 +8,7 @@ from backend.constants import (
     STATIC_DIR,
 )
 from backend.schemas.requests import CoverageRequest, NetworkCoverageRequest
+from backend.services.network_coverage_kpis import extract_network_coverage_kpis
 from backend.simulations.antenna_factory import (
     remove_entity,
     sionna_azimuth_rad,
@@ -71,6 +72,7 @@ def calculate_coverage_map_service(req: CoverageRequest, base_url, scene):
             "status": "success",
             "coverage_map_image_url": "",
             "grid": grid,
+            "kpis": extract_network_coverage_kpis(grid),
             "solver": {
                 "cell_size": req.solver.cell_size,
                 "center": req.solver.center,
