@@ -47,6 +47,7 @@ function MapScene3DPreview({
   const wardBoundaryLinePathRef = useRef(null);
   const antennaOverlayGroupRef = useRef(null);
   const wardBoundaryOverlayUpdateRef = useRef(null);
+  const simulationLayerSyncRef = useRef(null);
   const dataRef = useRef({});
   const [status, setStatus] = useState("Loading vector scene...");
   const boundsKey = sceneBoundsKey(bounds);
@@ -71,8 +72,7 @@ function MapScene3DPreview({
   useEffect(() => {
     const map = mapRef.current;
     if (map) {
-      syncSimulationLayers(map, dataRef.current);
-      wardBoundaryOverlayUpdateRef.current?.();
+      simulationLayerSyncRef.current?.();
     }
   }, [
     antennas,
@@ -133,6 +133,14 @@ function MapScene3DPreview({
       syncAntennaOverlay(antennaGroup, map, dataRef.current);
     };
     wardBoundaryOverlayUpdateRef.current = updateWardBoundaryOverlay;
+
+    const syncSceneLayers = () => {
+      if (!map || !isLoaded) return false;
+      syncSimulationLayers(map, dataRef.current);
+      updateWardBoundaryOverlay();
+      return true;
+    };
+    simulationLayerSyncRef.current = syncSceneLayers;
 
     setStatus(isReady ? "Cached vector scene ready." : "Loading vector scene...");
     loadingCallback?.(!isReady);
@@ -215,13 +223,13 @@ function MapScene3DPreview({
         { padding: 24, maxZoom: viewMode === "top" ? 19 : 18, duration: 0 },
       );
       updateWardBoundaryOverlay();
-      syncSimulationLayers(map, dataRef.current);
+      syncSceneLayers();
 
       fallbackController = new AbortController();
       try {
         await loadSceneBuildings(map, activeBounds, fallbackController.signal);
         if (!disposed) {
-          syncSimulationLayers(map, dataRef.current);
+          syncSceneLayers();
           setStatus("Scene ready · drag to explore.");
         }
       } catch {
@@ -257,6 +265,7 @@ function MapScene3DPreview({
       map.remove();
       mapRef.current = null;
       wardBoundaryOverlayUpdateRef.current = null;
+      simulationLayerSyncRef.current = null;
       releasePmtilesProtocol();
       loadingCallback?.(false);
     };
@@ -557,7 +566,7 @@ function parseBuildingMeters(value) {
 }
 
 function syncSimulationLayers(map, data) {
-  if (!map.isStyleLoaded() || !data.bounds) return;
+  if (!data.bounds) return;
   syncCoverageRaster(map, data);
   map.getSource("scene-coverage-hover")?.setData(
     data.hoverCell ? (cellFeature(data.hoverCell, data.solver, data.bounds) || emptyFeatureCollection()) : emptyFeatureCollection(),

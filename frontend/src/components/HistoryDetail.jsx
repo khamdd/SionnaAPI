@@ -174,7 +174,11 @@ function HistoryCoveragePreview({
   onPreviewLoadingChange,
   wardBoundary,
 }) {
-  const fullResult = useFullResultArtifact(item);
+  const {
+    error: fullResultError,
+    loading: fullResultLoading,
+    result: fullResult,
+  } = useFullResultArtifact(item);
   const grid = useMemo(
     () => historyPreviewGrid(fullResult ? {
       ...item,
@@ -194,6 +198,22 @@ function HistoryCoveragePreview({
     setCoverageDisplayMode("quality");
     setSelectedCell(null);
   }, [item.id]);
+
+  if (fullResultLoading) {
+    return (
+      <p className="history-status">
+        Loading saved coverage result...
+      </p>
+    );
+  }
+
+  if (fullResultError && !historyPreviewGrid(item) && !fallbackImageUrl) {
+    return (
+      <p className="history-status error-text">
+        Saved coverage result could not be loaded.
+      </p>
+    );
+  }
 
   if (item.scene_bounds) {
     return (
@@ -255,11 +275,15 @@ function historyPreviewGrid(item) {
 function useFullResultArtifact(item) {
   const url = item.response_json?.full_result_url || "";
   const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(Boolean(url));
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     let active = true;
 
     setResult(null);
+    setError(null);
+    setLoading(Boolean(url));
 
     if (!url) {
       return () => {
@@ -271,11 +295,14 @@ function useFullResultArtifact(item) {
       .then((value) => {
         if (active) {
           setResult(value);
+          setLoading(false);
         }
       })
-      .catch(() => {
+      .catch((loadError) => {
         if (active) {
           setResult(null);
+          setError(loadError);
+          setLoading(false);
         }
       });
 
@@ -284,7 +311,7 @@ function useFullResultArtifact(item) {
     };
   }, [item.id, url]);
 
-  return result;
+  return { error, loading, result };
 }
 
 function HistoryCoverageCellDialog({ cell, onClose }) {
@@ -497,7 +524,7 @@ function HistoryLinkPreview({ item, onPreviewLoadingChange, wardBoundary }) {
 
 function RsrpHistory({ item, onPreviewLoadingChange, wardBoundary }) {
   const [selectedUser, setSelectedUser] = useState(null);
-  const fullResult = useFullResultArtifact(item);
+  const { loading: fullResultLoading, result: fullResult } = useFullResultArtifact(item);
   const savedResponse = useMemo(() => item.response_json || {}, [item]);
   const response = fullResult || savedResponse;
   const request = useMemo(() => item.request_json || {}, [item]);
@@ -559,7 +586,7 @@ function RsrpHistory({ item, onPreviewLoadingChange, wardBoundary }) {
         </p>
       )}
 
-      {!fullResult && savedResponse.full_result_url && (
+      {fullResultLoading && (
         <p className="history-status">
           Loading saved RSRP users...
         </p>
