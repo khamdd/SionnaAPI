@@ -49,4 +49,29 @@ describe("optimization engineering report", () => {
     expect(report).toContain("<svg");
     expect(report).toContain("8 simulations");
   });
+
+  it("coalesces same-color heatmap cells to keep reports small", () => {
+    const grid = {
+      rows: 40,
+      cols: 40,
+      cells: Array.from({ length: 1600 }, (_, index) => ({
+        row: Math.floor(index / 40),
+        col: index % 40,
+        signal_dbm: -90,
+      })),
+    };
+    const report = buildOptimizationReport({
+      scene: { id: "scene-1", name: "Test" },
+      result: {
+        grid,
+        optimization: {
+          baseline: { evaluation: { evaluations: [] } },
+          recommended_candidate: { evaluation: { evaluations: [] } },
+          comparison: { baseline_grid: grid },
+        },
+      },
+    });
+
+    expect((report.match(/<rect /g) || []).length).toBe(120);
+  });
 });
