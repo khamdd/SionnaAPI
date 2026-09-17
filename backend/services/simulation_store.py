@@ -117,22 +117,51 @@ def list_simulation_runs(limit=25, scene_id=None):
 
 
 def get_simulation_statistics(scene_id=None, limit=100):
-    """Return scene-scoped KPI series and summary counts for the dashboard."""
+    """Return scene-scoped queue/history status counts for the dashboard."""
     if not is_database_configured():
         return {"database_configured": False, "summary": {}, "series": []}
 
     try:
         with db_session() as session:
-            query = select(SimulationRun).order_by(SimulationRun.created_at.asc()).limit(limit)
+            query = select(SimulationRun).order_by(SimulationRun.created_at.asc())
             if scene_id:
                 query = query.where(SimulationRun.scene_id == scene_id)
 
-            rows = list(session.scalars(query))
+            all_rows = list(session.scalars(query))
+            rows = all_rows[-limit:]
             series = []
             type_counts = {}
             successful = 0
-            for row in rows:
+            breakdown = {}
+            for row in all_rows:
                 response = normalize_json_value(row.response_json) or {}
+                simulation_type = row.simulation_type
+                status = str(row.status).lower()
+                type_summary = breakdown.setdefault(simulation_type, {"queue": 0, "history": 0, "successful": 0, "failure": 0})
+                type_summary["history"] += 1
+                if status == "success":
+                    type_summary["successful"] += 1
+                else:
+                    type_summary["failure"] += 1
+                type_counts[simulation_type] = type_counts.get(simulation_type, 0) + 1
+                if status == "success":
+                    successful += 1
+
+            queue_jobs = list(session.scalars(select(SimulationJob)))
+            queue_total = 0
+            active_queue_total = 0
+            for job in queue_jobs:
+                job_scene = normalize_json_value(job.scene_json) or {}
+                if scene_id and str(job_scene.get("id")) != str(scene_id):
+                    continue
+                simulation_type = job.simulation_type
+                type_summary = breakdown.setdefault(simulation_type, {"queue": 0, "history": 0, "successful": 0, "failure": 0})
+                type_summary["queue"] += 1
+                queue_total += 1
+                if job.status in ("queued", "running"):
+                    active_queue_total += 1
+
+            for row in rows:
                 item = {
                     "id": str(row.id),
                     "simulation_type": row.simulation_type,
@@ -141,19 +170,21 @@ def get_simulation_statistics(scene_id=None, limit=100):
                     "metrics": extract_statistics_metrics(row.simulation_type, response),
                 }
                 series.append(item)
-                type_counts[row.simulation_type] = type_counts.get(row.simulation_type, 0) + 1
-                if str(row.status).lower() == "success":
-                    successful += 1
 
             return {
                 "database_configured": True,
                 "summary": {
-                    "total_runs": len(rows),
+                    "total_runs": len(all_rows),
+                    "history_total": len(all_rows),
+                    "queue_total": queue_total,
+                    "queued_total": queue_total,
+                    "active_queue_total": active_queue_total,
                     "successful_runs": successful,
-                    "failed_runs": len(rows) - successful,
-                    "failure_rate": round(((len(rows) - successful) / len(rows)) * 100, 2) if rows else 0,
+                    "failed_runs": len(all_rows) - successful,
+                    "failure_rate": round(((len(all_rows) - successful) / len(all_rows)) * 100, 2) if all_rows else 0,
                     "latest_run": series[-1] if series else None,
                     "type_counts": type_counts,
+                    "breakdown": breakdown,
                 },
                 "series": series,
             }
