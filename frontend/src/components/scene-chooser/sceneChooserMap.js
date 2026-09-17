@@ -106,10 +106,13 @@ function createOfflineSceneMapStyle(dataBaseUrl) {
   };
 }
 
-function createBuildingRegionManager(map, dataBaseUrl) {
+function createBuildingRegionManager(map, dataBaseUrl, options = {}) {
   const activeRegionIds = new Set();
   let buildingRegions = [];
   let disposed = false;
+  const minZoom = Number.isFinite(Number(options.minZoom))
+    ? Number(options.minZoom)
+    : 16;
 
   async function load() {
     const response = await fetch(`${dataBaseUrl}building-regions.json`, {
@@ -144,10 +147,10 @@ function createBuildingRegionManager(map, dataBaseUrl) {
       return;
     }
 
-    // The chooser should stay responsive while browsing provinces and wards.
-    // Detailed 3D buildings are only useful at street-level zoom and are
-    // rendered again in the selected scene preview.
-    if (map.getZoom() < 16) {
+    // The chooser stays responsive while browsing provinces and wards. A
+    // selected scene is allowed to request buildings earlier because its
+    // viewport is already bounded to a small simulation area.
+    if (map.getZoom() < minZoom) {
       removeAllRegions();
       return;
     }
@@ -190,7 +193,7 @@ function createBuildingRegionManager(map, dataBaseUrl) {
         type: "fill-extrusion",
         source: sourceId,
         "source-layer": "buildings",
-        minzoom: 16,
+        minzoom: minZoom,
         paint: {
           "fill-extrusion-color": "#d18b62",
           "fill-extrusion-height": [

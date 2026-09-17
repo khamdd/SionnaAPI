@@ -30,7 +30,11 @@ changes normally should not require an edit here.
   rows are minimal references for persisted results. Preview scenes expire and
   are cleaned up when not kept.
 - Offline building data lives under `frontend/public/data/`. Regional PMTiles are
-  loaded at high zoom and are intentionally excluded from Git.
+  loaded at high zoom by both the Vietnam map and selected-scene previews, so
+  browser rendering uses the same streamed vector-tile path. Simulation
+  overlays (coverage, antennas, links, users, and ward boundaries) remain
+  scene-scoped MapLibre layers; this does not change Sionna scene generation or
+  solver execution. The generated map data is intentionally excluded from Git.
 
 ## Simulations, Queue, and History
 
