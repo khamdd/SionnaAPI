@@ -4762,10 +4762,19 @@ textarea:hover:not(:disabled) {
 }
 
 .optimization-form-section {
+  position: relative;
   display: grid;
   gap: 14px;
   border-bottom: 1px solid var(--line);
   padding: 20px;
+}
+
+.optimization-form-section > .optimization-form-heading,
+.optimization-form-section > .optimization-disclosure {
+  position: relative;
+  border-left: 3px solid #9eb5c1;
+  background: #f7fafb;
+  padding: 9px 12px 10px;
 }
 
 .optimization-form-heading {
@@ -4840,9 +4849,24 @@ textarea:hover:not(:disabled) {
   background: #f2f6f7;
 }
 
+.optimization-section-collapsed > .optimization-disclosure {
+  border-left-color: #b6c5cc;
+  color: #475563;
+}
+
+.optimization-section-collapsed > .optimization-disclosure:hover {
+  background: #f2f6f7;
+}
+
 .optimization-form-section.optimization-section-active {
   background: #f2f8f7;
   box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.optimization-form-section.optimization-section-active > .optimization-disclosure {
+  border-left-color: var(--accent);
+  background: #e7f1f0;
+  color: var(--accent-dark);
 }
 
 .optimization-section-active .optimization-disclosure-title button {
@@ -4866,7 +4890,6 @@ textarea:hover:not(:disabled) {
   justify-content: start;
   gap: 10px;
   border: 1px solid var(--line);
-  border-left: 3px solid #7f9bad;
   border-radius: 4px;
   background: #fafbfc;
   margin: 0;
