@@ -287,8 +287,12 @@ function stopReason(reason) {
   );
 }
 function safeFilename(value) {
+  const normalized = String(value ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[đĐ]/g, (character) => (character === "Đ" ? "D" : "d"));
   return (
-    String(value)
+    normalized
       .trim()
       .replace(/[^a-z0-9_-]+/gi, "-")
       .replace(/^-+|-+$/g, "")
