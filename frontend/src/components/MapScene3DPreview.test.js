@@ -5,6 +5,7 @@ import {
   colorForCoverageCell,
   coverageCellAtLngLat,
   signalLinkFeatures,
+  viewportMaskFeatures,
   worldPositionToLngLat,
 } from "./MapScene3DPreview";
 
@@ -32,5 +33,11 @@ describe("MapScene3DPreview overlay projection", () => {
     expect(antennas.features).toHaveLength(3);
     expect(links.features[0].properties.color).toBe("#22c55e");
     expect(colorForCoverageCell({ overlap_level: "high_overlap" }, "overlap")).toContain("234, 179, 8");
+  });
+
+  it("masks the nationwide basemap outside the selected scene", () => {
+    const mask = viewportMaskFeatures(bounds);
+    expect(mask.features).toHaveLength(4);
+    expect(mask.features.every((feature) => feature.geometry.coordinates[0].length === 5)).toBe(true);
   });
 });

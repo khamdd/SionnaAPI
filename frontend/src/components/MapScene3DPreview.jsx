@@ -9,10 +9,8 @@ import {
   createBuildingRegionManager,
   createOfflineSceneMapStyle,
   emptyFeatureCollection,
-  ensureSelectionLayers,
   offlineMapDataBaseUrl,
   releasePmtilesProtocol,
-  updateSelectionBounds,
 } from "./scene-chooser/sceneChooserMap";
 
 const previewReadyCache = new Set();
@@ -42,6 +40,8 @@ function MapScene3DPreview({
   wardBoundary = null,
 }) {
   const mapHostRef = useRef(null);
+  const viewportMaskRef = useRef(null);
+  const viewportMaskPathRef = useRef(null);
   const mapRef = useRef(null);
   const dataRef = useRef({});
   const [status, setStatus] = useState("Loading vector scene...");
@@ -99,6 +99,26 @@ function MapScene3DPreview({
     let isLoaded = false;
     let disposed = false;
     const dataBaseUrl = offlineMapDataBaseUrl();
+
+    const updateViewportMask = () => {
+      const svg = viewportMaskRef.current;
+      const path = viewportMaskPathRef.current;
+      if (!svg || !path || !map) return;
+      const width = host.clientWidth;
+      const height = host.clientHeight;
+      if (!width || !height) return;
+      const selectedCorners = [
+        map.project([activeBounds.west, activeBounds.north]),
+        map.project([activeBounds.east, activeBounds.north]),
+        map.project([activeBounds.east, activeBounds.south]),
+        map.project([activeBounds.west, activeBounds.south]),
+      ];
+      const selectedPath = selectedCorners
+        .map((point, index) => `${index === 0 ? "M" : "L"}${point.x},${point.y}`)
+        .join(" ");
+      svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      path.setAttribute("d", `M0,0 H${width} V${height} H0 Z ${selectedPath} Z`);
+    };
 
     setStatus(isReady ? "Cached vector scene ready." : "Loading vector scene...");
     loadingCallback?.(!isReady);
@@ -166,19 +186,20 @@ function MapScene3DPreview({
     }
 
     mapRef.current = map;
+    map.on("move", updateViewportMask);
+    map.on("resize", updateViewportMask);
     map.on("mousemove", handleMouseMove);
     map.on("mouseleave", handleMouseLeave);
     map.on("click", handleClick);
     map.on("load", async () => {
       if (disposed) return;
       isLoaded = true;
-      ensureSelectionLayers(map);
-      updateSelectionBounds(map, activeBounds);
       ensureSimulationLayers(map);
       map.fitBounds(
         [[activeBounds.west, activeBounds.south], [activeBounds.east, activeBounds.north]],
         { padding: 24, maxZoom: viewMode === "top" ? 19 : 18, duration: 0 },
       );
+      updateViewportMask();
       syncSimulationLayers(map, dataRef.current);
 
       buildingManager = createBuildingRegionManager(map, dataBaseUrl, { minZoom: 13 });
@@ -212,6 +233,8 @@ function MapScene3DPreview({
       map.off("mousemove", handleMouseMove);
       map.off("mouseleave", handleMouseLeave);
       map.off("click", handleClick);
+      map.off("move", updateViewportMask);
+      map.off("resize", updateViewportMask);
       map.remove();
       mapRef.current = null;
       releasePmtilesProtocol();
@@ -226,6 +249,19 @@ function MapScene3DPreview({
         className="scene-3d-canvas"
         aria-label="Interactive 3D scene. Drag to move, right-drag to rotate, and scroll or pinch to zoom."
       />
+      <svg
+        ref={viewportMaskRef}
+        className="scene-viewport-mask-overlay"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path
+          ref={viewportMaskPathRef}
+          fill="#eef1f4"
+          fillOpacity="0.98"
+          fillRule="evenodd"
+        />
+      </svg>
       <div className="scene-3d-navigation-hint" aria-hidden="true">
         Drag to move · Right-drag to rotate · Scroll/pinch to zoom
       </div>
@@ -246,6 +282,7 @@ function ensureSimulationLayers(map) {
     "scene-coverage-hover", "scene-selected-coverage",
     "scene-antennas", "scene-signal-links",
     "scene-rsrp-users", "scene-selected-rsrp-user", "scene-ward-boundary",
+    "scene-viewport-mask",
   ].forEach((id) => addGeoJsonSource(map, id, emptyFeatureCollection()));
 
   addLayerIfMissing(map, {
@@ -323,6 +360,10 @@ function ensureSimulationLayers(map) {
     id: "scene-ward-boundary-line", type: "line", source: "scene-ward-boundary",
     paint: { "line-color": "#dc2626", "line-width": 3 },
   });
+  addLayerIfMissing(map, {
+    id: "scene-viewport-mask", type: "fill", source: "scene-viewport-mask",
+    paint: { "fill-color": "#eef1f4", "fill-opacity": 0.98 },
+  });
 }
 
 function addGeoJsonSource(map, id, data) {
@@ -350,6 +391,7 @@ function syncSimulationLayers(map, data) {
     data.selectedRsrpUser ? rsrpUserFeature(data.selectedRsrpUser, data.solver, data.bounds) : emptyFeatureCollection(),
   );
   map.getSource("scene-ward-boundary")?.setData(data.wardBoundary || emptyFeatureCollection());
+  map.getSource("scene-viewport-mask")?.setData(viewportMaskFeatures(data.bounds));
 }
 
 function syncCoverageImage(map, data) {
@@ -619,6 +661,27 @@ function metersPerDegreeLng(bounds) {
   return 111320 * Math.max(Math.cos(centerLat), 0.01);
 }
 
+function viewportMaskFeatures(bounds) {
+  const worldWest = -180;
+  const worldEast = 180;
+  const worldSouth = -85;
+  const worldNorth = 85;
+  const rectangles = [
+    [[worldWest, bounds.north], [worldEast, bounds.north], [worldEast, worldNorth], [worldWest, worldNorth]],
+    [[worldWest, worldSouth], [worldEast, worldSouth], [worldEast, bounds.south], [worldWest, bounds.south]],
+    [[worldWest, bounds.south], [bounds.west, bounds.south], [bounds.west, bounds.north], [worldWest, bounds.north]],
+    [[bounds.east, bounds.south], [worldEast, bounds.south], [worldEast, bounds.north], [bounds.east, bounds.north]],
+  ];
+  return {
+    type: "FeatureCollection",
+    features: rectangles.map((rectangle) => ({
+      type: "Feature",
+      properties: {},
+      geometry: { type: "Polygon", coordinates: [[...rectangle, rectangle[0]]] },
+    })),
+  };
+}
+
 function antennaPalette(id = "") {
   const normalized = String(id).toUpperCase();
   if (normalized.includes("RX")) return { color: "#2563eb", labelColor: "#1d4ed8" };
@@ -685,5 +748,6 @@ export {
   coverageCellAtLngLat,
   rsrpUserFeatures,
   signalLinkFeatures,
+  viewportMaskFeatures,
   worldPositionToLngLat,
 };
