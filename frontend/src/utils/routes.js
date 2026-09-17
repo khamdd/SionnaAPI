@@ -2,7 +2,8 @@ import { ROUTES } from "../constants";
 
 export const SCENE_SELECTION_ROUTE = "/scenes";
 export const SCENE_CREATION_ROUTE = "/choose-scene";
-export const SIMULATION_ENTRY_ROUTE = "/network";
+export const NETWORK_COVERAGE_ROUTE = "/network";
+export const SIMULATION_ENTRY_ROUTE = "/statistics";
 export const NETWORK_OPTIMIZATION_ROUTE = "/network/optimization";
 
 export function normalizeRoute(pathname) {

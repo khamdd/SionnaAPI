@@ -1,8 +1,8 @@
 import { ROUTES } from "../constants";
 import {
+  NETWORK_COVERAGE_ROUTE,
   NETWORK_OPTIMIZATION_ROUTE,
   SCENE_SELECTION_ROUTE,
-  SIMULATION_ENTRY_ROUTE,
 } from "../utils/routes";
 
 function NavIcon({ path }) {
@@ -49,8 +49,9 @@ export default function Navbar({
     configurationPaths.includes(item.path)
   ));
   const resultRoutes = visibleRoutes.filter((item) => (
-    item.path === "/queue" || item.path === "/history" || item.path === "/statistics"
+    item.path === "/queue" || item.path === "/history"
   ));
+  const dashboardRoute = visibleRoutes.find((item) => item.path === "/statistics");
 
   return (
     <header className="app-navbar">
@@ -64,6 +65,23 @@ export default function Navbar({
         </div>
       </div>
       <nav aria-label="Primary navigation">
+        {dashboardRoute && (
+          <div className="nav-group dashboard-nav" aria-label="Workspace overview">
+            <div>
+              <button
+                className={route === dashboardRoute.path ? "active" : ""}
+                type="button"
+                disabled={isBusy}
+                aria-current={route === dashboardRoute.path ? "page" : undefined}
+                title={dashboardRoute.label}
+                onClick={() => onNavigate(dashboardRoute.path)}
+              >
+                <NavIcon path={dashboardRoute.path} />
+                {dashboardRoute.label}
+              </button>
+            </div>
+          </div>
+        )}
         {simulationRoutes.length > 0 && (
           <div className="nav-group simulation-nav" aria-label="Simulation tools">
             <span>Simulations</span>
@@ -71,7 +89,7 @@ export default function Navbar({
               {simulationRoutes.map((item) => (
                 <button
                   key={item.path}
-                  className={route === item.path || (item.path === SIMULATION_ENTRY_ROUTE && route === NETWORK_OPTIMIZATION_ROUTE) ? "active" : ""}
+                  className={route === item.path || (item.path === NETWORK_COVERAGE_ROUTE && route === NETWORK_OPTIMIZATION_ROUTE) ? "active" : ""}
                   type="button"
                   disabled={isBusy}
                   aria-current={route === item.path ? "page" : undefined}

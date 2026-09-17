@@ -8,7 +8,7 @@ changes normally should not require an edit here.
 ## Scenes and Navigation
 
 - There is no built-in default scene. After authenticating, users land on
-  `/network` when a persisted work scene is active, otherwise on `/scenes`,
+  `/statistics` when a persisted work scene is active, otherwise on `/scenes`,
   where they explicitly select an imported scene or create one at
   `/choose-scene`.
 - Simulation, History, configuration, profile, optimization, and antenna routes

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ROUTES } from "../constants";
 import {
   NETWORK_OPTIMIZATION_ROUTE,
+  NETWORK_COVERAGE_ROUTE,
   SCENE_CREATION_ROUTE,
   SCENE_SELECTION_ROUTE,
   SIMULATION_ENTRY_ROUTE,
@@ -15,7 +16,8 @@ describe("route constants", () => {
   it("keeps the special routes distinct from the route matrix", () => {
     expect(SCENE_SELECTION_ROUTE).toBe("/scenes");
     expect(SCENE_CREATION_ROUTE).toBe("/choose-scene");
-    expect(SIMULATION_ENTRY_ROUTE).toBe("/network");
+    expect(NETWORK_COVERAGE_ROUTE).toBe("/network");
+    expect(SIMULATION_ENTRY_ROUTE).toBe("/statistics");
     expect(NETWORK_OPTIMIZATION_ROUTE).toBe("/network/optimization");
   });
 });

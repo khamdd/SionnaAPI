@@ -1,8 +1,8 @@
 import {
+  NETWORK_COVERAGE_ROUTE,
   NETWORK_OPTIMIZATION_ROUTE,
   SCENE_CREATION_ROUTE,
   SCENE_SELECTION_ROUTE,
-  SIMULATION_ENTRY_ROUTE,
 } from "../utils/routes";
 import { buildNetworkCoveragePayload } from "../utils/jobAdapters";
 import {
@@ -88,7 +88,7 @@ export default function AppRouteContent({
             network.mimoLayers,
           )}
           storageKey={network.optimizationStorageKey}
-          onBack={() => navigate(SIMULATION_ENTRY_ROUTE)}
+          onBack={() => navigate(NETWORK_COVERAGE_ROUTE)}
           onApply={network.onApplyOptimization}
         />
       )}

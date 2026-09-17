@@ -23,7 +23,7 @@ separate task.
 | `/throughput` | Yes | Yes | Simulations | Throughput Comparison |
 | `/queue` | Yes | Yes | Results | Simulation Queue |
 | `/history` | Yes | Yes | Results | Saved Results scoped to the work scene |
-| `/statistics` | Yes | Yes | Results | Scene-scoped simulation statistics |
+| `/statistics` | Yes | Yes | Results | Scene-scoped Dashboard |
 | Any unknown path | Yes | No | None | Normalizes to `/scenes` |
 
 ## Session and Navigation Matrix
@@ -33,16 +33,16 @@ separate task.
 | Session check pending | Any | Show the session-check screen until verification resolves |
 | No stored token | Any | Show Login without loading protected page data |
 | Invalid/expired token | Any | Remove token and stored user, then show Login |
-| Login succeeds | Any | Store token/user, load scenes, then replace-navigate to `/network` when a work scene is active, otherwise `/scenes` |
+| Login succeeds | Any | Store token/user, load scenes, then replace-navigate to `/statistics` when a work scene is active, otherwise `/scenes` |
 | Reload with a valid stored session and active scene | Any known route | Restore the active scene before route gating and keep the requested route |
 | Authenticated, no work scene | `/scenes` or `/choose-scene` | Allow route |
 | Authenticated, no work scene | Any simulation/result route | Replace with `/scenes` and show a scene-required notice |
-| Work scene selected | `/network` | Allow route and use selected scene context |
+| Work scene selected | `/statistics` | Allow route and use selected scene context |
 | Work scene selected | Browser Back/Forward | Normalize `window.location.pathname` on `popstate` |
 | Work scene selected | Unknown route | Show `/scenes` |
 | Change scene cancelled | Current route | Keep scene, route, and drafts |
 | Change scene confirmed | Any protected route | Clear all current-scene simulation drafts, clear work-scene state, and navigate to `/scenes` |
-| Scene activated/created | `/scenes` or `/choose-scene` | Cache fixed antennas, set work scene, and navigate to `/network` |
+| Scene activated/created | `/scenes` or `/choose-scene` | Cache fixed antennas, set work scene, and navigate to `/statistics` |
 
 ## Navigation Visibility
 
