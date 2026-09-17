@@ -5,6 +5,7 @@ import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { EMPTY_ARRAY } from "../constants";
 import { getOfflineBuildings } from "../api";
 import { scenePositionToLngLat } from "../utils/scene";
+import { wardBoundaryCoordinateRings } from "../utils/wardBoundary";
 import {
   acquirePmtilesProtocol,
   createOfflineSceneMapStyle,
@@ -41,6 +42,11 @@ function MapScene3DPreview({
 }) {
   const mapHostRef = useRef(null);
   const mapRef = useRef(null);
+  const wardBoundaryOverlayRef = useRef(null);
+  const wardBoundaryPathRef = useRef(null);
+  const wardBoundaryLinePathRef = useRef(null);
+  const antennaOverlayGroupRef = useRef(null);
+  const wardBoundaryOverlayUpdateRef = useRef(null);
   const dataRef = useRef({});
   const [status, setStatus] = useState("Loading vector scene...");
   const boundsKey = sceneBoundsKey(bounds);
@@ -66,6 +72,7 @@ function MapScene3DPreview({
     const map = mapRef.current;
     if (map) {
       syncSimulationLayers(map, dataRef.current);
+      wardBoundaryOverlayUpdateRef.current?.();
     }
   }, [
     antennas,
@@ -106,6 +113,26 @@ function MapScene3DPreview({
         map.jumpTo({ center: [constrained.lng, constrained.lat] });
       }
     };
+
+    const updateWardBoundaryOverlay = () => {
+      const svg = wardBoundaryOverlayRef.current;
+      const path = wardBoundaryPathRef.current;
+      const linePath = wardBoundaryLinePathRef.current;
+      const antennaGroup = antennaOverlayGroupRef.current;
+      if (!svg || !path || !linePath || !antennaGroup || !map) return;
+      const width = host.clientWidth;
+      const height = host.clientHeight;
+      if (!width || !height) return;
+      svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      const boundaryPath = wardBoundarySvgPath(
+        dataRef.current.wardBoundary,
+        (coordinate) => map.project(coordinate),
+      );
+      path.setAttribute("d", boundaryPath);
+      linePath.setAttribute("d", boundaryPath);
+      syncAntennaOverlay(antennaGroup, map, dataRef.current);
+    };
+    wardBoundaryOverlayUpdateRef.current = updateWardBoundaryOverlay;
 
     setStatus(isReady ? "Cached vector scene ready." : "Loading vector scene...");
     loadingCallback?.(!isReady);
@@ -177,6 +204,8 @@ function MapScene3DPreview({
     map.on("mouseleave", handleMouseLeave);
     map.on("click", handleClick);
     map.on("moveend", constrainSceneCenter);
+    map.on("move", updateWardBoundaryOverlay);
+    map.on("resize", updateWardBoundaryOverlay);
     map.on("load", async () => {
       if (disposed) return;
       isLoaded = true;
@@ -185,12 +214,16 @@ function MapScene3DPreview({
         [[activeBounds.west, activeBounds.south], [activeBounds.east, activeBounds.north]],
         { padding: 24, maxZoom: viewMode === "top" ? 19 : 18, duration: 0 },
       );
+      updateWardBoundaryOverlay();
       syncSimulationLayers(map, dataRef.current);
 
       fallbackController = new AbortController();
       try {
         await loadSceneBuildings(map, activeBounds, fallbackController.signal);
-        if (!disposed) setStatus("Scene ready · drag to explore.");
+        if (!disposed) {
+          syncSimulationLayers(map, dataRef.current);
+          setStatus("Scene ready · drag to explore.");
+        }
       } catch {
         if (!disposed) setStatus("Scene ready · buildings unavailable.");
       } finally {
@@ -219,8 +252,11 @@ function MapScene3DPreview({
       map.off("mouseleave", handleMouseLeave);
       map.off("click", handleClick);
       map.off("moveend", constrainSceneCenter);
+      map.off("move", updateWardBoundaryOverlay);
+      map.off("resize", updateWardBoundaryOverlay);
       map.remove();
       mapRef.current = null;
+      wardBoundaryOverlayUpdateRef.current = null;
       releasePmtilesProtocol();
       loadingCallback?.(false);
     };
@@ -233,6 +269,16 @@ function MapScene3DPreview({
         className="scene-3d-canvas"
         aria-label="Interactive 3D scene. Drag to move, right-drag to rotate, and scroll or pinch to zoom."
       />
+      <svg
+        ref={wardBoundaryOverlayRef}
+        className="scene-ward-boundary-overlay"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path className="scene-ward-boundary-casing" ref={wardBoundaryPathRef} />
+        <path className="scene-ward-boundary-line" ref={wardBoundaryLinePathRef} />
+        <g ref={antennaOverlayGroupRef} />
+      </svg>
       <div className="scene-3d-navigation-hint" aria-hidden="true">
         Drag to move · Right-drag to rotate · Scroll/pinch to zoom
       </div>
@@ -255,12 +301,30 @@ export function constrainedSceneCenter(center, bounds) {
   };
 }
 
+export function wardBoundarySvgPath(boundary, project) {
+  return wardBoundaryCoordinateRings(boundary)
+    .map((ring) => ring.map((coordinate, index) => {
+      const point = project([Number(coordinate[0]), Number(coordinate[1])]);
+      return `${index === 0 ? "M" : "L"}${roundSvgCoordinate(point.x)},${roundSvgCoordinate(point.y)}`;
+    }).join(" "))
+    .map((path) => `${path} Z`)
+    .join(" ");
+}
+
+function roundSvgCoordinate(value) {
+  return Math.round(Number(value) * 100) / 100;
+}
+
 function ensureSimulationLayers(map, bounds) {
   [
     "scene-coverage-hover", "scene-selected-coverage",
-    "scene-antennas", "scene-signal-links",
+    "scene-signal-links",
     "scene-rsrp-users", "scene-selected-rsrp-user", "scene-ward-boundary",
   ].forEach((id) => addGeoJsonSource(map, id, emptyFeatureCollection()));
+
+  if (!map.getLayer("scene-viewport-mask")) {
+    map.addLayer(createSceneViewportMaskLayer(bounds));
+  }
 
   addLayerIfMissing(map, {
     id: "scene-coverage-hover", type: "line", source: "scene-coverage-hover",
@@ -290,28 +354,6 @@ function ensureSimulationLayers(map, bounds) {
     paint: { "text-color": ["get", "color"], "text-halo-color": "#ffffff", "text-halo-width": 1.5 },
   });
   addLayerIfMissing(map, {
-    id: "scene-antenna-direction", type: "line", source: "scene-antennas",
-    filter: ["==", ["get", "kind"], "direction"],
-    paint: { "line-color": ["get", "color"], "line-width": 2.5 },
-  });
-  addLayerIfMissing(map, {
-    id: "scene-antennas", type: "circle", source: "scene-antennas",
-    filter: ["!=", ["get", "kind"], "direction"],
-    paint: {
-      "circle-radius": ["case", ["==", ["get", "receiver"], true], 5, 7],
-      "circle-color": ["get", "color"], "circle-stroke-color": "#ffffff", "circle-stroke-width": 2,
-    },
-  });
-  addLayerIfMissing(map, {
-    id: "scene-antenna-labels", type: "symbol", source: "scene-antennas",
-    filter: ["!=", ["get", "kind"], "direction"],
-    layout: {
-      "text-field": ["get", "label"], "text-size": 11, "text-offset": [0, 1.3],
-      "text-allow-overlap": true, "text-ignore-placement": true,
-    },
-    paint: { "text-color": ["get", "labelColor"], "text-halo-color": "#ffffff", "text-halo-width": 1.5 },
-  });
-  addLayerIfMissing(map, {
     id: "scene-rsrp-users", type: "circle", source: "scene-rsrp-users",
     paint: {
       "circle-radius": 4, "circle-color": ["get", "color"],
@@ -337,9 +379,6 @@ function ensureSimulationLayers(map, bounds) {
     id: "scene-ward-boundary-line", type: "line", source: "scene-ward-boundary",
     paint: { "line-color": "#dc2626", "line-width": 3 },
   });
-  if (!map.getLayer("scene-viewport-mask")) {
-    map.addLayer(createSceneViewportMaskLayer(bounds));
-  }
 }
 
 function addGeoJsonSource(map, id, data) {
@@ -375,7 +414,9 @@ async function loadSceneBuildings(map, bounds, signal) {
       "fill-extrusion-opacity": 0.9,
     },
   };
-  if (!map.getLayer(buildingLayer.id)) map.addLayer(buildingLayer);
+  if (!map.getLayer(buildingLayer.id)) {
+    map.addLayer(buildingLayer, map.getLayer("scene-coverage-hover") ? "scene-coverage-hover" : undefined);
+  }
 }
 
 function createSceneViewportMaskLayer(bounds) {
@@ -525,13 +566,49 @@ function syncSimulationLayers(map, data) {
     data.selectedCoverageCell ? (cellFeature(data.selectedCoverageCell, data.solver, data.bounds) || emptyFeatureCollection()) : emptyFeatureCollection(),
   );
   syncCoverageImage(map, data);
-  map.getSource("scene-antennas")?.setData(antennaFeatures(data.antennas, data.solver, data.bounds));
   map.getSource("scene-signal-links")?.setData(signalLinkFeatures(data.signalLinks, data.solver, data.bounds));
   map.getSource("scene-rsrp-users")?.setData(rsrpUserFeatures(data.rsrpUsers, data.solver, data.bounds));
   map.getSource("scene-selected-rsrp-user")?.setData(
     data.selectedRsrpUser ? rsrpUserFeature(data.selectedRsrpUser, data.solver, data.bounds) : emptyFeatureCollection(),
   );
   map.getSource("scene-ward-boundary")?.setData(data.wardBoundary || emptyFeatureCollection());
+  map.triggerRepaint();
+}
+
+function syncAntennaOverlay(group, map, data) {
+  const fragment = document.createDocumentFragment();
+  antennaFeatures(data.antennas, data.solver, data.bounds).features.forEach((feature) => {
+    if (feature.geometry.type === "LineString") {
+      const [start, end] = feature.geometry.coordinates.map((coordinate) => map.project(coordinate));
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("class", "scene-antenna-direction-overlay");
+      line.setAttribute("x1", roundSvgCoordinate(start.x));
+      line.setAttribute("y1", roundSvgCoordinate(start.y));
+      line.setAttribute("x2", roundSvgCoordinate(end.x));
+      line.setAttribute("y2", roundSvgCoordinate(end.y));
+      line.setAttribute("stroke", feature.properties.color);
+      fragment.appendChild(line);
+      return;
+    }
+    if (feature.geometry.type !== "Point") return;
+    const point = map.project(feature.geometry.coordinates);
+    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    circle.setAttribute("class", "scene-antenna-marker-overlay");
+    circle.setAttribute("cx", roundSvgCoordinate(point.x));
+    circle.setAttribute("cy", roundSvgCoordinate(point.y));
+    circle.setAttribute("r", feature.properties.receiver ? 5 : 7);
+    circle.setAttribute("fill", feature.properties.color);
+    fragment.appendChild(circle);
+
+    const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    label.setAttribute("class", "scene-antenna-label-overlay");
+    label.setAttribute("x", roundSvgCoordinate(point.x));
+    label.setAttribute("y", roundSvgCoordinate(point.y + 18));
+    label.setAttribute("fill", feature.properties.labelColor);
+    label.textContent = feature.properties.label;
+    fragment.appendChild(label);
+  });
+  group.replaceChildren(fragment);
 }
 
 function syncCoverageImage(map, data) {

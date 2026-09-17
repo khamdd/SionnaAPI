@@ -8,6 +8,7 @@ import {
   offlineBuildingFeatureCollection,
   signalLinkFeatures,
   viewportMaskVertices,
+  wardBoundarySvgPath,
   worldPositionToLngLat,
 } from "./MapScene3DPreview";
 
@@ -58,6 +59,19 @@ describe("MapScene3DPreview overlay projection", () => {
     const vertices = viewportMaskVertices(bounds);
     expect(vertices).toHaveLength(48);
     expect(vertices.every(Number.isFinite)).toBe(true);
+  });
+
+  it("projects the ward boundary into an always-visible overlay path", () => {
+    const boundary = {
+      type: "Feature",
+      properties: { ward_code: "001", ward_name: "Test" },
+      geometry: {
+        type: "Polygon",
+        coordinates: [[[106, 10], [106.01, 10], [106.01, 10.01], [106, 10]]],
+      },
+    };
+    expect(wardBoundarySvgPath(boundary, ([lng, lat]) => ({ x: lng * 10, y: lat * 10 })))
+      .toBe("M1060,100 L1060.1,100 L1060.1,100.1 L1060,100 Z");
   });
 
   it("constrains panning without imposing a minimum zoom", () => {
