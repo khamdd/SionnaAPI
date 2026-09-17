@@ -419,7 +419,7 @@ export default function SceneChooserPage({
     setSceneNameError("");
     setError(false);
 
-    if (!sceneName.trim()) {
+    if (!sceneName.trim() || sceneName === autoSceneNameRef.current) {
       setSceneName(ward.ward_name);
       autoSceneNameRef.current = ward.ward_name;
     }
