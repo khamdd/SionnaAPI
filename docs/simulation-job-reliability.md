@@ -19,6 +19,9 @@ set `SIMULATION_WORKER_ENABLED=false` when running a separate worker.
 - The dedicated Linux worker enforces the configured per-attempt timeout.
 - Result artifacts use the job ID as their stable path, and only the worker that
   owns the current lease can finalize database state.
+- Queue result files are reconciled at API/worker startup and periodically while
+  the worker runs. Files older than the short reconciliation grace period are
+  removed when their job ID no longer exists.
 
 Queue responses expose `attempts`, `max_attempts`, `next_attempt_at`, `worker_id`,
 `heartbeat_at`, `lease_expires_at`, `cancel_requested`, `failure_type`, and

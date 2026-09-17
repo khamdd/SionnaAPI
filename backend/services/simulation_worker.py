@@ -28,6 +28,7 @@ from backend.services.coverage_service import (
 from backend.services.rsrp_service import calculate_rsrp_service
 from backend.services.simulation_job_store import (
     claim_next_simulation_job,
+    cleanup_orphaned_job_result_artifacts,
     handle_simulation_job_failure,
     heartbeat_simulation_job,
     is_simulation_job_cancel_requested,
@@ -133,6 +134,7 @@ def simulation_worker_loop(poll_interval=None, worker_id=None):
             monotonic_now = time.monotonic()
             if monotonic_now >= next_recovery_at:
                 recovered = recover_expired_simulation_jobs()
+                cleanup_orphaned_job_result_artifacts()
                 if recovered:
                     logger.warning("Recovered %s expired simulation job(s).", recovered)
                 next_recovery_at = monotonic_now + recovery_interval

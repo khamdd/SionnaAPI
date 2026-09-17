@@ -44,6 +44,9 @@ REQUEST_MODELS = {
 }
 
 JOB_RESULT_DIR_NAME = "simulation-job-results"
+ORPHAN_RESULT_GRACE_SECONDS = 60
+
+
 def create_simulation_job(
     simulation_type,
     req,
@@ -299,6 +302,7 @@ def request_simulation_job_cancellation(job_id):
     if not is_database_configured():
         return {"database_configured": False, "cancelled": False}
 
+    files_to_delete = []
     try:
         with db_session() as session:
             row = session.scalar(
@@ -315,6 +319,8 @@ def request_simulation_job_cancellation(job_id):
 
             now = datetime.now(timezone.utc)
             if row.status == "queued":
+                result_json = normalize_json_value(row.result_json) or {}
+                files_to_delete = job_result_artifacts_to_delete(result_json)
                 row.status = "cancelled"
                 row.cancel_requested = True
                 row.failure_type = "cancelled"
@@ -337,6 +343,8 @@ def request_simulation_job_cancellation(job_id):
             "error": "Failed to cancel simulation job.",
         }
 
+    deleted_files = delete_artifact_files(files_to_delete)
+    response["deleted_files"] = deleted_files
     return response
 
 
@@ -345,6 +353,7 @@ def recover_expired_simulation_jobs(now=None):
         return 0
 
     now = now or datetime.now(timezone.utc)
+    files_to_delete = []
     with db_session() as session:
         rows = session.scalars(
             select(SimulationJob)
@@ -358,6 +367,9 @@ def recover_expired_simulation_jobs(now=None):
             .with_for_update(skip_locked=True)
         ).all()
         for row in rows:
+            result_json = normalize_json_value(row.result_json) or {}
+            files_to_delete.extend(job_result_artifacts_to_delete(result_json))
+            row.result_json = None
             row.worker_id = None
             row.heartbeat_at = None
             row.lease_expires_at = None
@@ -379,6 +391,7 @@ def recover_expired_simulation_jobs(now=None):
                 row.started_at = None
                 row.finished_at = None
 
+    delete_artifact_files(files_to_delete)
     return len(rows)
 
 
@@ -395,10 +408,15 @@ def update_optimization_progress(job_id, progress, worker_id=None):
 
 
 def mark_simulation_job_succeeded(job_id, result, worker_id=None):
-    kwargs = {"result": prepare_job_result(job_id, result)}
+    prepared_result = prepare_job_result(job_id, result)
+    kwargs = {"result": prepared_result}
     if worker_id is not None:
         kwargs["worker_id"] = worker_id
-    return update_simulation_job_finished(job_id, "succeeded", **kwargs)
+    try:
+        return update_simulation_job_finished(job_id, "succeeded", **kwargs)
+    except Exception:
+        delete_artifact_files(job_result_artifacts_to_delete(prepared_result))
+        raise
 
 
 def mark_simulation_job_failed(
@@ -437,6 +455,7 @@ def handle_simulation_job_failure(
     worker_id=None,
 ):
     settings = get_simulation_job_settings()
+    files_to_delete = []
     with db_session() as session:
         job = session.scalar(
             select(SimulationJob)
@@ -444,10 +463,17 @@ def handle_simulation_job_failure(
             .with_for_update()
         )
         if not _worker_can_update(job, worker_id):
+            delete_artifact_files(
+                job_result_artifacts_to_delete(normalize_json_value(result) or {})
+            )
             return {"updated": False}
 
         now = datetime.now(timezone.utc)
-        job.result_json = sanitize_json_value(result) if result is not None else None
+        result_json = normalize_json_value(result) or {}
+        files_to_delete = job_result_artifacts_to_delete(result_json)
+        result_json.pop("full_result_url", None)
+        result_json.pop("full_result_size_bytes", None)
+        job.result_json = sanitize_json_value(result_json) if result is not None else None
         job.error_message = error_message
         job.failure_type = failure_type
         job.updated_at = now
@@ -475,6 +501,7 @@ def handle_simulation_job_failure(
         final_status = job.status
         next_attempt_at = serialize_datetime(job.next_attempt_at)
 
+    delete_artifact_files(files_to_delete)
     return {
         "updated": True,
         "status": final_status,
@@ -491,6 +518,8 @@ def update_simulation_job_finished(
     failure_type=None,
     worker_id=None,
 ):
+    files_to_delete = []
+    updated = False
     with db_session() as session:
         job = session.scalar(
             select(SimulationJob)
@@ -498,28 +527,41 @@ def update_simulation_job_finished(
             .with_for_update()
         )
         if not _worker_can_update(job, worker_id):
-            return False
+            files_to_delete = job_result_artifacts_to_delete(
+                normalize_json_value(result) or {},
+            )
+        else:
+            now = datetime.now(timezone.utc)
+            if status == "cancelled":
+                files_to_delete = job_result_artifacts_to_delete(
+                    normalize_json_value(job.result_json) or {},
+                )
+            if job.cancel_requested and status != "cancelled":
+                files_to_delete.extend(
+                    job_result_artifacts_to_delete(
+                        normalize_json_value(result) or {},
+                    )
+                )
+                status = "cancelled"
+                result = None
+                result_run_id = None
+                error_message = "Simulation job was cancelled."
+                failure_type = "cancelled"
+            job.status = status
+            job.result_json = sanitize_json_value(result) if result is not None else None
+            job.result_run_id = result_run_id
+            job.error_message = error_message
+            job.failure_type = failure_type
+            job.worker_id = None
+            job.heartbeat_at = None
+            job.lease_expires_at = None
+            job.next_attempt_at = None
+            job.finished_at = now
+            job.updated_at = now
+            updated = True
 
-        now = datetime.now(timezone.utc)
-        if job.cancel_requested and status != "cancelled":
-            status = "cancelled"
-            result = None
-            result_run_id = None
-            error_message = "Simulation job was cancelled."
-            failure_type = "cancelled"
-        job.status = status
-        job.result_json = sanitize_json_value(result) if result is not None else None
-        job.result_run_id = result_run_id
-        job.error_message = error_message
-        job.failure_type = failure_type
-        job.worker_id = None
-        job.heartbeat_at = None
-        job.lease_expires_at = None
-        job.next_attempt_at = None
-        job.finished_at = now
-        job.updated_at = now
-
-    return True
+    delete_artifact_files(files_to_delete)
+    return updated
 
 
 def save_simulation_job_result(job_id):
@@ -641,6 +683,7 @@ def delete_simulation_job(job_id):
             session.execute(delete(SimulationJob).where(SimulationJob.id == job_id))
 
         deleted_files = delete_artifact_files(files_to_delete)
+        deleted_files += cleanup_orphaned_job_result_artifacts()
         return {
             "database_configured": True,
             "deleted": True,
@@ -728,6 +771,71 @@ def is_job_result_url(url):
         return False
 
     return True
+
+
+def cleanup_orphaned_job_result_artifacts(
+    now=None,
+    grace_seconds=ORPHAN_RESULT_GRACE_SECONDS,
+):
+    """Remove queue result files whose job rows no longer exist.
+
+    The short grace period protects a completed file write from a concurrent
+    delete/reconciliation cycle while still healing files left by crashes or
+    older cleanup bugs.
+    """
+    if not is_database_configured():
+        return 0
+
+    artifact_dir = STATIC_DIR / JOB_RESULT_DIR_NAME
+    if not artifact_dir.is_dir():
+        return 0
+
+    try:
+        with db_session() as session:
+            job_ids = {
+                str(job_id)
+                for job_id in session.scalars(select(SimulationJob.id))
+            }
+    except SQLAlchemyError:
+        logger.exception("Failed to reconcile simulation job result artifacts.")
+        return 0
+
+    now = now or datetime.now(timezone.utc)
+    cutoff = now.timestamp() - max(0, int(grace_seconds))
+    files_to_delete = []
+    try:
+        candidates = artifact_dir.iterdir()
+    except OSError:
+        logger.warning(
+            "Failed to inspect simulation job result artifacts: %s",
+            artifact_dir,
+            exc_info=True,
+        )
+        return 0
+
+    for file_path in candidates:
+        if not file_path.is_file() or file_path.suffix.lower() != ".json":
+            continue
+        try:
+            if file_path.stat().st_mtime > cutoff:
+                continue
+        except OSError:
+            logger.warning(
+                "Failed to inspect simulation job result artifact: %s",
+                file_path,
+                exc_info=True,
+            )
+            continue
+        if file_path.stem not in job_ids:
+            files_to_delete.append({
+                "file_path": str(file_path),
+                "public_url": "",
+            })
+
+    deleted_files = delete_artifact_files(files_to_delete)
+    if deleted_files:
+        logger.info("Removed %s orphaned simulation job result artifact(s).", deleted_files)
+    return deleted_files
 
 
 def parse_datetime(value):

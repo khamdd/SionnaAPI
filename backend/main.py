@@ -15,6 +15,7 @@ from backend.services.event_logger import (
     start_event_logger,
     stop_event_logger,
 )
+from backend.services.simulation_job_store import cleanup_orphaned_job_result_artifacts
 from backend.services.simulation_worker import (
     start_simulation_worker,
     stop_simulation_worker,
@@ -24,6 +25,7 @@ from backend.services.simulation_worker import (
 @asynccontextmanager
 async def lifespan(app):
     ensure_database_is_current()
+    cleanup_orphaned_job_result_artifacts()
     start_event_logger()
     start_simulation_worker()
     try:

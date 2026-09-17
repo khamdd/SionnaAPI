@@ -1,3 +1,4 @@
+import os
 from contextlib import nullcontext
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -160,3 +161,63 @@ def test_expired_lease_requeues_job(monkeypatch):
     assert row.status == "queued"
     assert row.failure_type == "worker_lost"
     assert row.worker_id is None
+
+
+def test_cancellation_race_removes_result_written_before_job_update(tmp_path, monkeypatch):
+    artifact = tmp_path / "simulation-job-results" / "job-1.json"
+    artifact.parent.mkdir()
+    artifact.write_text("{}", encoding="utf-8")
+    row = running_job(cancel_requested=True, result_json=None)
+    session = SimpleNamespace(scalar=lambda statement: row)
+    monkeypatch.setattr(simulation_job_store, "STATIC_DIR", tmp_path)
+    monkeypatch.setattr(
+        simulation_job_store,
+        "db_session",
+        lambda: nullcontext(session),
+    )
+
+    updated = simulation_job_store.update_simulation_job_finished(
+        row.id,
+        "succeeded",
+        result={
+            "status": "success",
+            "full_result_url": "/static/simulation-job-results/job-1.json",
+        },
+        worker_id="worker-1",
+    )
+
+    assert updated is True
+    assert row.status == "cancelled"
+    assert row.result_json is None
+    assert not artifact.exists()
+
+
+def test_orphan_reconciliation_removes_unreferenced_old_files(tmp_path, monkeypatch):
+    artifact_dir = tmp_path / "simulation-job-results"
+    artifact_dir.mkdir()
+    orphan = artifact_dir / "orphan.json"
+    referenced = artifact_dir / "known.json"
+    recent = artifact_dir / "recent.json"
+    for artifact in (orphan, referenced, recent):
+        artifact.write_text("{}", encoding="utf-8")
+    old_timestamp = datetime(2026, 9, 1, tzinfo=timezone.utc).timestamp()
+    os.utime(orphan, (old_timestamp, old_timestamp))
+    os.utime(referenced, (old_timestamp, old_timestamp))
+
+    session = SimpleNamespace(scalars=lambda statement: ["known"])
+    monkeypatch.setattr(simulation_job_store, "STATIC_DIR", tmp_path)
+    monkeypatch.setattr(simulation_job_store, "is_database_configured", lambda: True)
+    monkeypatch.setattr(
+        simulation_job_store,
+        "db_session",
+        lambda: nullcontext(session),
+    )
+
+    deleted = simulation_job_store.cleanup_orphaned_job_result_artifacts(
+        now=datetime(2026, 9, 2, tzinfo=timezone.utc),
+    )
+
+    assert deleted == 1
+    assert not orphan.exists()
+    assert referenced.exists()
+    assert recent.exists()
