@@ -18,17 +18,15 @@ class SionnaEngine:
 
     def get_scene(self):
         with self.lock:
+            self._sync_active_scene()
             if self._scene is None:
-                if not self._active_scene_synced:
-                    self._sync_active_scene()
                 self._scene = self._load_scene()
 
             return self._scene
 
     def get_active_scene_info(self):
         with self.lock:
-            if not self._active_scene_synced:
-                self._sync_active_scene()
+            self._sync_active_scene()
 
             return {
                 "id": self._scene_id,
@@ -46,20 +44,36 @@ class SionnaEngine:
             next_scene_bounds = scene.get("bounds")
             next_scene_metrics = scene.get("metrics")
 
-            if (
-                next_scene_id == self._scene_id
-                and next_scene_path == self._scene_path
-            ):
-                self._active_scene_synced = True
-                return
+            self._update_active_scene(
+                next_scene_id,
+                next_scene_name,
+                next_scene_path,
+                next_scene_bounds,
+                next_scene_metrics,
+            )
 
+    def _update_active_scene(
+        self,
+        scene_id,
+        scene_name,
+        scene_path,
+        scene_bounds,
+        scene_metrics,
+    ):
+        scene_changed = (
+            scene_id != self._scene_id
+            or scene_path != self._scene_path
+        )
+
+        if scene_changed:
             self._scene = None
-            self._scene_id = next_scene_id
-            self._scene_name = next_scene_name
-            self._scene_path = next_scene_path
-            self._scene_bounds = next_scene_bounds
-            self._scene_metrics = next_scene_metrics
-            self._active_scene_synced = True
+
+        self._scene_id = scene_id
+        self._scene_name = scene_name
+        self._scene_path = scene_path
+        self._scene_bounds = scene_bounds
+        self._scene_metrics = scene_metrics
+        self._active_scene_synced = True
 
     def clear_active_scene(self):
         with self.lock:
@@ -76,12 +90,13 @@ class SionnaEngine:
         if str(active_scene.get("status", "")).lower().startswith("failure"):
             raise RuntimeError(active_scene.get("error") or "No active scene is selected.")
 
-        self._scene_id = active_scene["id"]
-        self._scene_name = active_scene["name"]
-        self._scene_path = active_scene.get("scene_path")
-        self._scene_bounds = active_scene.get("bounds")
-        self._scene_metrics = active_scene.get("metrics")
-        self._active_scene_synced = True
+        self._update_active_scene(
+            active_scene["id"],
+            active_scene["name"],
+            active_scene.get("scene_path"),
+            active_scene.get("bounds"),
+            active_scene.get("metrics"),
+        )
 
     def _load_scene(self):
         from backend.simulations.sionna_scene import load_scene
