@@ -565,7 +565,7 @@ export default function SceneChooserPage({
     setIsBusy(true);
     setSceneNameError("");
     setError(false);
-    setStatus("Creating Sionna scene...");
+    setStatus("Creating scene...");
 
     let createdScene = null;
 

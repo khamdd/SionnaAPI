@@ -47,12 +47,12 @@ export default function LoginPage({ onAuthenticated }) {
 
   return (
     <main className="login-page">
-      <section className="login-intro" aria-label="Sionna Planner overview">
+      <section className="login-intro" aria-label="SignalLab overview">
         <div className="login-intro-mark" aria-hidden="true">
           <span /><span /><span /><i />
         </div>
         <div>
-          <strong>Sionna Planner</strong>
+          <strong>SignalLab</strong>
           <h1>Plan radio networks with traceable simulation inputs.</h1>
           <p>Configure scenes, antennas, solver parameters, and result history in one engineering workspace.</p>
         </div>

@@ -105,7 +105,7 @@ export default function MapPanel({
         ) : (
           <div className="network-scene-empty">
             <strong>{activeScene?.name || "Loading active scene"}</strong>
-            <span>{activeScene ? "Run a simulation to render the Sionna coverage map." : "Waiting for the backend active scene."}</span>
+          <span>{activeScene ? "Run a simulation to render the coverage map." : "Waiting for the backend active scene."}</span>
           </div>
         )}
         {!showScene3D && (

@@ -1,6 +1,6 @@
-# Sionna Simulation Planner
+# SignalLab
 
-A radio-network planning application built with FastAPI, React, NVIDIA Sionna RT,
+A radio-network simulation and planning application built with FastAPI, React, NVIDIA Sionna RT,
 PostgreSQL/PostGIS, and Elasticsearch/Kibana.
 
 The application lets users manage scenes and antennas, run coverage, RSRP, SINR,

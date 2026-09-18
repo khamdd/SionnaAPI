@@ -20,7 +20,7 @@ export default function SessionGate({ children }) {
           <i />
           <i />
         </span>
-        <strong>Opening Sionna Planner</strong>
+        <strong>Opening SignalLab</strong>
         <p>Checking your workspace session...</p>
       </main>
     );

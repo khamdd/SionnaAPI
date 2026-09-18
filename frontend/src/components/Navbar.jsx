@@ -60,7 +60,7 @@ export default function Navbar({
           <i /><i /><i />
         </span>
         <div>
-          <strong>Sionna Planner</strong>
+          <strong>SignalLab</strong>
           <span>Radio network workspace</span>
         </div>
       </div>
