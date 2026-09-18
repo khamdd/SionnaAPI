@@ -10,7 +10,8 @@ Applies under `backend/` in addition to the root guide.
   and idempotent finalization. Read `../docs/simulation-job-reliability.md` only
   for queue/worker changes.
 - Preserve separate ownership for queue, History, scene, and Impact artifacts.
-- No-DB mode must start without migration validation and run supported work inline.
+- PostgreSQL/PostGIS is required before the backend starts; validate the database
+  connection and current migration head during startup.
 
 Find code with `rg` before opening files. Common entry points: `main.py`, `api/`,
 `schemas/requests.py`, `services/simulation_worker.py`,

@@ -229,8 +229,9 @@ python -m alembic upgrade head
 python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
 
-When no database is configured, Alembic is not required and the existing inline,
-manual simulation mode remains available.
+PostgreSQL/PostGIS is required for the supported application runtime. The backend
+checks the configured database and Alembic revision during startup, and exits with
+a configuration error when PostgreSQL is unavailable or the schema is outdated.
 
 Production queue execution uses a separate leased worker with heartbeat, crash
 recovery, bounded retries, timeouts, and cancellation checkpoints. See

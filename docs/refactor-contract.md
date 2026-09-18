@@ -42,10 +42,10 @@ Every other operation requires the existing HTTP bearer dependency.
 - `POST /api/v1/throughput-comparison`
 - `POST /api/v1/optimizations/network-coverage/run`
 
-When a database is configured, these submission endpoints create queue jobs.
-Without a database they execute inline. Analytical SINR and Throughput requests
-do not require a loaded Sionna scene during inline calculation, but retain the
-same request preparation and result-storage boundary.
+The application requires PostgreSQL/PostGIS at startup, and these submission
+endpoints create durable queue jobs. Analytical SINR and Throughput requests do
+not require a loaded Sionna scene during calculation, but retain the same request
+preparation and result-storage boundary.
 
 ### Simulation Queue
 

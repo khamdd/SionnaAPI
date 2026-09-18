@@ -22,8 +22,9 @@ the nearest nested `AGENTS.md` before changing `backend/` or `frontend/`.
 
 - API routes live under `/api/v1`; keep router, schema, service, and ORM concerns
   separate. Preserve authentication/authorization for owned and shared resources.
-- PostgreSQL/PostGIS is optional locally. DB mode uses the durable queue; no-DB
-  mode must start without migration validation and run supported work inline.
+- PostgreSQL/PostGIS is required for the supported application runtime. Startup
+  must validate the configured database and current migration head before serving
+  the application.
 - Docker runs Alembic before the API and worker; the API does not create tables.
 - Queue results remain temporary until saved to History. Queue, History, reports,
   and scenes own separate artifacts and cleanup rules.

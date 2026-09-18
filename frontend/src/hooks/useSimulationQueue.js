@@ -27,7 +27,7 @@ export default function useSimulationQueue({ enabled, route }) {
         setSelectedJobId(null);
         setSelectedDeleteIds(new Set());
         setStatus(
-          "Database is not configured. Set DATABASE_URL to use the simulation queue.",
+          "PostgreSQL is unavailable. Contact the operator before using the simulation queue.",
         );
         setError(true);
         return;

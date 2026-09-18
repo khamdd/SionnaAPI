@@ -3,7 +3,7 @@ import pytest
 from backend import database
 
 
-def test_database_revision_check_skips_no_database_mode(monkeypatch):
+def test_database_revision_check_requires_database(monkeypatch):
     monkeypatch.setattr(database, "DATABASE_URL", None)
     monkeypatch.setattr(
         database,
@@ -11,7 +11,8 @@ def test_database_revision_check_skips_no_database_mode(monkeypatch):
         lambda: pytest.fail("database should not be inspected"),
     )
 
-    assert database.ensure_database_is_current() is False
+    with pytest.raises(RuntimeError, match="PostgreSQL/PostGIS is required"):
+        database.ensure_database_is_current()
 
 
 def test_database_revision_check_accepts_current_database(monkeypatch):

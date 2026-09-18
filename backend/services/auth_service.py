@@ -34,7 +34,7 @@ def create_user(username, password):
         return {
             "status": "failure",
             "status_code": 503,
-            "error": "Database is not configured.",
+            "error": "PostgreSQL is unavailable.",
         }
 
     try:
@@ -99,7 +99,7 @@ def login_user(username, password):
         return {
             "status": "failure",
             "status_code": 503,
-            "error": "Database is not configured.",
+            "error": "PostgreSQL is unavailable.",
         }
 
     try:
@@ -239,7 +239,7 @@ def authenticate_access_token(token):
         return {
             "status": "failure",
             "status_code": 503,
-            "error": "Database is not configured.",
+            "error": "PostgreSQL is unavailable.",
         }
 
     try:

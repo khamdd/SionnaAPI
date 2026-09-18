@@ -438,7 +438,7 @@ export default function PlannerApp({ currentUser, isNewSession, onLogout }) {
 
       if (!jobResponse.database_configured) {
         setModalContent(
-          <p className="history-status">Database is not configured.</p>,
+          <p className="history-status">PostgreSQL is unavailable.</p>,
         );
         return;
       }

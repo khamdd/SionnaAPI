@@ -98,7 +98,7 @@ services:
   backend:
     image: sionna-simulation-backend:local
     pull_policy: never
-    # Sionna RT runs in the worker, but keep the API GPU-capable for inline/no-DB runs.
+    # Sionna RT runs in the worker; keep the API GPU-capable for shared runtime parity.
     gpus: all
     deploy:
       replicas: 2

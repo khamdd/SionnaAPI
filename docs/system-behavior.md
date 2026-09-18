@@ -17,9 +17,9 @@ changes normally should not require an edit here.
   frontend work-scene state, and returns to `/scenes`. Signing out also clears
   the persisted active scene. Reloading the browser without changing or signing
   out keeps the active scene.
-- The scene chooser uses an offline Vietnam MapLibre/PMTiles map. With a database,
-  province and ward search uses the authenticated Vietnam admin API and persisted
-  PostGIS boundaries. Without a database, manual area drawing remains available.
+- The scene chooser uses an offline Vietnam MapLibre/PMTiles map. Province and ward
+  search uses the authenticated Vietnam admin API and persisted PostGIS boundaries.
+  PostgreSQL/PostGIS is required for the supported application runtime.
 - Kept ward scenes retain validated GeoJSON boundary metadata for shared 3D
   previews. Manual drawing or choosing a new area clears the ward overlay and any
   untouched auto-generated scene name.
@@ -43,8 +43,8 @@ changes normally should not require an edit here.
 
 - Supported simulation types are `network_coverage`, `coverage_map`,
   `rsrp_simulation`, `sinr`, and `throughput_comparison`.
-- With PostgreSQL/PostGIS configured, simulations become durable jobs processed by
-  `backend/services/simulation_worker.py`. Without it, supported calls run inline.
+- Simulations are durable jobs processed by `backend/services/simulation_worker.py`.
+  PostgreSQL/PostGIS must be configured before the backend starts.
 - Completed queue results remain temporary until the user explicitly saves them
   to History. Removing a queue entry must not remove an already-saved History run.
 - Heavy queue and History payloads are stored as JSON artifacts under distinct
@@ -93,6 +93,7 @@ changes normally should not require an edit here.
 - Docker uses a dedicated worker and shared static artifact storage. Host
   development defaults to an in-process worker.
 - Database startup validates the Alembic head. Docker's one-shot migration service
-  applies revisions before the API and worker; no-database mode skips this check.
+  applies revisions before the API and worker; startup fails when PostgreSQL is not
+  configured or the schema is not current.
 - See `database-baseline.md` before changing migration adoption or PostGIS schema
   handling.

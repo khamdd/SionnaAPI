@@ -84,7 +84,7 @@ export default function useSimulationHistory({ activeScene, modal }) {
         setComparisonDetails(new Map());
         setComparisonType(null);
         closeModal();
-        setStatus("Database is not configured. Set DATABASE_URL to use history.");
+        setStatus("PostgreSQL is unavailable. Contact the operator before using history.");
         return;
       }
 
@@ -248,7 +248,7 @@ export default function useSimulationHistory({ activeScene, modal }) {
         const result = await getSimulationRun(runId);
         if (!result.database_configured) {
           setModalContent(
-            <p className="history-status">Database is not configured.</p>,
+            <p className="history-status">PostgreSQL is unavailable.</p>,
           );
           return;
         }
@@ -441,7 +441,7 @@ async function loadComparisonDetails(selectedIds, cachedDetails) {
     if (!item) {
       const result = await getSimulationRun(runId);
       if (!result.database_configured) {
-        throw new Error("Database is not configured.");
+        throw new Error("PostgreSQL is unavailable.");
       }
       if (result.error) {
         throw new Error(result.error);

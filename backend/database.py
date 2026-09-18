@@ -59,9 +59,12 @@ def _get_current_migration_heads():
 
 
 def ensure_database_is_current():
-    """Fail startup when a configured database has unapplied migrations."""
+    """Require a current PostgreSQL/PostGIS database before application startup."""
     if not is_database_configured():
-        return False
+        raise RuntimeError(
+            "PostgreSQL/PostGIS is required. Set DATABASE_URL or POSTGRES_HOST "
+            "before starting the backend."
+        )
 
     expected_heads = set(_get_expected_migration_heads())
     current_heads = set(_get_current_migration_heads())

@@ -501,7 +501,7 @@ def simulation_job_result(job_id: str):
     if not response.get("database_configured"):
         raise HTTPException(
             status_code=503,
-            detail="Database is not configured.",
+            detail="PostgreSQL is unavailable.",
         )
 
     if response.get("not_found"):
@@ -539,7 +539,7 @@ def save_simulation_job(job_id: str):
     if not result.get("database_configured"):
         raise HTTPException(
             status_code=503,
-            detail="Database is not configured.",
+            detail="PostgreSQL is unavailable.",
         )
 
     if result.get("not_found"):
@@ -568,7 +568,7 @@ def save_simulation_job(job_id: str):
 def cancel_simulation_job(job_id: str):
     result = request_simulation_job_cancellation(job_id)
     if not result.get("database_configured"):
-        raise HTTPException(status_code=503, detail="Database is not configured.")
+        raise HTTPException(status_code=503, detail="PostgreSQL is unavailable.")
     if result.get("not_found"):
         raise HTTPException(status_code=404, detail="Simulation job not found.")
     if result.get("error"):
@@ -634,7 +634,7 @@ def simulation_run_result(run_id: str):
     if not response.get("database_configured"):
         raise HTTPException(
             status_code=503,
-            detail="Database is not configured.",
+            detail="PostgreSQL is unavailable.",
         )
 
     if response.get("error"):
