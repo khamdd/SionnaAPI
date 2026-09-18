@@ -111,13 +111,10 @@ function createOfflineSceneMapStyle(dataBaseUrl, bounds = null) {
   };
 }
 
-function createBuildingRegionManager(map, dataBaseUrl, options = {}) {
+function createBuildingRegionManager(map, dataBaseUrl) {
   const activeRegionIds = new Set();
   let buildingRegions = [];
   let disposed = false;
-  const minZoom = Number.isFinite(Number(options.minZoom))
-    ? Number(options.minZoom)
-    : 16;
 
   async function load() {
     const response = await fetch(`${dataBaseUrl}building-regions.json`, {
@@ -149,14 +146,6 @@ function createBuildingRegionManager(map, dataBaseUrl, options = {}) {
 
   function update() {
     if (disposed || !map.isStyleLoaded()) {
-      return;
-    }
-
-    // The chooser stays responsive while browsing provinces and wards. A
-    // selected scene is allowed to request buildings earlier because its
-    // viewport is already bounded to a small simulation area.
-    if (map.getZoom() < minZoom) {
-      removeAllRegions();
       return;
     }
 
@@ -198,7 +187,6 @@ function createBuildingRegionManager(map, dataBaseUrl, options = {}) {
         type: "fill-extrusion",
         source: sourceId,
         "source-layer": "buildings",
-        minzoom: minZoom,
         paint: {
           "fill-extrusion-color": "#d18b62",
           "fill-extrusion-height": [
