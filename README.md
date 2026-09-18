@@ -11,8 +11,8 @@ history, and compare saved results.
 
 Docker Compose starts the complete application:
 
-- `frontend`: React application served by Nginx
-- `backend`: FastAPI API service
+- `frontend`: React application served by Nginx and local API load balancer
+- `backend`: two FastAPI API replicas managed by Docker Compose
 - `simulation-worker`: leased, retrying Sionna background-job executor
 - `postgres`: users, jobs, scenes, and simulation history
 - `database-migrate`: applies pending Alembic database migrations, then exits
@@ -50,6 +50,11 @@ docker compose --env-file .env.docker up --build -d
 The first build downloads the base images and Python/Node dependencies, so it takes
 longer than later starts.
 
+The Compose configuration starts two backend replicas automatically. The frontend
+Nginx proxy distributes API and static-file requests between them. The backend
+port is internal to Docker; use the application address below rather than port
+8000 directly.
+
 Check that every service is running:
 
 ```powershell
@@ -61,7 +66,7 @@ Open:
 | Service | Address |
 | --- | --- |
 | Application | http://127.0.0.1:8080 |
-| FastAPI documentation | Not directly exposed in the container setup; it will be routed through the frontend proxy in a later load-balancing step |
+| FastAPI documentation | Not directly exposed in the Docker setup; the backend port is internal |
 | Kibana Discover | http://127.0.0.1:5601/app/discover |
 | Elasticsearch | http://127.0.0.1:9200 |
 | PostgreSQL | `127.0.0.1:5433` by default |
@@ -171,16 +176,17 @@ the receiving user generate their own secrets.
 
 ## Persistent data
 
-Docker Compose uses named volumes:
+Docker Compose uses persistent storage:
 
 | Volume | Contents |
 | --- | --- |
 | `postgres-data` | Users, jobs, antenna inventory, scene references, and saved history |
 | `elasticsearch-data` | Application logs |
-| `application-static` | Imported scenes and generated simulation files |
+| `./static` host directory | Imported scenes and generated simulation files shared by backend replicas and workers |
 
-`docker compose down` preserves these volumes. `docker compose down -v` deletes
-them.
+`docker compose down` preserves this data. `docker compose down -v` deletes the
+named database and Elasticsearch volumes; it does not delete the `./static` host
+directory.
 
 ## Kibana logs
 
