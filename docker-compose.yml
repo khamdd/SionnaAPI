@@ -128,8 +128,8 @@ services:
         condition: service_completed_successfully
       database-migrate:
         condition: service_completed_successfully
-    ports:
-      - "127.0.0.1:${BACKEND_HOST_PORT:-8000}:8000"
+    expose:
+      - "8000"
     volumes:
       - ./static:/app/static
       - "./.optix-driver/extracted/usr/lib/x86_64-linux-gnu:/opt/nvidia/lib:ro"

@@ -61,7 +61,7 @@ Open:
 | Service | Address |
 | --- | --- |
 | Application | http://127.0.0.1:8080 |
-| FastAPI documentation | http://127.0.0.1:8000/docs |
+| FastAPI documentation | Not directly exposed in the container setup; it will be routed through the frontend proxy in a later load-balancing step |
 | Kibana Discover | http://127.0.0.1:5601/app/discover |
 | Elasticsearch | http://127.0.0.1:9200 |
 | PostgreSQL | `127.0.0.1:5433` by default |
@@ -397,7 +397,7 @@ Confirm that `.env.docker` exists and that you used `--env-file .env.docker`.
 ### A port is already in use
 
 Change the corresponding value in `.env.docker`: `POSTGRES_HOST_PORT`,
-`BACKEND_HOST_PORT`, `FRONTEND_HOST_PORT`, `ELASTICSEARCH_HOST_PORT`, or
+`FRONTEND_HOST_PORT`, `ELASTICSEARCH_HOST_PORT`, or
 `KIBANA_HOST_PORT`. The container-side ports and service-to-service addresses do
 not change.
 
